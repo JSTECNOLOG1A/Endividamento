@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44, getToken } from '@/api/base44Client';
 
 const AuthContext = createContext();
 
@@ -20,25 +20,43 @@ export const AuthProvider = ({ children }) => {
       setIsLoadingPublicSettings(true);
       setIsLoadingAuth(true);
       setAuthError(null);
+      setAppPublicSettings({
+        id: "local",
+        public_settings: { requires_auth: true },
+      });
+
+      if (!getToken()) {
+        setIsAuthenticated(false);
+        setUser(null);
+        return;
+      }
 
       const currentUser = await base44.auth.me();
       setUser(currentUser);
       setIsAuthenticated(true);
-      setAppPublicSettings({
-        id: "local",
-        public_settings: { requires_auth: false },
-      });
     } catch (error) {
-      console.error('Falha ao iniciar modo local:', error);
+      if (error.status === 401) {
+        setIsAuthenticated(false);
+        setUser(null);
+        return;
+      }
       setAuthError({
         type: 'unknown',
-        message: error.message || 'Não foi possível conectar à API local',
+        message: error.message || 'Não foi possível conectar à API',
       });
       setIsAuthenticated(false);
     } finally {
       setIsLoadingPublicSettings(false);
       setIsLoadingAuth(false);
     }
+  };
+
+  const login = async (email, password) => {
+    const currentUser = await base44.auth.login(email, password);
+    setUser(currentUser);
+    setIsAuthenticated(true);
+    setAuthError(null);
+    return currentUser;
   };
 
   const logout = () => {
@@ -48,7 +66,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const navigateToLogin = () => {
-    base44.auth.redirectToLogin();
+    logout();
   };
 
   return (
@@ -59,6 +77,7 @@ export const AuthProvider = ({ children }) => {
       isLoadingPublicSettings,
       authError,
       appPublicSettings,
+      login,
       logout,
       navigateToLogin,
       checkAppState

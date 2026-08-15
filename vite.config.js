@@ -10,17 +10,21 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@engine': path.resolve(__dirname, './backend/src/engine'),
     },
   },
   server: {
+    fs: {
+      allow: [path.resolve(__dirname)],
+    },
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3001',
+        target: process.env.API_PROXY_TARGET || 'http://127.0.0.1:3001',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://127.0.0.1:3001',
+        target: process.env.API_PROXY_TARGET || 'http://127.0.0.1:3001',
         changeOrigin: true,
       },
     },

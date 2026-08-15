@@ -176,17 +176,6 @@ export default function ContractForm({ onCalculate, initialData, groups, entitie
 
   const hasChanges = JSON.stringify(form) !== JSON.stringify(initialForm);
 
-  // Sugerir data de vencimento quando prazo total é preenchido
-  React.useEffect(() => {
-    if (!isLoaded) return;
-    if (form.operation_date && form.total_term_months && !form.first_payment_date) {
-      const operationDate = new Date(form.operation_date);
-      const suggestedDate = new Date(operationDate);
-      suggestedDate.setMonth(suggestedDate.getMonth() + 1);
-      update("first_payment_date", suggestedDate.toISOString().split("T")[0]);
-    }
-  }, [form.operation_date, form.total_term_months, isLoaded]);
-
   // Calcular data final do bullet (data operação + prazo total)
   const [updatingFromDate, setUpdatingFromDate] = React.useState(false);
   
@@ -789,9 +778,9 @@ export default function ContractForm({ onCalculate, initialData, groups, entitie
                 value={form.first_payment_date} 
                 onChange={(e) => update("first_payment_date", e.target.value)} 
                 className="h-9 font-mono" 
-                placeholder="Sugerido automaticamente"
+                placeholder="Se vazio, usa a Data da Operação"
               />
-              <p className="text-xs text-slate-500">Define o dia fixo mensal para todos os pagamentos</p>
+              <p className="text-xs text-slate-500">Se preenchido, ancora neste dia (ex.: 10/04, 10/05…). Se vazio, usa a Data da Operação. Fim de semana/feriado só adia aquele mês.</p>
             </div>
           </div>
           <Separator />

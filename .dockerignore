@@ -1,0 +1,11 @@
+node_modules
+.git
+server/data
+server/uploads
+backend/uploads
+*.sqlite
+*.db
+dist
+.env
+.DS_Store
+canvases

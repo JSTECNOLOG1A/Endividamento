@@ -614,6 +614,11 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
               <Badge variant="secondary" className="ml-2 text-xs">
                 {params?.calculation_system}
               </Badge>
+              {result?.calculation_metadata?.engine_version && (
+                <Badge variant="outline" className="ml-2 text-[10px] font-mono">
+                  motor {result.calculation_metadata.engine_version}
+                </Badge>
+              )}
             </CardTitle>
             <div className="flex gap-2">
               {!editMode ? (

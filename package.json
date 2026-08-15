@@ -4,13 +4,16 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node server/dev.mjs",
+    "dev": "docker compose up --build",
+    "dev:legacy": "node server/dev.mjs",
     "dev:client": "vite",
-    "dev:server": "node server/index.js",
+    "dev:server": "npm start --prefix backend",
     "build": "vite build",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down",
     "preview": "vite preview"
   },
   "dependencies": {

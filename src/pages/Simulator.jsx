@@ -16,7 +16,7 @@ import SnapshotValidationTest from "../components/loan/SnapshotValidationTest";
 import ZeroRiskRegressionTest from "../components/loan/ZeroRiskRegressionTest";
 import IntegrityValidator from "../components/loan/IntegrityValidator";
 import ScenarioTests from "../components/loan/ScenarioTests";
-import { calculateAmortizationSchedule } from "../components/loan/CalculationEngine";
+import { calculateAmortizationSchedule } from "../lib/runCalculation";
 
 export default function Simulator() {
   const navigate = useNavigate();
@@ -253,7 +253,8 @@ export default function Simulator() {
         indexer: formData.indexer,
         indexerSpread: formData.indexer_spread,
         operationDate: formData.operation_date,
-        firstPaymentDate: formData.first_payment_date,
+        firstPaymentDate: convertBRtoISO(formData.first_payment_date),
+        first_payment_date: convertBRtoISO(formData.first_payment_date),
         principalGraceMonths: formData.principal_grace_months,
         interestGraceMonths: formData.interest_grace_months,
         graceAction: formData.grace_action,
@@ -515,55 +516,59 @@ export default function Simulator() {
   };
 
   const handleRecalculate = async (customDates, originalParams) => {
-    // Recalcular com as datas alteradas
-    console.log("🔄 handleRecalculate chamado com:", customDates.length, "datas");
-    const cdiRatesSnapshot = result.cdiRatesSnapshot || [];
-    const holidaysSnapshot = holidays.map((h) => ({ holiday_date: h.holiday_date }));
-    
-    // Função auxiliar: converte data BR (DD/MM/YYYY) para ISO (YYYY-MM-DD)
-    const convertBRtoISO = (brDate) => {
-      if (!brDate) return null;
-      if (brDate.match(/^\d{4}-\d{2}-\d{2}$/)) return brDate; // Já é ISO
-      const [day, month, year] = brDate.split('/');
-      return `${year}-${month}-${day}`;
-    };
-    
-    const calcResult = await calculateAmortizationSchedule({
-      operationValue: originalParams.operation_value,
-      signalValue: originalParams.signal_value,
-      iofValue: originalParams.iof_value,
-      iofFinanced: originalParams.iof_financed,
-      otherFees: originalParams.other_fees,
-      otherFeesFinanced: originalParams.other_fees_financed,
-      fixedRate: originalParams.fixed_rate,
-      indexer: originalParams.indexer,
-      indexerSpread: originalParams.indexer_spread,
-      operationDate: originalParams.operation_date,
-      firstPaymentDate: originalParams.first_payment_date,
-      principalGraceMonths: originalParams.principal_grace_months,
-      interestGraceMonths: originalParams.interest_grace_months,
-      graceAction: originalParams.grace_action,
-      graceInterestBehavior: originalParams.grace_interest_behavior,
-      amortizationTrigger: originalParams.amortization_trigger,
-      principalInstallments: originalParams.principal_installments,
-      interestInstallments: originalParams.interest_installments,
-      principalFrequency: originalParams.principal_frequency,
-      interestFrequency: originalParams.interest_frequency,
-      calculationSystem: originalParams.calculation_system,
-      cdiRates: cdiRatesSnapshot,
-      holidays: holidaysSnapshot,
-      customDates: customDates,
-      totalTermMonths: originalParams.total_term_months ? parseInt(originalParams.total_term_months) : null,
-      finalMaturityDate: convertBRtoISO(originalParams.final_maturity_date),
-    });
+    try {
+      console.log("🔄 handleRecalculate chamado com:", customDates.length, "datas");
+      const cdiRatesSnapshot = result.cdiRatesSnapshot || [];
+      const holidaysSnapshot = holidays.map((h) => ({ holiday_date: h.holiday_date }));
 
-    console.log("✅ Resultado recalculado:", {
-      parcelas: calcResult.schedule?.length,
-      ultimaData: calcResult.schedule?.[calcResult.schedule.length - 1]?.dataVencimento
-    });
+      const convertBRtoISO = (brDate) => {
+        if (!brDate) return null;
+        if (brDate.match(/^\d{4}-\d{2}-\d{2}$/)) return brDate;
+        const [day, month, year] = brDate.split('/');
+        return `${year}-${month}-${day}`;
+      };
 
-    calcResult.cdiRatesSnapshot = cdiRatesSnapshot;
-    setResult(calcResult);
+      const calcResult = await calculateAmortizationSchedule({
+        operationValue: originalParams.operation_value,
+        signalValue: originalParams.signal_value,
+        iofValue: originalParams.iof_value,
+        iofFinanced: originalParams.iof_financed,
+        otherFees: originalParams.other_fees,
+        otherFeesFinanced: originalParams.other_fees_financed,
+        fixedRate: originalParams.fixed_rate,
+        indexer: originalParams.indexer,
+        indexerSpread: originalParams.indexer_spread,
+        operationDate: originalParams.operation_date,
+        firstPaymentDate: convertBRtoISO(originalParams.first_payment_date),
+        first_payment_date: convertBRtoISO(originalParams.first_payment_date),
+        principalGraceMonths: originalParams.principal_grace_months,
+        interestGraceMonths: originalParams.interest_grace_months,
+        graceAction: originalParams.grace_action,
+        graceInterestBehavior: originalParams.grace_interest_behavior,
+        amortizationTrigger: originalParams.amortization_trigger,
+        principalInstallments: originalParams.principal_installments,
+        interestInstallments: originalParams.interest_installments,
+        principalFrequency: originalParams.principal_frequency,
+        interestFrequency: originalParams.interest_frequency,
+        calculationSystem: originalParams.calculation_system,
+        cdiRates: cdiRatesSnapshot,
+        holidays: holidaysSnapshot,
+        customDates: customDates,
+        totalTermMonths: originalParams.total_term_months ? parseInt(originalParams.total_term_months) : null,
+        finalMaturityDate: convertBRtoISO(originalParams.final_maturity_date),
+      });
+
+      console.log("✅ Resultado recalculado:", {
+        parcelas: calcResult.schedule?.length,
+        ultimaData: calcResult.schedule?.[calcResult.schedule.length - 1]?.dataVencimento
+      });
+
+      calcResult.cdiRatesSnapshot = cdiRatesSnapshot;
+      setResult(calcResult);
+    } catch (error) {
+      alert(`❌ Erro no recálculo: ${error.message}`);
+      console.error("Recalculate error:", error);
+    }
   };
 
   return (

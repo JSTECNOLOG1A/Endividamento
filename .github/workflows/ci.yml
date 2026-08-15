@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install API deps
+        working-directory: backend
+        run: npm install
+      - name: Syntax check
+        working-directory: backend
+        run: node --check src/index.js && node --check src/app.js && node --check src/engine/CalculationEngine.js
+      - name: Engine smoke test
+        working-directory: backend
+        run: npm run test:engine
+      - name: Compose file
+        run: docker compose config

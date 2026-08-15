@@ -1,7 +1,19 @@
 const API = "/api";
+const TOKEN_KEY = "fincalc_token";
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token) {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
 
 async function request(path, options = {}) {
   const headers = { ...(options.headers || {}) };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
   const isForm = options.body instanceof FormData;
   if (!isForm && options.body && typeof options.body !== "string") {
     headers["Content-Type"] = "application/json";
@@ -17,6 +29,10 @@ async function request(path, options = {}) {
     } catch {
       payload = text;
     }
+  }
+
+  if (response.status === 401) {
+    setToken(null);
   }
 
   if (!response.ok) {
@@ -79,6 +95,14 @@ export const base44 = {
     TenantUser: entityApi("TenantUser"),
   },
   auth: {
+    async login(email, password) {
+      const result = await request("/auth/login", {
+        method: "POST",
+        body: { email, password },
+      });
+      setToken(result.token);
+      return result.user;
+    },
     me() {
       return request("/auth/me");
     },
@@ -86,10 +110,12 @@ export const base44 = {
       try {
         await request("/auth/logout", { method: "POST" });
       } catch {
-        // logout local não deve quebrar a UI
+        // ignore
       }
+      setToken(null);
     },
     redirectToLogin() {
+      setToken(null);
       window.location.href = "/";
     },
   },

@@ -1,6 +1,8 @@
 #env
 .env
-.env.*
+.env.local
+.env.*.local
+!.env.example
 
 # Logs
 logs
@@ -15,6 +17,7 @@ node_modules
 dist
 dist-ssr
 *.local
+backend/uploads
 server/data
 server/uploads
 *.sqlite
