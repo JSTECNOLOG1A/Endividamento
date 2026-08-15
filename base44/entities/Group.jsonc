@@ -1,0 +1,30 @@
+{
+  "name": "Group",
+  "type": "object",
+  "properties": {
+    "group_name": {
+      "type": "string",
+      "description": "Nome do Grupo Econ\u00f4mico"
+    },
+    "cnpj_group": {
+      "type": "string",
+      "description": "CNPJ da holding/grupo (opcional)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Descri\u00e7\u00e3o do grupo"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ativo",
+        "inativo"
+      ],
+      "default": "ativo",
+      "description": "Status do grupo"
+    }
+  },
+  "required": [
+    "group_name"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "name": "Tenant",
+  "type": "object",
+  "properties": {
+    "group_id": {
+      "type": "string",
+      "description": "ID do grupo (isolamento de tenant)"
+    },
+    "tenant_name": {
+      "type": "string",
+      "description": "Nome do tenant/organiza\u00e7\u00e3o"
+    },
+    "plan": {
+      "type": "string",
+      "enum": [
+        "STARTER",
+        "PRO",
+        "ENTERPRISE"
+      ],
+      "default": "STARTER",
+      "description": "Plano contratado"
+    },
+    "billing_status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "trial",
+        "suspended"
+      ],
+      "default": "trial",
+      "description": "Status de billing"
+    },
+    "trial_ends_at": {
+      "type": "string",
+      "format": "date",
+      "description": "Data de t\u00e9rmino do trial"
+    },
+    "contract_limit": {
+      "type": "number",
+      "description": "Limite de contratos (calculado pelo plano)"
+    },
+    "contracts_used": {
+      "type": "number",
+      "default": 0,
+      "description": "Contratos atualmente criados"
+    },
+    "owner_email": {
+      "type": "string",
+      "description": "Email do owner do tenant"
+    },
+    "metadata": {
+      "type": "string",
+      "description": "JSON com metadados adicionais (CNPJ, endere\u00e7o, etc)"
+    }
+  },
+  "required": [
+    "group_id",
+    "tenant_name",
+    "plan",
+    "billing_status"
+  ]
+}

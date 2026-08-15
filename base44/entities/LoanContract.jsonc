@@ -1,0 +1,320 @@
+{
+  "name": "LoanContract",
+  "type": "object",
+  "properties": {
+    "group_id": {
+      "type": "string",
+      "description": "ID do Grupo Econ\u00f4mico"
+    },
+    "entity_id": {
+      "type": "string",
+      "description": "ID da Entidade Componente"
+    },
+    "bank_id": {
+      "type": "string",
+      "description": "ID do Banco credor"
+    },
+    "contract_number": {
+      "type": "string",
+      "description": "N\u00famero do contrato"
+    },
+    "operation_category": {
+      "type": "string",
+      "enum": [
+        "emprestimos",
+        "financiamentos"
+      ],
+      "description": "Categoria da opera\u00e7\u00e3o: Empr\u00e9stimos (capital de giro) ou Financiamentos (investimento/CAPEX)"
+    },
+    "operation_type": {
+      "type": "string",
+      "enum": [
+        "giro_prefixado",
+        "giro_cdi",
+        "conta_garantida",
+        "emprestimo_moeda_estrangeira_4131",
+        "bndes_finame",
+        "credito_rural_custeio",
+        "credito_rural_investimento_solos",
+        "leasing",
+        "cri_cra"
+      ],
+      "description": "Tipo espec\u00edfico de opera\u00e7\u00e3o"
+    },
+    "operation_value": {
+      "type": "number",
+      "description": "Valor da opera\u00e7\u00e3o"
+    },
+    "amount_foreign": {
+      "type": "number",
+      "description": "Valor l\u00edquido captado na moeda estrangeira (USD, EUR, etc)"
+    },
+    "exchange_rate_closing": {
+      "type": "number",
+      "description": "Cota\u00e7\u00e3o fixada no fechamento da opera\u00e7\u00e3o (taxa acordada com o banco)"
+    },
+    "signal_value": {
+      "type": "number",
+      "description": "Sinal do neg\u00f3cio (entrada)"
+    },
+    "iof_value": {
+      "type": "number",
+      "description": "Valor do IOF"
+    },
+    "iof_financed": {
+      "type": "boolean",
+      "description": "IOF financiado (soma ao principal)"
+    },
+    "other_fees": {
+      "type": "number",
+      "description": "Taxas diversas"
+    },
+    "other_fees_financed": {
+      "type": "boolean",
+      "description": "Taxas financiadas"
+    },
+    "mip_value": {
+      "type": "number",
+      "description": "Valor do seguro MIP (Morte e Invalidez Permanente)"
+    },
+    "mip_embedded": {
+      "type": "boolean",
+      "default": false,
+      "description": "MIP embutido na parcela (true) ou separado (false)"
+    },
+    "dfi_value": {
+      "type": "number",
+      "description": "Valor do seguro DFI (Danos F\u00edsicos ao Im\u00f3vel)"
+    },
+    "dfi_embedded": {
+      "type": "boolean",
+      "default": false,
+      "description": "DFI embutido na parcela (true) ou separado (false)"
+    },
+    "other_insurance_value": {
+      "type": "number",
+      "description": "Outros seguros prestamistas"
+    },
+    "other_insurance_embedded": {
+      "type": "boolean",
+      "default": false,
+      "description": "Seguro prestamista embutido na parcela (true) ou separado (false)"
+    },
+    "fixed_rate": {
+      "type": "number",
+      "description": "Taxa de juros fixa (% a.a.)"
+    },
+    "indexer": {
+      "type": "string",
+      "enum": [
+        "CDI",
+        "SELIC",
+        "IPCA",
+        "NA"
+      ],
+      "description": "Indexador"
+    },
+    "indexer_spread": {
+      "type": "number",
+      "description": "Spread sobre indexador (% a.a.)"
+    },
+    "currency_id": {
+      "type": "string",
+      "description": "ID da moeda (para opera\u00e7\u00f5es em moeda estrangeira)"
+    },
+    "exchange_lag": {
+      "type": "number",
+      "enum": [
+        0,
+        1,
+        2
+      ],
+      "default": 1,
+      "description": "Defasagem PTAX: 0=D, 1=D-1, 2=D-2"
+    },
+    "exchange_rates": {
+      "type": "string",
+      "description": "JSON serializado com hist\u00f3rico PTAX: [{rate_date, ptax_rate, source, created_at}, ...]"
+    },
+    "operation_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Data da opera\u00e7\u00e3o"
+    },
+    "first_payment_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Data do primeiro pagamento (DEPRECATED - usar amortization_trigger)"
+    },
+    "total_term_months": {
+      "type": "number",
+      "description": "Prazo total em meses"
+    },
+    "final_maturity_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Data de vencimento final"
+    },
+    "principal_grace_months": {
+      "type": "number",
+      "description": "Car\u00eancia de principal (meses)"
+    },
+    "interest_grace_months": {
+      "type": "number",
+      "description": "Car\u00eancia de juros (meses)"
+    },
+    "grace_action": {
+      "type": "string",
+      "enum": [
+        "capitalizar",
+        "pagar"
+      ],
+      "description": "A\u00e7\u00e3o na car\u00eancia de juros (DEPRECATED - usar grace_interest_behavior)"
+    },
+    "grace_interest_behavior": {
+      "type": "string",
+      "enum": [
+        "CAPITALIZAR",
+        "INTEREST_ONLY",
+        "BALLOON"
+      ],
+      "description": "Comportamento dos juros na car\u00eancia: CAPITALIZAR (juros sobre juros), INTEREST_ONLY (pagar juros mensalmente), BALLOON (juros simples acumulados)"
+    },
+    "amortization_trigger": {
+      "type": "string",
+      "enum": [
+        "END_OF_GRACE",
+        "GRACE_PLUS_FREQ"
+      ],
+      "description": "Gatilho para primeira amortiza\u00e7\u00e3o: END_OF_GRACE (\u00faltimo dia da car\u00eancia) ou GRACE_PLUS_FREQ (car\u00eancia + periodicidade)"
+    },
+    "principal_installments": {
+      "type": "number",
+      "description": "Quantidade de parcelas do principal"
+    },
+    "interest_installments": {
+      "type": "number",
+      "description": "Quantidade de parcelas de juros"
+    },
+    "principal_frequency": {
+      "type": "string",
+      "enum": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "6",
+        "12",
+        "bullet"
+      ],
+      "description": "Frequ\u00eancia do principal"
+    },
+    "interest_frequency": {
+      "type": "string",
+      "enum": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "6",
+        "12",
+        "bullet"
+      ],
+      "description": "Frequ\u00eancia dos juros"
+    },
+    "calculation_system": {
+      "type": "string",
+      "enum": [
+        "SAC",
+        "PRICE",
+        "AMERICANO",
+        "BULLET",
+        "PERCENTAGE_RESIDUAL"
+      ],
+      "description": "Sistema de c\u00e1lculo"
+    },
+    "amortization_percentages": {
+      "type": "string",
+      "description": "Percentuais de amortiza\u00e7\u00e3o para PERCENTAGE_RESIDUAL (CSV: 24.18,28.09,32.72)"
+    },
+    "percentage_base": {
+      "type": "string",
+      "enum": [
+        "saldo_devedor",
+        "principal"
+      ],
+      "default": "saldo_devedor",
+      "description": "Base de c\u00e1lculo para PERCENTAGE_RESIDUAL: saldo devedor ou principal original"
+    },
+    "schedule_data": {
+      "type": "string",
+      "description": "JSON serializado da tabela de amortiza\u00e7\u00e3o calculada"
+    },
+    "contract_pdf_url": {
+      "type": "string",
+      "description": "URL do PDF do contrato anexado"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "rascunho",
+        "pendente_aprovacao",
+        "aprovado",
+        "cancelado"
+      ],
+      "default": "rascunho",
+      "description": "Status do contrato"
+    },
+    "status_history": {
+      "type": "string",
+      "description": "Hist\u00f3rico de mudan\u00e7as de status (JSON)"
+    },
+    "approved_by": {
+      "type": "string",
+      "description": "Email do usu\u00e1rio que aprovou"
+    },
+    "approved_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Data e hora da aprova\u00e7\u00e3o"
+    },
+    "rejection_comments": {
+      "type": "string",
+      "description": "Coment\u00e1rios ao recusar contrato"
+    },
+    "exported_to_payables": {
+      "type": "boolean",
+      "default": false,
+      "description": "Flag de integra\u00e7\u00e3o com contas a pagar"
+    },
+    "current_snapshot_id": {
+      "type": "string",
+      "description": "ID do snapshot mais recente (CalculationSnapshot)"
+    },
+    "approved_snapshot_id": {
+      "type": "string",
+      "description": "ID do snapshot na aprova\u00e7\u00e3o (para auditoria)"
+    },
+    "last_recalculated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Data do \u00faltimo rec\u00e1lculo"
+    }
+  },
+  "required": [
+    "group_id",
+    "entity_id",
+    "bank_id",
+    "contract_number",
+    "operation_value",
+    "fixed_rate",
+    "operation_date",
+    "principal_installments",
+    "calculation_system"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

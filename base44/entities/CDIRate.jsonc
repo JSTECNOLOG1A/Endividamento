@@ -1,0 +1,32 @@
+{
+  "name": "CDIRate",
+  "type": "object",
+  "properties": {
+    "rate_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Data da taxa"
+    },
+    "annual_rate": {
+      "type": "number",
+      "description": "Taxa anual (% a.a.)"
+    },
+    "daily_factor": {
+      "type": "number",
+      "description": "Fator di\u00e1rio calculado"
+    },
+    "rate_type": {
+      "type": "string",
+      "enum": [
+        "CDI",
+        "SELIC"
+      ],
+      "description": "Tipo de taxa"
+    }
+  },
+  "required": [
+    "rate_date",
+    "annual_rate",
+    "rate_type"
+  ]
+}

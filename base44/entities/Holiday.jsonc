@@ -1,0 +1,23 @@
+{
+  "name": "Holiday",
+  "type": "object",
+  "properties": {
+    "holiday_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Data do feriado"
+    },
+    "holiday_name": {
+      "type": "string",
+      "description": "Nome do feriado"
+    },
+    "day_of_week": {
+      "type": "string",
+      "description": "Dia da semana"
+    }
+  },
+  "required": [
+    "holiday_date",
+    "holiday_name"
+  ]
+}

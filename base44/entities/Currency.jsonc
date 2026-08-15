@@ -1,0 +1,41 @@
+{
+  "name": "Currency",
+  "type": "object",
+  "properties": {
+    "currency_code": {
+      "type": "string",
+      "description": "C\u00f3digo ISO da moeda (BRL, USD, EUR, etc)"
+    },
+    "currency_name": {
+      "type": "string",
+      "description": "Nome da moeda"
+    },
+    "exchange_rate": {
+      "type": "number",
+      "description": "Taxa de c\u00e2mbio (em rela\u00e7\u00e3o ao BRL)"
+    },
+    "rate_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Data da taxa de c\u00e2mbio"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ativa",
+        "inativa"
+      ],
+      "default": "ativa",
+      "description": "Status da moeda"
+    }
+  },
+  "required": [
+    "currency_code",
+    "currency_name"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

@@ -1,0 +1,1067 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCircle, Info, Paperclip, Trash2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+
+const OPERATION_CATEGORIES = [
+  { value: "emprestimos", label: "Empréstimos (Capital de Giro)" },
+  { value: "financiamentos", label: "Financiamentos (Investimento/CAPEX)" },
+];
+
+const OPERATION_TYPES = {
+  emprestimos: [
+    { value: "giro_prefixado", label: "Giro Prefixado" },
+    { value: "giro_cdi", label: "Giro CDI" },
+    { value: "conta_garantida", label: "Conta Garantida" },
+    { value: "emprestimo_moeda_estrangeira_4131", label: "Empréstimo em Moeda Estrangeira (4131)" },
+  ],
+  financiamentos: [
+    { value: "bndes_finame", label: "BNDES/FINAME" },
+    { value: "credito_rural_custeio", label: "Crédito Rural (Custeio)" },
+    { value: "credito_rural_investimento_solos", label: "Crédito rural (Investimento em solos)" },
+    { value: "leasing", label: "Leasing Imobiliário/Equipamentos" },
+    { value: "cri_cra", label: "CRI/CRA" },
+  ],
+};
+
+const PERIODICITIES = [
+  { value: "1", label: "Mensal" },
+  { value: "2", label: "Bimestral" },
+  { value: "3", label: "Trimestral" },
+  { value: "6", label: "Semestral" },
+  { value: "12", label: "Anual" },
+  { value: "bullet", label: "No Vencimento" },
+];
+
+const SYSTEMS = [
+  { 
+    value: "SAC", 
+    label: "SAC — Amortização Constante",
+    description: "Sistema de Amortização Constante: Parcelas decrescentes ao longo do tempo. A amortização do principal é fixa, enquanto os juros diminuem a cada período, resultando em prestações menores progressivamente. Ideal para planejamento com redução de compromisso financeiro."
+  },
+  { 
+    value: "PRICE", 
+    label: "PRICE — Prestação Constante",
+    description: "Sistema Francês de Amortização: Prestações fixas durante todo o contrato. Nos primeiros períodos, a maior parte da prestação é composta por juros; gradualmente, a amortização do principal aumenta. Facilita o orçamento mensal por ter parcelas constantes."
+  },
+  { 
+    value: "AMERICANO", 
+    label: "Americano — Juros Periódicos",
+    description: "Sistema Americano: Pagamento de juros em cada período, com amortização total do principal apenas no vencimento final. Mantém prestações baixas durante o período, mas requer planejamento para pagamento do valor principal no final. Comum em operações estruturadas."
+  },
+  { 
+    value: "BULLET", 
+    label: "Bullet — Pagamento Único",
+    description: "Pagamento Bullet: Todo o valor (principal + juros acumulados) é pago em uma única parcela no vencimento. Não há pagamentos intermediários. Utilizado em operações de curto prazo ou quando há previsão de entrada de recursos específica na data de vencimento."
+  },
+  { 
+    value: "PERCENTAGE_RESIDUAL", 
+    label: "% Residual — Percentual sobre SD",
+    description: "Amortização por Percentual sobre Saldo Devedor: Cada parcela amortiza um percentual configurável do saldo devedor inicial do período (antes de capitalizar juros). Usado por Banco da Amazônia e outras instituições em operações estruturadas."
+  },
+];
+
+const defaultForm = {
+  group_id: "",
+  entity_id: "",
+  bank_id: "",
+  currency_id: "",
+  exchange_lag: "1",
+  contract_number: "",
+  operation_category: "",
+  operation_type: "",
+  operation_value: "",
+  amount_foreign: "",
+  exchange_rate_closing: "",
+  signal_value: "0",
+  iof_value: "0",
+  iof_financed: false,
+  other_fees: "0",
+  other_fees_financed: false,
+  fixed_rate: "",
+  indexer: "NA",
+  indexer_spread: "0",
+  operation_date: new Date().toISOString().split("T")[0],
+  calculation_system: "SAC",
+  total_term_months: "",
+  final_maturity_date: "",
+  principal_grace_months: "0",
+  interest_grace_months: "0",
+  grace_action: "capitalizar",
+  grace_interest_behavior: "CAPITALIZAR", // NOVO: "CAPITALIZAR", "INTEREST_ONLY", "BALLOON"
+  amortization_trigger: "END_OF_GRACE", // NOVO: "END_OF_GRACE" ou "GRACE_PLUS_FREQ"
+  principal_periodicity: "1",
+  interest_periodicity: "1",
+  first_payment_date: "",
+  amortization_percentages: "", // Ex: "24.18,28.09,32.72,38.18"
+  percentage_base: "saldo_devedor", // "saldo_devedor" ou "principal"
+};
+
+// Helper: Converter string BR (2.000.000,00) para número
+const parseBRNumber = (str) => {
+  if (!str) return 0;
+  const cleaned = String(str).replace(/\./g, '').replace(',', '.');
+  return parseFloat(cleaned) || 0;
+};
+
+export default function ContractForm({ onCalculate, initialData, groups, entities, banks, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf }) {
+  const [form, setForm] = useState(defaultForm);
+  const [initialForm, setInitialForm] = useState(defaultForm);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Update form when initialData changes
+  React.useEffect(() => {
+    if (initialData) {
+      const newForm = {
+        group_id: initialData.group_id || "",
+        entity_id: initialData.entity_id || "",
+        bank_id: initialData.bank_id || "",
+        currency_id: initialData.currency_id || "",
+        exchange_lag: initialData.exchange_lag !== undefined ? initialData.exchange_lag.toString() : "1",
+        contract_number: initialData.contract_number || "",
+        operation_category: initialData.operation_category || "",
+        operation_type: initialData.operation_type || "",
+        operation_value: initialData.operation_value || "",
+        amount_foreign: initialData.amount_foreign || "",
+        exchange_rate_closing: initialData.exchange_rate_closing || "",
+        signal_value: initialData.signal_value || "0",
+        iof_value: initialData.iof_value || "0",
+        iof_financed: initialData.iof_financed || false,
+        other_fees: initialData.other_fees || "0",
+        other_fees_financed: initialData.other_fees_financed || false,
+        fixed_rate: initialData.fixed_rate || "",
+        indexer: initialData.indexer || "NA",
+        indexer_spread: initialData.indexer_spread || "0",
+        operation_date: initialData.operation_date || new Date().toISOString().split("T")[0],
+        calculation_system: initialData.calculation_system || "SAC",
+        total_term_months: initialData.total_term_months !== undefined && initialData.total_term_months !== null ? initialData.total_term_months.toString() : "",
+        final_maturity_date: initialData.final_maturity_date || "",
+        principal_grace_months: initialData.principal_grace_months || "0",
+        interest_grace_months: initialData.interest_grace_months || "0",
+        grace_action: initialData.grace_action || "capitalizar",
+        grace_interest_behavior: initialData.grace_interest_behavior || (initialData.grace_action === "pagar" ? "INTEREST_ONLY" : "CAPITALIZAR"),
+        amortization_trigger: initialData.amortization_trigger || "END_OF_GRACE",
+        principal_periodicity: initialData.principal_frequency || initialData.principal_periodicity || "1",
+        interest_periodicity: initialData.interest_frequency || initialData.interest_periodicity || "1",
+        first_payment_date: initialData.first_payment_date || "",
+        amortization_percentages: initialData.amortization_percentages || "",
+        percentage_base: initialData.percentage_base || "saldo_devedor",
+      };
+      setForm(newForm);
+      setInitialForm(newForm);
+      setTimeout(() => setIsLoaded(true), 100);
+    } else {
+      setForm(defaultForm);
+      setInitialForm(defaultForm);
+      setIsLoaded(true);
+    }
+  }, [initialData]);
+
+
+
+  const hasChanges = JSON.stringify(form) !== JSON.stringify(initialForm);
+
+  // Sugerir data de vencimento quando prazo total é preenchido
+  React.useEffect(() => {
+    if (!isLoaded) return;
+    if (form.operation_date && form.total_term_months && !form.first_payment_date) {
+      const operationDate = new Date(form.operation_date);
+      const suggestedDate = new Date(operationDate);
+      suggestedDate.setMonth(suggestedDate.getMonth() + 1);
+      update("first_payment_date", suggestedDate.toISOString().split("T")[0]);
+    }
+  }, [form.operation_date, form.total_term_months, isLoaded]);
+
+  // Calcular data final do bullet (data operação + prazo total)
+  const [updatingFromDate, setUpdatingFromDate] = React.useState(false);
+  
+  React.useEffect(() => {
+    if (!isLoaded || updatingFromDate) return;
+    if (form.operation_date && form.total_term_months) {
+      const operationDate = new Date(form.operation_date);
+      const finalDate = new Date(operationDate);
+      finalDate.setMonth(finalDate.getMonth() + parseInt(form.total_term_months));
+      setUpdatingFromDate(true);
+      update("final_maturity_date", finalDate.toISOString().split("T")[0]);
+      setTimeout(() => setUpdatingFromDate(false), 50);
+    }
+  }, [form.operation_date, form.total_term_months, isLoaded]);
+
+  // Recalcular prazo total quando data final é editada
+  const handleFinalDateChange = (dateStr) => {
+    update("final_maturity_date", dateStr);
+    if (form.operation_date && dateStr) {
+      const operationDate = new Date(form.operation_date);
+      const finalDate = new Date(dateStr);
+      const monthsDiff = (finalDate.getFullYear() - operationDate.getFullYear()) * 12 + 
+                         (finalDate.getMonth() - operationDate.getMonth());
+      if (monthsDiff > 0) {
+        setUpdatingFromDate(true);
+        update("total_term_months", monthsDiff.toString());
+        setTimeout(() => setUpdatingFromDate(false), 50);
+      }
+    }
+  };
+
+  // Desabilitar campos conforme sistema selecionado
+  const getFieldsStatus = () => {
+    const system = form.calculation_system;
+    return {
+      principalPeriodicity: system === "SAC" || system === "PERCENTAGE_RESIDUAL",
+      interestPeriodicity: system === "AMERICANO" || system === "PERCENTAGE_RESIDUAL",
+      principalGrace: system !== "BULLET",
+      interestGrace: system !== "BULLET",
+      totalTerm: true, // Sempre habilitado (incluindo BULLET)
+    };
+  };
+
+  const fieldsStatus = getFieldsStatus();
+
+  // Sincronizar periodicidade apenas quando sistema muda, não constantemente
+  const [prevSystem, setPrevSystem] = React.useState(form.calculation_system);
+  
+  React.useEffect(() => {
+    if (!isLoaded || prevSystem === form.calculation_system) return;
+    
+    setPrevSystem(form.calculation_system);
+    
+    if (form.calculation_system === "SAC") {
+      update("interest_periodicity", form.principal_periodicity);
+    } else if (form.calculation_system === "PRICE") {
+      update("principal_periodicity", "1");
+      update("interest_periodicity", "1");
+    } else if (form.calculation_system === "BULLET") {
+      update("principal_periodicity", "bullet");
+      update("interest_periodicity", "bullet");
+      update("principal_grace_months", "0");
+      update("interest_grace_months", "0");
+    }
+  }, [form.calculation_system, isLoaded]);
+
+  const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
+
+  const selectedGroup = groups?.find((g) => g.id === form.group_id);
+  const filteredEntities = form.group_id ? entities?.filter((e) => e.group_id === form.group_id) : [];
+  const selectedEntity = form.entity_id ? entities?.find((e) => e.id === form.entity_id) : null;
+  const missingData = !form.group_id || !form.entity_id || !form.bank_id;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validação: Se moeda estrangeira, campos obrigatórios
+    if (form.currency_id && (!form.amount_foreign || !form.exchange_rate_closing)) {
+      alert("⚠️ Para operações em moeda estrangeira, preencha o Valor em Moeda Estrangeira e a Cotação do Fechamento.");
+      return;
+    }
+    
+    // Buscar taxas PTAX USD da entidade Currency se necessário
+    let exchangeRates = [];
+    if (form.currency_id) {
+      try {
+        const allCurrencies = await base44.entities.Currency.list("rate_date", 10000);
+        const usdRates = allCurrencies
+          .filter(c => c.currency_code === "USD")
+          .map(c => ({
+            rate_date: c.rate_date,
+            ptax_rate: c.exchange_rate,
+            source: "bacen",
+            created_at: c.created_date
+          }))
+          .sort((a, b) => a.rate_date.localeCompare(b.rate_date));
+        
+        if (usdRates.length === 0) {
+          alert("⚠️ Nenhuma taxa PTAX USD cadastrada. Por favor, importe as taxas na aba 'Indexadores e Feriados' antes de calcular contratos USD.");
+          return;
+        }
+        
+        exchangeRates = usdRates;
+      } catch (error) {
+        alert(`Erro ao carregar taxas PTAX: ${error.message}`);
+        return;
+      }
+    }
+    
+    // Calcular qtd de parcelas baseado no prazo total e periodicidade
+    const totalMonths = parseInt(form.total_term_months) || 0;
+    const principalGrace = parseInt(form.principal_grace_months) || 0;
+    const principalPeriod = parseInt(form.principal_periodicity) || 1;
+    const interestPeriod = parseInt(form.interest_periodicity) || 1;
+    
+    const principalInstallments = form.calculation_system === "BULLET" 
+      ? 1 
+      : Math.ceil((totalMonths - principalGrace) / principalPeriod);
+    const interestInstallments = form.calculation_system === "BULLET" 
+      ? 1 
+      : Math.ceil(totalMonths / interestPeriod);
+
+    // Helper: Normalizar parse BR (com validação de null/undefined)
+    const parseBR = (s) => {
+      if (s === null || s === undefined) return null;
+      const v = String(s).trim();
+      if (!v) return null;
+      return parseFloat(v.replace(/\./g, '').replace(',', '.'));
+    };
+
+    // 🔍 DEBUG: Validar USD antes do cálculo (expandido)
+    if (form.currency_id) {
+      const af_parsed = parseBR(form.amount_foreign);
+      const er_parsed = parseBR(form.exchange_rate_closing);
+      
+      console.log('🔍 Validação USD PRÉ-CÁLCULO:', {
+        currencyId: form.currency_id,
+        amount_foreign_raw: form.amount_foreign,
+        amount_foreign_type_raw: typeof form.amount_foreign,
+        amount_foreign_parsed: af_parsed,
+        amount_foreign_type_parsed: typeof af_parsed,
+        amount_foreign_is_finite: Number.isFinite(af_parsed),
+        amount_foreign_gt_zero: af_parsed > 0,
+        exchange_rate_closing_raw: form.exchange_rate_closing,
+        exchange_rate_closing_parsed: er_parsed
+      });
+      
+      // Validação inline antes de enviar
+      if (!Number.isFinite(af_parsed) || af_parsed <= 0) {
+        alert(`⚠️ ERRO DE VALIDAÇÃO USD:\n\nValor em moeda estrangeira inválido.\n\nRaw: "${form.amount_foreign}"\nParsed: ${af_parsed}\n\nVerifique o preenchimento do campo.`);
+        return;
+      }
+    }
+
+    onCalculate({
+      ...form,
+      operation_value: parseFloat(form.operation_value || '0') || 0,
+      amount_foreign: parseBR(form.amount_foreign),
+      exchange_rate_closing: parseBR(form.exchange_rate_closing),
+      signal_value: parseFloat(form.signal_value.replace(/\./g, '').replace(',', '.')) || 0,
+      iof_value: parseFloat(form.iof_value.replace(/\./g, '').replace(',', '.')) || 0,
+      other_fees: parseFloat(form.other_fees.replace(/\./g, '').replace(',', '.')) || 0,
+      fixed_rate: parseFloat(form.fixed_rate.replace(/\./g, '').replace(',', '.')) || 0,
+      indexer_spread: parseFloat(form.indexer_spread.replace(/\./g, '').replace(',', '.')) || 0,
+      principal_grace_months: parseInt(form.principal_grace_months) || 0,
+      interest_grace_months: parseInt(form.interest_grace_months) || 0,
+      principal_installments: principalInstallments,
+      interest_installments: interestInstallments,
+      principal_frequency: form.principal_periodicity,
+      interest_frequency: form.interest_periodicity,
+      first_payment_date: form.first_payment_date || null,
+      total_term_months: parseInt(form.total_term_months) || 0,
+      final_maturity_date: form.final_maturity_date || null,
+      amortization_percentages: form.amortization_percentages || "",
+      percentage_base: form.percentage_base || "saldo_devedor",
+      grace_interest_behavior: form.grace_interest_behavior || "CAPITALIZAR",
+      amortization_trigger: form.amortization_trigger || "END_OF_GRACE",
+      currencyId: form.currency_id || null,
+      exchangeLag: parseInt(form.exchange_lag) || 1,
+      exchangeRates: exchangeRates,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Seção A: Identificação */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
+            <Building2 className="w-4 h-4 text-blue-600" />
+            Identificação
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Grupo Econômico *</Label>
+              <Select 
+                value={form.group_id || ""} 
+                onValueChange={(v) => update("group_id", v)}
+              >
+                <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  {groups?.map((g) => (<SelectItem key={g.id} value={g.id}>{g.group_name}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Entidade Componente *</Label>
+              <Select 
+                value={form.entity_id || ""} 
+                onValueChange={(v) => update("entity_id", v)} 
+                disabled={!form.group_id}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder={form.group_id ? "Selecione" : "Selecione um grupo primeiro"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredEntities?.map((e) => (<SelectItem key={e.id} value={e.id}>{e.entity_name}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Banco Credor *</Label>
+              <Select value={form.bank_id || ""} onValueChange={(v) => update("bank_id", v)}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  {banks?.map((b) => (<SelectItem key={b.id} value={b.id}>{b.bank_name}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nº Contrato *</Label>
+              <Input value={form.contract_number} onChange={(e) => update("contract_number", e.target.value)} placeholder="000.000.000" className="h-9" required />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Categoria da Operação *</Label>
+              <Select 
+                value={form.operation_category} 
+                onValueChange={(v) => {
+                  update("operation_category", v);
+                  update("operation_type", "");
+                }}
+              >
+                <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  {OPERATION_CATEGORIES.map((c) => (<SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo Específico *</Label>
+              <Select 
+                value={form.operation_type} 
+                onValueChange={(v) => update("operation_type", v)}
+                disabled={!form.operation_category}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder={form.operation_category ? "Selecione" : "Escolha categoria primeiro"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {form.operation_category && OPERATION_TYPES[form.operation_category]?.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {missingData && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              Preencha grupo, entidade e banco antes de calcular.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Seção B: Composição e Remuneração da Dívida */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
+            <CreditCard className="w-4 h-4 text-blue-600" />
+            Composição e Remuneração da Dívida
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Moeda e Defasagem PTAX - Primeiro Bloco */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Moeda (Opcional)</Label>
+              <Select value={form.currency_id || ""} onValueChange={(v) => update("currency_id", v)}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="BRL (Padrão)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={null}>BRL (Padrão)</SelectItem>
+                  {currencies?.map((c) => (<SelectItem key={c.id} value={c.id}>{c.currency_code} - {c.currency_name}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            {form.currency_id && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Defasagem PTAX</Label>
+                <Select value={form.exchange_lag} onValueChange={(v) => update("exchange_lag", v)}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">D (Mesma data)</SelectItem>
+                    <SelectItem value="1">D-1 (Dia anterior)</SelectItem>
+                    <SelectItem value="2">D-2 (Dois dias antes)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          
+          {/* Campos de Moeda Estrangeira */}
+          {form.currency_id && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    Valor em Moeda Estrangeira * 
+                    <TooltipProvider>
+                      <Tooltip delayDuration={200}>
+                        <TooltipTrigger asChild>
+                          <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs">
+                          <p className="text-xs">Valor líquido captado na moeda estrangeira (fonte de verdade)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                  <CurrencyInput 
+                    type="currency" 
+                    value={form.amount_foreign} 
+                    onChange={(e) => {
+                      update("amount_foreign", e.target.value);
+                      // Calcular operation_value em tempo real
+                      const foreign = parseBRNumber(e.target.value);
+                      const rate = parseBRNumber(form.exchange_rate_closing);
+                      if (foreign > 0 && rate > 0) {
+                        const brl = (foreign * rate).toFixed(4);
+                        update("operation_value", brl);
+                      }
+                    }}
+                    placeholder="0,00" 
+                    className="h-9" 
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    Cotação do Fechamento *
+                    <TooltipProvider>
+                      <Tooltip delayDuration={200}>
+                        <TooltipTrigger asChild>
+                          <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs">
+                          <p className="text-xs">Taxa fixada no fechamento da operação com o banco (pode incluir spread)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                  <CurrencyInput 
+                    type="exchange_rate" 
+                    value={form.exchange_rate_closing} 
+                    onChange={(e) => {
+                      const newRate = e.target.value;
+                      update("exchange_rate_closing", newRate);
+                      
+                      // Calcular operation_value em tempo real
+                      const foreign = parseBRNumber(form.amount_foreign);
+                      const rate = parseBRNumber(newRate);
+                      if (foreign > 0 && rate > 0) {
+                        const brl = (foreign * rate).toFixed(4);
+                        update("operation_value", brl);
+                      }
+                    }}
+                    placeholder="0,0000" 
+                    className="h-9" 
+                  />
+                  {(() => {
+                    const rate = parseFloat(form.exchange_rate_closing || '0');
+                    if (!isNaN(rate) && rate > 0 && (rate < 2.0 || rate > 10.0)) {
+                      return (
+                        <p className="text-xs text-amber-600 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          Taxa fora do range usual (2,00 - 10,00)
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              </div>
+              
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Valor Convertido (R$) - Calculado Automaticamente
+                </Label>
+                <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm font-mono text-slate-600">
+                  {(() => {
+                    const foreign = parseBRNumber(form.amount_foreign);
+                    const rate = parseBRNumber(form.exchange_rate_closing);
+                    if (foreign > 0 && rate > 0) {
+                      const brl = foreign * rate;
+                      return `R$ ${brl.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`;
+                    }
+                    return "—";
+                  })()}
+                </div>
+                <p className="text-xs text-slate-500">
+                  Este valor será usado como "Valor da Operação" (R$)
+                </p>
+              </div>
+            </>
+          )}
+          
+          <Separator />
+          
+          {/* Valor da Operação e Sinal */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Valor da Operação (R$) *
+                {form.currency_id && (
+                  <span className="ml-1 text-xs text-blue-600 font-normal">(Calculado automaticamente)</span>
+                )}
+              </Label>
+              <CurrencyInput 
+                type="currency" 
+                value={form.operation_value} 
+                onChange={(e) => update("operation_value", e.target.value)} 
+                placeholder="0,00" 
+                className="h-9" 
+                disabled={!!form.currency_id}
+                required 
+              />
+              {form.currency_id && (
+                <p className="text-xs text-slate-500">
+                  Este campo é somente leitura quando operação em moeda estrangeira
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">(-) Sinal do Negócio (R$)</Label>
+              <CurrencyInput type="currency" value={form.signal_value} onChange={(e) => update("signal_value", e.target.value)} className="h-9" />
+            </div>
+          </div>
+          <Separator />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">IOF (R$)</Label>
+                 <CurrencyInput type="currency" value={form.iof_value} onChange={(e) => update("iof_value", e.target.value)} className="h-9" />
+               </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={form.iof_financed} onCheckedChange={(v) => update("iof_financed", v)} />
+                <Label className="text-xs text-slate-600">IOF financiado (somar ao principal)</Label>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Taxas Diversas (R$)</Label>
+                 <CurrencyInput type="currency" value={form.other_fees} onChange={(e) => update("other_fees", e.target.value)} className="h-9" />
+               </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={form.other_fees_financed} onCheckedChange={(v) => update("other_fees_financed", v)} />
+                <Label className="text-xs text-slate-600">Taxas financiadas</Label>
+              </div>
+            </div>
+          </div>
+          <Separator />
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Data da Operação *</Label>
+            <Input type="date" value={form.operation_date} onChange={(e) => update("operation_date", e.target.value)} className="h-9 font-mono w-64" required />
+          </div>
+          <Separator />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa Fixa (% a.a.) *</Label>
+              <CurrencyInput type="percent" value={form.fixed_rate} onChange={(e) => update("fixed_rate", e.target.value)} placeholder="0,0000" className="h-9" required />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa Mensal Equivalente</Label>
+              <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm font-mono text-slate-600">
+                {form.fixed_rate && !isNaN(parseFloat(form.fixed_rate)) 
+                  ? `${((Math.pow(1 + parseFloat(form.fixed_rate) / 100, 1/12) - 1) * 100).toFixed(4)}% a.m.`
+                  : "—"}
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Indexador</Label>
+              <Select value={form.indexer} onValueChange={(v) => update("indexer", v)}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NA">N/A (Prefixado)</SelectItem>
+                  <SelectItem value="CDI">CDI</SelectItem>
+                  <SelectItem value="SELIC">SELIC</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {form.indexer !== "NA" && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Spread (% a.a.)</Label>
+                <CurrencyInput type="percent" value={form.indexer_spread} onChange={(e) => update("indexer_spread", e.target.value)} className="h-9" />
+              </div>
+            )}
+          </div>
+          <Separator />
+          <div className="space-y-3">
+            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Sistema de Amortização</Label>
+            <TooltipProvider>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {SYSTEMS.map((s) => (
+                  <div key={s.value} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => update("calculation_system", s.value)}
+                      className={`w-full p-3 pr-10 rounded-lg border-2 text-left transition-all duration-200 ${
+                        form.calculation_system === s.value
+                          ? "border-blue-600 bg-blue-50 text-blue-900"
+                          : "border-slate-200 hover:border-slate-300 text-slate-600"
+                      }`}
+                    >
+                      <span className="text-sm font-semibold">{s.value}</span>
+                      <p className="text-xs mt-0.5 opacity-70">{s.label.split("—")[1]?.trim()}</p>
+                    </button>
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="absolute top-3 right-3 p-1 rounded-full hover:bg-slate-200 transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Info className="w-4 h-4 text-slate-400 hover:text-blue-600" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <p className="text-xs leading-relaxed">{s.description}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                ))}
+              </div>
+            </TooltipProvider>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Seção C: Prazos e Periodicidades */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
+            <Calendar className="w-4 h-4 text-blue-600" />
+            Prazos e Periodicidades
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Prazo Total (meses) *</Label>
+              <Input 
+                type="number" 
+                min="1" 
+                value={form.total_term_months} 
+                onChange={(e) => update("total_term_months", e.target.value)} 
+                className="h-9 font-mono" 
+                disabled={!fieldsStatus.totalTerm}
+                required 
+              />
+              {(form.calculation_system === "BULLET" || form.calculation_system === "AMERICANO") && (
+                <p className="text-xs text-slate-500 mt-1">
+                  {form.calculation_system === "BULLET" ? "Define quando ocorre o pagamento único" : "Define quando cai a amortização completa"}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Data Vencimento Final {(form.calculation_system === "AMERICANO" || form.calculation_system === "BULLET") && "(Pagamento Final)"}
+              </Label>
+              <Input 
+                type="date" 
+                value={form.final_maturity_date} 
+                onChange={(e) => handleFinalDateChange(e.target.value)} 
+                className="h-9 font-mono" 
+                disabled={!fieldsStatus.totalTerm}
+              />
+              <p className="text-xs text-slate-500">Calculado automaticamente, editável</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Dia de Referência dos Vencimentos</Label>
+              <Input 
+                type="date" 
+                value={form.first_payment_date} 
+                onChange={(e) => update("first_payment_date", e.target.value)} 
+                className="h-9 font-mono" 
+                placeholder="Sugerido automaticamente"
+              />
+              <p className="text-xs text-slate-500">Define o dia fixo mensal para todos os pagamentos</p>
+            </div>
+          </div>
+          <Separator />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Carência Principal (meses)</Label>
+              <Input 
+                type="number" 
+                min="0" 
+                value={form.principal_grace_months} 
+                onChange={(e) => update("principal_grace_months", e.target.value)} 
+                className="h-9" 
+                disabled={!fieldsStatus.principalGrace}
+              />
+              {!fieldsStatus.principalGrace && (
+                <p className="text-xs text-slate-500">Não aplicável neste sistema</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Carência Juros (meses)</Label>
+              <Input 
+                type="number" 
+                min="0" 
+                value={form.interest_grace_months} 
+                onChange={(e) => update("interest_grace_months", e.target.value)} 
+                className="h-9" 
+                disabled={!fieldsStatus.interestGrace}
+              />
+              {!fieldsStatus.interestGrace && (
+                <p className="text-xs text-slate-500">Não aplicável neste sistema</p>
+              )}
+            </div>
+          </div>
+          {(parseInt(form.interest_grace_months) > 0 && fieldsStatus.interestGrace) && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Comportamento dos Juros na Carência</Label>
+                <Select 
+                  value={form.grace_interest_behavior} 
+                  onValueChange={(v) => {
+                    // Bloquear PRICE + BALLOON
+                    if (form.calculation_system === "PRICE" && v === "BALLOON") {
+                      alert("⚠️ Sistema PRICE é incompatível com BALLOON. Use CAPITALIZAR ou INTEREST_ONLY.");
+                      return;
+                    }
+                    update("grace_interest_behavior", v);
+                  }}
+                >
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CAPITALIZAR">
+                      <div className="py-1">
+                        <div className="font-semibold">Capitalizar (Anatocismo)</div>
+                        <div className="text-xs text-slate-500">Juros sobre juros - SD cresce</div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="INTEREST_ONLY">
+                      <div className="py-1">
+                        <div className="font-semibold">Pagar Juros (Interest Only)</div>
+                        <div className="text-xs text-slate-500">PMT = juros mensais, SD estático</div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="BALLOON" disabled={form.calculation_system === "PRICE"}>
+                      <div className="py-1">
+                        <div className="font-semibold">Balloon (Juros Simples)</div>
+                        <div className="text-xs text-slate-500">Acumula juros simples para pagar depois</div>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {form.grace_interest_behavior === "CAPITALIZAR" && (
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    Anatocismo: Juros capitalizados geram juros sobre juros
+                  </div>
+                )}
+              </div>
+              {parseInt(form.principal_grace_months) > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Gatilho da Primeira Amortização</Label>
+                  <Select value={form.amortization_trigger} onValueChange={(v) => update("amortization_trigger", v)}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="END_OF_GRACE">
+                        <div className="py-1">
+                          <div className="font-semibold">Fim da Carência</div>
+                          <div className="text-xs text-slate-500">1ª PMT = último dia da carência</div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="GRACE_PLUS_FREQ">
+                        <div className="py-1">
+                          <div className="font-semibold">Carência + Periodicidade</div>
+                          <div className="text-xs text-slate-500">1ª PMT = carência + 1 frequência</div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="NEXT_MONTH">
+                        <div className="py-1">
+                          <div className="font-semibold">Mês Subsequente</div>
+                          <div className="text-xs text-slate-500">1ª PMT = carência + 1 mês fixo</div>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500">Define quando cai a primeira parcela de amortização</p>
+                </div>
+              )}
+            </div>
+          )}
+          <Separator />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Periodicidade Amortização</Label>
+              <Select 
+                value={form.principal_periodicity} 
+                onValueChange={(v) => update("principal_periodicity", v)}
+                disabled={!fieldsStatus.principalPeriodicity}
+              >
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PERIODICITIES.map((p) => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
+                </SelectContent>
+              </Select>
+              {!fieldsStatus.principalPeriodicity && (
+                <p className="text-xs text-slate-500">
+                  {form.calculation_system === "PRICE" && "Travado como Mensal (PRICE)"}
+                  {form.calculation_system === "AMERICANO" && "Amortização só ao final"}
+                  {form.calculation_system === "BULLET" && "Pagamento único final"}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Periodicidade Juros</Label>
+              <Select 
+                value={form.interest_periodicity} 
+                onValueChange={(v) => update("interest_periodicity", v)}
+                disabled={!fieldsStatus.interestPeriodicity}
+              >
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PERIODICITIES.map((p) => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
+                </SelectContent>
+              </Select>
+              {!fieldsStatus.interestPeriodicity && (
+                <p className="text-xs text-slate-500">
+                  {form.calculation_system === "SAC" && "Segue periodicidade da amortização"}
+                  {form.calculation_system === "PRICE" && "Travado como Mensal (PRICE)"}
+                  {form.calculation_system === "BULLET" && "Pagamento único final"}
+                </p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Seção D: Percentuais de Amortização (PERCENTAGE_RESIDUAL) */}
+      {form.calculation_system === "PERCENTAGE_RESIDUAL" && (
+        <Card className="border-amber-200 shadow-sm bg-amber-50/30">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base font-semibold text-amber-900">
+              <Percent className="w-4 h-4 text-amber-600" />
+              Percentuais de Amortização sobre Saldo Devedor
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-amber-700 uppercase tracking-wider">Base de Cálculo</Label>
+              <Select value={form.percentage_base} onValueChange={(v) => update("percentage_base", v)}>
+                <SelectTrigger className="h-9 border-amber-300">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="saldo_devedor">% sobre Saldo Devedor (início do período)</SelectItem>
+                  <SelectItem value="principal">% sobre Principal Original</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-amber-600">
+                {form.percentage_base === "saldo_devedor" 
+                  ? "Percentual incide sobre o saldo devedor no início de cada período"
+                  : "Percentual incide sobre o valor do principal original (fixo)"}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-amber-700 uppercase tracking-wider">
+                Percentuais por Parcela (%)
+              </Label>
+              <Input
+                value={form.amortization_percentages}
+                onChange={(e) => update("amortization_percentages", e.target.value)}
+                placeholder="Ex: 24.18, 28.09, 32.72, 38.18"
+                className="h-9 font-mono border-amber-300"
+              />
+              <p className="text-xs text-amber-600">
+                Insira os percentuais separados por vírgula. Ex: primeira parcela 24,18%, segunda 28,09%, etc.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="space-y-3">
+        {/* Upload PDF Section */}
+        {uploadedPdfUrl ? (
+          <div className="flex items-center justify-between p-3 rounded-lg bg-green-50 border border-green-200">
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-green-600" />
+              <div>
+                <p className="text-sm font-medium text-slate-900">PDF anexado</p>
+                <a 
+                  href={uploadedPdfUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:underline"
+                >
+                  Visualizar PDF
+                </a>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                if (confirm("Deseja remover o PDF anexado?")) {
+                  onPdfUpload(null);
+                }
+              }}
+              className="gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <div className="relative">
+            <input
+              type="file"
+              id="pdf-upload"
+              accept="application/pdf"
+              onChange={(e) => onPdfUpload(e.target.files[0])}
+              disabled={isUploadingPdf}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+            <Button
+              type="button"
+              size="lg"
+              variant="outline"
+              disabled={isUploadingPdf}
+              className="w-full h-12 text-base font-semibold border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50 disabled:opacity-70"
+              onClick={() => document.getElementById('pdf-upload').click()}
+            >
+              <Paperclip className="w-5 h-5 mr-2" />
+              {isUploadingPdf ? "Fazendo upload..." : "Anexar arquivo (PDF)"}
+            </Button>
+          </div>
+        )}
+
+        <Button 
+          type="submit" 
+          size="lg" 
+          disabled={isCalculating}
+          className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base font-semibold shadow-lg shadow-blue-600/20 disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          <Calculator className="w-5 h-5 mr-2" />
+          {isCalculating ? "Calculando..." : (isEditing ? "Recalcular contrato" : "Calcular contrato")}
+        </Button>
+        {isCalculating && (
+          <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-600 animate-pulse" style={{ width: "100%" }} />
+          </div>
+        )}
+      </div>
+    </form>
+  );
+}

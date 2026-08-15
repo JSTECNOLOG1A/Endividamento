@@ -1,0 +1,41 @@
+{
+  "name": "Bank",
+  "type": "object",
+  "properties": {
+    "bank_code": {
+      "type": "string",
+      "description": "C\u00f3digo COMPE/SPB do banco"
+    },
+    "bank_name": {
+      "type": "string",
+      "description": "Nome do banco"
+    },
+    "bank_type": {
+      "type": "string",
+      "enum": [
+        "privado",
+        "publico",
+        "estrangeiro"
+      ],
+      "description": "Tipo de institui\u00e7\u00e3o"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ativo",
+        "inativo"
+      ],
+      "default": "ativo",
+      "description": "Status"
+    }
+  },
+  "required": [
+    "bank_code",
+    "bank_name"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

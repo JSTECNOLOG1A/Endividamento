@@ -1,0 +1,49 @@
+{
+  "name": "CompanyEntity",
+  "type": "object",
+  "properties": {
+    "group_id": {
+      "type": "string",
+      "description": "ID do Grupo Econ\u00f4mico vinculado"
+    },
+    "entity_name": {
+      "type": "string",
+      "description": "Nome da empresa ou indiv\u00edduo"
+    },
+    "document_number": {
+      "type": "string",
+      "description": "CNPJ (empresa) ou CPF (indiv\u00edduo)"
+    },
+    "document_type": {
+      "type": "string",
+      "enum": [
+        "CNPJ",
+        "CPF"
+      ],
+      "description": "Tipo de documento"
+    },
+    "entity_type": {
+      "type": "string",
+      "enum": [
+        "empresa",
+        "pf"
+      ],
+      "description": "Tipo de entidade"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ativa",
+        "inativa"
+      ],
+      "default": "ativa",
+      "description": "Status da entidade"
+    }
+  },
+  "required": [
+    "group_id",
+    "entity_name",
+    "document_number",
+    "document_type"
+  ]
+}

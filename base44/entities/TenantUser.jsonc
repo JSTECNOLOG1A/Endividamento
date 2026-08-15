@@ -1,0 +1,47 @@
+{
+  "name": "TenantUser",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "description": "ID do tenant (Tenant.id)"
+    },
+    "group_id": {
+      "type": "string",
+      "description": "ID do grupo (duplicado para query performance)"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "Email do usu\u00e1rio"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "OWNER",
+        "ADMIN",
+        "VIEWER"
+      ],
+      "default": "VIEWER",
+      "description": "Role do usu\u00e1rio no tenant"
+    },
+    "permissions": {
+      "type": "string",
+      "description": "JSON com permiss\u00f5es customizadas"
+    },
+    "invited_by": {
+      "type": "string",
+      "description": "Email de quem convidou"
+    },
+    "joined_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Data de entrada no tenant"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "group_id",
+    "user_email",
+    "role"
+  ]
+}
