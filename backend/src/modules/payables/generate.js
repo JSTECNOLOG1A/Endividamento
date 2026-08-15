@@ -1,0 +1,249 @@
+import { randomUUID } from "node:crypto";
+import { pool } from "../../db/pool.js";
+import { logger } from "../../logger.js";
+import { se2FilialFromSm0 } from "../integrations/protheusScope.js";
+
+export function titleNumberFromContract(contractNumber) {
+  const digits = String(contractNumber || "").replace(/\D/g, "");
+  if (!digits) return "000000001";
+  return digits.slice(-9).padStart(9, "0");
+}
+
+export function parcelaCode(value) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.slice(-3).padStart(3, "0");
+}
+
+function money(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return 0;
+  return Math.round(amount * 100) / 100;
+}
+
+function dateOnly(value) {
+  if (!value) return null;
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const text = String(value).trim();
+  if (!text) return null;
+  return text.slice(0, 10);
+}
+
+export function parseContractSchedule(contract) {
+  const raw = contract?.schedule_data;
+  if (!raw) return [];
+  try {
+    const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.schedule)) return data.schedule;
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function prefixAndType(contract) {
+  const category = String(contract?.operation_category || "").toLowerCase();
+  if (category === "financiamentos") return { prefixo: "FIN", tipo: "NP" };
+  return { prefixo: "EMP", tipo: "NP" };
+}
+
+export function supplierFromBank(bank) {
+  const digits = String(bank?.bank_code || "").replace(/\D/g, "");
+  return {
+    fornecedor: digits ? digits.padStart(6, "0").slice(-6) : "",
+    fornecedor_loja: "01",
+    fornecedor_nome: String(bank?.bank_name || "").trim(),
+  };
+}
+
+export function buildPayableTitles(contract, bank = null, entity = null) {
+  if (!contract?.id || !contract.entity_id) return [];
+  const { prefixo, tipo } = prefixAndType(contract);
+  const tituloNumero = titleNumberFromContract(contract.contract_number);
+  const emissao = dateOnly(contract.operation_date);
+  const natureza = String(contract.natureza || contract.nature_code || "").trim();
+  const contractNumber = String(contract.contract_number || tituloNumero).trim();
+  const supplier = supplierFromBank(bank);
+  const se2 = se2FilialFromSm0(null, entity);
+
+  const titles = [];
+  const seen = new Set();
+  for (const row of parseContractSchedule(contract)) {
+    const parcela = parcelaCode(row?.parcela);
+    if (!parcela || parcela === "000") continue;
+    const valor = money(row.prestacao ?? ((row.amortizacao || 0) + (row.jurosFixosMes || 0) + (row.jurosVariaveisMes || 0)));
+    if (valor <= 0) continue;
+    if (seen.has(parcela)) continue;
+    seen.add(parcela);
+
+    titles.push({
+      entity_id: contract.entity_id,
+      contract_id: contract.id,
+      parcela,
+      titulo_numero: tituloNumero,
+      tipo,
+      prefixo,
+      emissao,
+      vencimento: dateOnly(row.dataVencimento),
+      valor,
+      saldo: valor,
+      natureza,
+      historico: `Parcela ${parcela} do contrato ${contractNumber}`,
+      status: "aberto",
+      origem: "contrato",
+      fornecedor: supplier.fornecedor,
+      fornecedor_loja: supplier.fornecedor_loja,
+      fornecedor_nome: supplier.fornecedor_nome,
+      filial: se2?.filial || "",
+      filial_origem: se2?.filialOrigem || "",
+    });
+  }
+  return titles;
+}
+
+export async function generatePayableTitlesForContract(contract, createdBy = "system") {
+  if (!contract?.id || contract.status !== "aprovado") {
+    return { created: 0, skipped: true };
+  }
+
+  const existing = await pool.query(
+    `SELECT COUNT(*)::int AS n FROM payable_titles WHERE contract_id = $1`,
+    [contract.id]
+  );
+  if (existing.rows[0].n > 0) {
+    return { created: 0, skipped: true };
+  }
+
+  let bank = null;
+  if (contract.bank_id) {
+    const bankResult = await pool.query(`SELECT * FROM banks WHERE id = $1`, [contract.bank_id]);
+    bank = bankResult.rows[0] || null;
+  }
+
+  const entityResult = await pool.query(
+    `SELECT codigo_empresa, codigo_filial FROM company_entities WHERE id = $1`,
+    [contract.entity_id]
+  );
+  const titles = buildPayableTitles(contract, bank, entityResult.rows[0] || null);
+  if (!titles.length) {
+    logger.warn({ contractId: contract.id }, "contrato aprovado sem parcelas para contas a pagar");
+    return { created: 0, skipped: false };
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const title of titles) {
+      await client.query(
+        `INSERT INTO payable_titles (
+           id, entity_id, contract_id, parcela, titulo_numero, tipo, prefixo,
+           emissao, vencimento, valor, saldo, natureza, historico, status, origem,
+           fornecedor, fornecedor_loja, fornecedor_nome, filial, filial_origem, created_by
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+        [
+          randomUUID(),
+          title.entity_id,
+          title.contract_id,
+          title.parcela,
+          title.titulo_numero,
+          title.tipo,
+          title.prefixo,
+          title.emissao,
+          title.vencimento,
+          title.valor,
+          title.saldo,
+          title.natureza,
+          title.historico,
+          title.status,
+          title.origem,
+          title.fornecedor,
+          title.fornecedor_loja,
+          title.fornecedor_nome,
+          title.filial,
+          title.filial_origem,
+          createdBy,
+        ]
+      );
+    }
+    await client.query(
+      `UPDATE loan_contracts SET exported_to_payables = true, updated_date = now() WHERE id = $1`,
+      [contract.id]
+    );
+    await client.query("COMMIT");
+    return { created: titles.length, skipped: false };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function backfillPayableSuppliers() {
+  await pool.query(
+    `UPDATE payable_titles t
+     SET
+       fornecedor = CASE
+         WHEN COALESCE(t.fornecedor, '') <> '' THEN t.fornecedor
+         WHEN COALESCE(b.bank_code, '') <> '' THEN lpad(regexp_replace(b.bank_code, '[^0-9]', '', 'g'), 6, '0')
+         ELSE t.fornecedor
+       END,
+       fornecedor_nome = CASE
+         WHEN COALESCE(t.fornecedor_nome, '') <> '' THEN t.fornecedor_nome
+         ELSE COALESCE(b.bank_name, t.fornecedor_nome, '')
+       END,
+       fornecedor_loja = CASE
+         WHEN COALESCE(t.fornecedor_loja, '') <> '' THEN t.fornecedor_loja
+         ELSE '01'
+       END,
+       updated_date = now()
+     FROM loan_contracts c
+     LEFT JOIN banks b ON b.id = c.bank_id
+     WHERE t.contract_id = c.id
+       AND (COALESCE(t.fornecedor, '') = '' OR COALESCE(t.fornecedor_nome, '') = '')`
+  );
+}
+
+export async function backfillPayableFiliais() {
+  await pool.query(
+    `UPDATE payable_titles t
+     SET
+       filial = lpad(regexp_replace(COALESCE(e.codigo_empresa, ''), '[^0-9]', '', 'g'), 2, '0'),
+       filial_origem = lpad(regexp_replace(COALESCE(e.codigo_empresa, ''), '[^0-9]', '', 'g'), 2, '0')
+         || lpad(regexp_replace(COALESCE(e.codigo_filial, ''), '[^0-9]', '', 'g'), 2, '0'),
+       updated_date = now()
+     FROM company_entities e
+     WHERE t.entity_id = e.id
+       AND COALESCE(e.codigo_empresa, '') <> ''
+       AND COALESCE(e.codigo_filial, '') <> ''
+       AND (
+         COALESCE(t.filial, '') = ''
+         OR COALESCE(t.filial_origem, '') = ''
+         OR length(regexp_replace(COALESCE(t.filial_origem, ''), '[^0-9]', '', 'g')) <= 2
+       )`
+  );
+}
+
+export async function syncPayableTitlesFromApprovedContracts() {
+  await backfillPayableSuppliers();
+  await backfillPayableFiliais();
+  const result = await pool.query(
+    `SELECT * FROM loan_contracts
+     WHERE status = 'aprovado'
+       AND (exported_to_payables IS NOT TRUE
+            OR NOT EXISTS (SELECT 1 FROM payable_titles p WHERE p.contract_id = loan_contracts.id))`
+  );
+  let created = 0;
+  let contracts = 0;
+  for (const row of result.rows) {
+    const generated = await generatePayableTitlesForContract(row, row.created_by || "system");
+    if (generated.created > 0) {
+      created += generated.created;
+      contracts += 1;
+    }
+  }
+  return { created, contracts, scanned: result.rows.length };
+}

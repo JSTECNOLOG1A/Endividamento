@@ -4,45 +4,73 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Send, CheckCircle, XCircle, Copy, Edit } from "lucide-react";
+import { Send, CheckCircle, XCircle, Copy, Edit, Paperclip } from "lucide-react";
+
+function parseStatusHistory(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw !== "string") return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 export default function ContractWorkflow({ contract, user, onStatusChange, onDuplicate }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [action, setAction] = useState(null);
   const [comments, setComments] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [pdfUrl, setPdfUrl] = useState(contract.contract_pdf_url || "");
+  const [uploadingPdf, setUploadingPdf] = useState(false);
 
-  const canEdit = contract.status === "rascunho";
   const canSendApproval = contract.status === "rascunho";
   const canApprove = contract.status === "pendente_aprovacao" && user?.role === "admin";
   const canReject = contract.status === "pendente_aprovacao" && user?.role === "admin";
   const canReopen = contract.status === "aprovado" && user?.role === "admin";
   const canCancel = ["rascunho", "pendente_aprovacao"].includes(contract.status);
 
-  const addToHistory = (newStatus, comments = "") => {
-    const history = contract.status_history ? JSON.parse(contract.status_history) : [];
+  const addToHistory = (newStatus, historyComments = "") => {
+    const history = parseStatusHistory(contract.status_history);
     history.push({
       from: contract.status,
       to: newStatus,
       by: user?.email,
       at: new Date().toISOString(),
-      comments,
+      comments: historyComments,
     });
     return JSON.stringify(history);
   };
 
+  const handlePdfUpload = async (file) => {
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      setError("Apenas arquivos PDF são permitidos");
+      return;
+    }
+    setUploadingPdf(true);
+    setError("");
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      await base44.entities.LoanContract.update(contract.id, { contract_pdf_url: file_url });
+      setPdfUrl(file_url);
+    } catch (err) {
+      setError("Erro ao anexar PDF: " + (err.message || "tente novamente"));
+    } finally {
+      setUploadingPdf(false);
+    }
+  };
+
   const handleAction = async () => {
     if (action === "reject" && !comments.trim()) {
-      alert("Comentários são obrigatórios ao recusar");
+      setError("Comentários são obrigatórios ao recusar");
       return;
     }
 
-    // Validar PDF obrigatório para envio de aprovação
-    if (action === "send_approval" && !contract.contract_pdf_url) {
-      alert("⚠️ É obrigatório anexar o PDF do contrato antes de enviar para aprovação");
-      return;
-    }
-
+    setError("");
     setLoading(true);
     try {
       let updateData = {};
@@ -52,6 +80,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
           updateData = {
             status: "pendente_aprovacao",
             status_history: addToHistory("pendente_aprovacao"),
+            ...(pdfUrl ? { contract_pdf_url: pdfUrl } : {}),
           };
           break;
         case "approve":
@@ -118,10 +147,11 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
       } else {
         setDialogOpen(false);
         setComments("");
+        setError("");
         if (onStatusChange) onStatusChange();
       }
-    } catch (error) {
-      alert("Erro ao atualizar status: " + error.message);
+    } catch (err) {
+      setError("Erro ao atualizar status: " + (err.message || "tente novamente"));
     } finally {
       setLoading(false);
     }
@@ -129,6 +159,8 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
 
   const openDialog = (actionType) => {
     setAction(actionType);
+    setError("");
+    setPdfUrl(contract.contract_pdf_url || "");
     setDialogOpen(true);
   };
 
@@ -213,9 +245,37 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
           </DialogHeader>
           <div className="space-y-4 py-4">
             {action === "send_approval" && (
-              <p className="text-sm text-slate-600">
-                O contrato será enviado para análise e aprovação. Deseja continuar?
-              </p>
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600">
+                  O contrato será enviado para análise e aprovação. Deseja continuar?
+                </p>
+                {pdfUrl ? (
+                  <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+                    PDF anexado.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                      Nenhum PDF anexado. Você pode enviar mesmo assim ou anexar agora.
+                    </p>
+                    <label className="inline-flex">
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        disabled={uploadingPdf || loading}
+                        onChange={(e) => handlePdfUpload(e.target.files?.[0])}
+                      />
+                      <Button type="button" size="sm" variant="outline" className="gap-1.5 text-xs" disabled={uploadingPdf || loading} asChild>
+                        <span>
+                          <Paperclip className="w-3.5 h-3.5" />
+                          {uploadingPdf ? "Enviando PDF..." : "Anexar PDF"}
+                        </span>
+                      </Button>
+                    </label>
+                  </div>
+                )}
+              </div>
             )}
             {action === "reopen" && (
               <p className="text-sm text-slate-600">
@@ -235,12 +295,17 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
                 />
               </div>
             )}
+            {error && (
+              <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                {error}
+              </p>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)} disabled={loading}>
+            <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)} disabled={loading}>
               Cancelar
             </Button>
-            <Button onClick={handleAction} disabled={loading}>
+            <Button type="button" onClick={handleAction} disabled={loading || uploadingPdf}>
               {loading ? "Processando..." : "Confirmar"}
             </Button>
           </DialogFooter>

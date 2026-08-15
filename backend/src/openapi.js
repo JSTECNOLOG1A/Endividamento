@@ -38,5 +38,17 @@ export const openApiDocument = {
         summary: "Funções: calculateAmortizationSchedule, getPTAXFromBACEN, validateAllApprovedContracts",
       },
     },
+    "/integrations": {
+      get: { summary: "Listar conexões de API / ERP" },
+      post: { summary: "Criar conexão de API" },
+    },
+    "/integrations/test-connection": {
+      post: { summary: "Testar conexão com o ERP (não persiste dados)" },
+    },
+    "/integrations/{code}": {
+      get: { summary: "Obter conexão" },
+      put: { summary: "Atualizar conexão" },
+      delete: { summary: "Excluir conexão" },
+    },
   },
 };

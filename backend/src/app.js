@@ -15,6 +15,7 @@ import { authRouter } from "./modules/auth/routes.js";
 import { entitiesRouter } from "./modules/entities/routes.js";
 import { functionsRouter } from "./modules/functions/routes.js";
 import { auditRouter } from "./modules/audit/routes.js";
+import { integrationsRouter } from "./modules/integrations/routes.js";
 import { openApiDocument } from "./openapi.js";
 import * as store from "./modules/entities/store.js";
 
@@ -57,11 +58,16 @@ export function createApp() {
   app.use("/api/entities", entitiesRouter);
   app.use("/api/functions", functionsRouter);
   app.use("/api/audit-events", auditRouter);
+  app.use("/api/integrations", integrationsRouter);
 
   const aliases = {
     groups: "Group",
     "company-entities": "CompanyEntity",
     banks: "Bank",
+    "bank-accounts": "BankAccount",
+    natures: "Nature",
+    "chart-of-accounts": "ChartOfAccount",
+    "payable-titles": "PayableTitle",
     contracts: "LoanContract",
     snapshots: "CalculationSnapshot",
     rates: "CDIRate",
@@ -86,6 +92,13 @@ export function createApp() {
       return;
     }
     res.json({ file_url: `/uploads/${req.file.filename}` });
+  });
+
+  app.use((req, res) => {
+    res.status(404).json({
+      error: `Rota não encontrada: ${req.method} ${req.path}`,
+      code: "NOT_FOUND",
+    });
   });
 
   app.use(errorHandler);

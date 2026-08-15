@@ -12,7 +12,7 @@ export const ENTITIES = {
   },
   CompanyEntity: {
     table: "company_entities",
-    columns: ["group_id", "entity_name", "document_number", "document_type", "entity_type", "status"],
+    columns: ["group_id", "entity_name", "document_number", "document_type", "entity_type", "codigo_empresa", "codigo_filial", "status"],
     booleans: [],
     numbers: [],
   },

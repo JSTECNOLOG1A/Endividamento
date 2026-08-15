@@ -6,6 +6,10 @@ export const config = {
   databaseUrl: process.env.DATABASE_URL,
   jwtSecret: process.env.JWT_SECRET || "dev-only-change-me-min-32-characters!!",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "8h",
+  credentialsEncryptionKey:
+    process.env.CREDENTIALS_ENCRYPTION_KEY ||
+    process.env.JWT_SECRET ||
+    "dev-only-change-me-min-32-characters!!",
   adminEmail: (process.env.ADMIN_EMAIL || "admin@fincalc.local").toLowerCase(),
   adminPassword: process.env.ADMIN_PASSWORD || "FinCalc!Local1",
   corsOrigins: (process.env.CORS_ORIGINS || "http://localhost:5173")

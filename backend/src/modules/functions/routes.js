@@ -1,6 +1,12 @@
 import { Router } from "express";
 import * as store from "../entities/store.js";
 import { calculateAmortizationScheduleOnServer } from "../calculate/service.js";
+import { previewNatures, integrateNatures } from "../natures/integrate.js";
+import { previewBankAccounts, integrateBankAccounts } from "../bankAccounts/integrate.js";
+import { previewChartAccounts, integrateChartAccounts } from "../chartAccounts/integrate.js";
+import { syncPayableTitlesFromApprovedContracts } from "../payables/generate.js";
+import { classifyPayableTitles } from "../payables/classify.js";
+import { integratePayableTitles } from "../payables/erpIntegrate.js";
 
 function toIsoDate(date) {
   return date.toISOString().slice(0, 10);
@@ -137,7 +143,20 @@ async function calculateAmortizationSchedule(payload = {}, req) {
   }
 }
 
-const handlers = { getPTAXFromBACEN, validateAllApprovedContracts, calculateAmortizationSchedule };
+const handlers = {
+  getPTAXFromBACEN,
+  validateAllApprovedContracts,
+  calculateAmortizationSchedule,
+  previewNatures: () => previewNatures(),
+  integrateNatures: (payload, req) => integrateNatures(payload, req.user?.email || "system"),
+  previewBankAccounts: () => previewBankAccounts(),
+  integrateBankAccounts: (payload, req) => integrateBankAccounts(payload, req.user?.email || "system"),
+  previewChartAccounts: () => previewChartAccounts(),
+  integrateChartAccounts: (payload, req) => integrateChartAccounts(payload, req.user?.email || "system"),
+  syncPayableTitles: () => syncPayableTitlesFromApprovedContracts(),
+  classifyPayableTitles: (payload) => classifyPayableTitles(payload || {}),
+  integratePayableTitles: (payload) => integratePayableTitles(payload || {}),
+};
 
 export const functionsRouter = Router();
 

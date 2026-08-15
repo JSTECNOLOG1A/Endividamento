@@ -48,10 +48,12 @@
  * The mainPage value must match a key in the PAGES object exactly.
  */
 import Accounting from './pages/Accounting';
+import AccountsPayable from './pages/AccountsPayable';
 import CDIManager from './pages/CDIManager';
 import Consolidation from './pages/Consolidation';
 import Contracts from './pages/Contracts';
 import Governance from './pages/Governance';
+import Settings from './pages/Settings';
 import Simulator from './pages/Simulator';
 import UserManual from './pages/UserManual';
 import __Layout from './Layout.jsx';
@@ -59,10 +61,12 @@ import __Layout from './Layout.jsx';
 
 export const PAGES = {
     "Accounting": Accounting,
+    "AccountsPayable": AccountsPayable,
     "CDIManager": CDIManager,
     "Consolidation": Consolidation,
     "Contracts": Contracts,
     "Governance": Governance,
+    "Settings": Settings,
     "Simulator": Simulator,
     "UserManual": UserManual,
 }
