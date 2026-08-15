@@ -10,7 +10,7 @@ export const uploadsDir = path.join(__dirname, "uploads");
 fs.mkdirSync(dataDir, { recursive: true });
 fs.mkdirSync(uploadsDir, { recursive: true });
 
-const dbPath = path.join(dataDir, "fincalc.sqlite");
+const dbPath = path.join(dataDir, "endividamento.sqlite");
 export const db = new Database(dbPath);
 
 db.pragma("journal_mode = WAL");

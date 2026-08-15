@@ -22,7 +22,8 @@ export const ENTITIES = {
     columns: [
       "group_id", "entity_id", "bank_id", "contract_number", "operation_category", "operation_type",
       "operation_value", "amount_foreign", "exchange_rate_closing", "signal_value", "iof_value",
-      "iof_financed", "other_fees", "other_fees_financed", "mip_value", "mip_embedded", "dfi_value",
+      "iof_financed", "encargo_garantia_value", "encargo_garantia_financed", "other_fees",
+      "other_fees_financed", "mip_value", "mip_embedded", "dfi_value",
       "dfi_embedded", "other_insurance_value", "other_insurance_embedded", "fixed_rate", "indexer",
       "indexer_spread", "currency_id", "exchange_lag", "exchange_rates", "operation_date",
       "first_payment_date", "total_term_months", "final_maturity_date", "principal_grace_months",
@@ -34,12 +35,13 @@ export const ENTITIES = {
       "last_recalculated_at",
     ],
     booleans: [
-      "iof_financed", "other_fees_financed", "mip_embedded", "dfi_embedded",
+      "iof_financed", "encargo_garantia_financed", "other_fees_financed", "mip_embedded", "dfi_embedded",
       "other_insurance_embedded", "exported_to_payables",
     ],
     numbers: [
       "operation_value", "amount_foreign", "exchange_rate_closing", "signal_value", "iof_value",
-      "other_fees", "mip_value", "dfi_value", "other_insurance_value", "fixed_rate", "indexer_spread",
+      "encargo_garantia_value", "other_fees", "mip_value", "dfi_value", "other_insurance_value",
+      "fixed_rate", "indexer_spread",
       "exchange_lag", "total_term_months", "principal_grace_months", "interest_grace_months",
       "principal_installments", "interest_installments",
     ],

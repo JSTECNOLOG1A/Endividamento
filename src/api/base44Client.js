@@ -1,5 +1,5 @@
 const API = "/api";
-const TOKEN_KEY = "fincalc_token";
+const TOKEN_KEY = "endividamento_token";
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);

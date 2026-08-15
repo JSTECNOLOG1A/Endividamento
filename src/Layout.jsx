@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "./utils";
-import { Calculator, FolderOpen, Database, Menu, X, Building, BarChart3, BookOpen } from "lucide-react";
+import { Calculator, FolderOpen, Database, Menu, X, Building, BarChart3, BookOpen, Settings, Sigma } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "sonner";
 
@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { name: "Consolidação", page: "Consolidation", icon: BarChart3 },
   { name: "Indexadores e Feriados", page: "CDIManager", icon: Database },
   { name: "Manual", page: "UserManual", icon: BookOpen },
+  { name: "Configurações", page: "Configuracoes", icon: Settings },
 ];
 
 export default function Layout({ children, currentPageName }) {
@@ -37,10 +38,10 @@ export default function Layout({ children, currentPageName }) {
             {/* Logo */}
             <Link to={createPageUrl("Simulator")} className="flex items-center gap-2.5 group">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-sm shadow-blue-600/20 group-hover:shadow-md group-hover:shadow-blue-600/30 transition-shadow">
-                <Calculator className="w-4 h-4 text-white" />
+                <Sigma className="w-4 h-4 text-white" strokeWidth={2.5} />
               </div>
               <div>
-                <span className="text-sm font-bold text-slate-900 tracking-tight">FinCalc</span>
+                <span className="text-sm font-bold text-slate-900 tracking-tight">Endividamento</span>
                 <span className="text-[10px] text-slate-400 font-medium ml-1.5 hidden sm:inline">BACEN</span>
               </div>
             </Link>

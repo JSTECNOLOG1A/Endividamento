@@ -85,7 +85,7 @@ export default function UserManual() {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(28);
     doc.setTextColor(255, 255, 255);
-    doc.text("FinCalc Pro", margin, 55);
+    doc.text("Endividamento", margin, 55);
     doc.setFontSize(14);
     doc.setFont("helvetica", "normal");
     doc.text("Motor de Cálculo para Empréstimos e Financiamentos", margin, 78);
@@ -94,7 +94,7 @@ export default function UserManual() {
 
     y = 160;
     addTitle("Manual de Uso", 22, [15, 23, 42]);
-    addParagraph("Guia completo para utilização da plataforma FinCalc Pro — simulação, gestão de contratos, governança, contabilidade e consolidação de operações de crédito.");
+    addParagraph("Guia completo para utilização da plataforma Endividamento — simulação, gestão de contratos, governança, contabilidade e consolidação de operações de crédito.");
 
     addDivider();
     addParagraph("Versão: 1.0    |    Data: " + new Date().toLocaleDateString("pt-BR"));
@@ -127,7 +127,7 @@ export default function UserManual() {
     addTitle("1. Visão Geral da Plataforma", 18);
     addDivider();
     addParagraph(
-      "O FinCalc Pro é uma plataforma de cálculo financeiro para operações de empréstimos e financiamentos, aderente às normas do Banco Central do Brasil (BACEN) e às práticas contábeis brasileiras (CPC 26)."
+      "O Endividamento é uma plataforma de cálculo financeiro para operações de empréstimos e financiamentos, aderente às normas do Banco Central do Brasil (BACEN) e às práticas contábeis brasileiras (CPC 26)."
     );
     addParagraph("A plataforma oferece seis módulos principais, acessíveis pela barra de navegação superior:");
     addBullet("Simulador — Cálculo de tabelas de amortização com gráficos e validações");
@@ -149,7 +149,7 @@ export default function UserManual() {
     addTitle("2. Simulador de Operações", 18);
     addDivider();
     addParagraph(
-      "O Simulador é o módulo principal do FinCalc Pro. Permite configurar todos os parâmetros de uma operação de crédito e visualizar a tabela de amortização completa, gráficos e indicadores financeiros."
+      "O Simulador é o módulo principal do Endividamento. Permite configurar todos os parâmetros de uma operação de crédito e visualizar a tabela de amortização completa, gráficos e indicadores financeiros."
     );
 
     addSubtitle("Como simular uma operação");
@@ -185,10 +185,10 @@ export default function UserManual() {
     );
 
     addSubtitle("Fluxo de status");
-    addBullet("Rascunho — Contrato criado mas não finalizado");
-    addBullet("Pendente Aprovação — Enviado para aprovação");
+    addBullet("Rascunho — Contrato em edição, salvo automaticamente no navegador (autosave)");
+    addBullet("Pendente — Contrato salvo e aguardando aprovação (o botão Salvar já envia para aprovação)");
     addBullet("Aprovado — Contrato aprovado e pronto para contabilização");
-    addBullet("Cancelado — Contrato cancelado");
+    addBullet("Devolvido para Correção — Recusado pelo aprovador com um comentário; volta para edição e, ao ser salvo novamente, retorna para Pendente");
 
     addSubtitle("Funcionalidades");
     addBullet("Listagem de contratos com filtros por status e banco");
@@ -286,7 +286,7 @@ export default function UserManual() {
     y = margin;
     addTitle("8. Sistemas de Amortização", 18);
     addDivider();
-    addParagraph("O FinCalc Pro suporta cinco sistemas de amortização:");
+    addParagraph("O Endividamento suporta cinco sistemas de amortização:");
 
     addSubtitle("SAC — Sistema de Amortização Constante");
     addParagraph("Amortização do principal em valores iguais a cada período. Juros decrescentes calculados sobre o saldo devedor. Prestações decrescentes ao longo do prazo.");
@@ -309,7 +309,7 @@ export default function UserManual() {
     addTitle("9. Operações em Moeda Estrangeira (USD)", 18);
     addDivider();
     addParagraph(
-      "Para operações em moeda estrangeira (Resolução CMN 4.131 / Lei 4.131), o FinCalc Pro oferece duas visões complementares:"
+      "Para operações em moeda estrangeira (Resolução CMN 4.131 / Lei 4.131), o Endividamento oferece duas visões complementares:"
     );
 
     addSubtitle("Visão Financeira (Fluxo de Caixa)");
@@ -388,13 +388,13 @@ export default function UserManual() {
       doc.setFontSize(8);
       doc.setTextColor(148, 163, 184);
       doc.text(
-        `FinCalc Pro — Manual de Uso    |    Página ${i} de ${totalPages}`,
+        `Endividamento — Manual de Uso    |    Página ${i} de ${totalPages}`,
         margin,
         pageH - 24
       );
     }
 
-    doc.save("FinCalc-Pro-Manual-de-Uso.pdf");
+    doc.save("Endividamento-Manual-de-Uso.pdf");
     setGenerating(false);
   };
 
@@ -408,7 +408,7 @@ export default function UserManual() {
             </div>
           </div>
           <CardTitle className="text-xl font-bold text-slate-900">
-            Manual de Uso — FinCalc Pro
+            Manual de Uso — Endividamento
           </CardTitle>
           <p className="text-sm text-slate-500 mt-1">
             Gere e baixe o manual completo em PDF para enviar aos usuários

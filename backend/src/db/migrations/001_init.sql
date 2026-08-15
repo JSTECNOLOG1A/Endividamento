@@ -1,4 +1,4 @@
--- FinCalc schema v1
+-- Endividamento schema v1
 -- ISO 8601 (timestamptz), ISO 4217 (currency_code), NUMERIC for money (ISO/IEC 60559-friendly)
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

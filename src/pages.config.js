@@ -49,6 +49,7 @@
  */
 import Accounting from './pages/Accounting';
 import CDIManager from './pages/CDIManager';
+import Configuracoes from './pages/Configuracoes';
 import Consolidation from './pages/Consolidation';
 import Contracts from './pages/Contracts';
 import Governance from './pages/Governance';
@@ -60,6 +61,7 @@ import __Layout from './Layout.jsx';
 export const PAGES = {
     "Accounting": Accounting,
     "CDIManager": CDIManager,
+    "Configuracoes": Configuracoes,
     "Consolidation": Consolidation,
     "Contracts": Contracts,
     "Governance": Governance,

@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Send, CheckCircle, XCircle, Copy, Edit } from "lucide-react";
+import { CheckCircle, XCircle, Copy, Edit } from "lucide-react";
+import { EDITABLE_STATUSES } from "@/lib/contractStatus";
 
 export default function ContractWorkflow({ contract, user, onStatusChange, onDuplicate }) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -12,12 +13,10 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
   const [comments, setComments] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const canEdit = contract.status === "rascunho";
-  const canSendApproval = contract.status === "rascunho";
+  const canEdit = EDITABLE_STATUSES.includes(contract.status);
   const canApprove = contract.status === "pendente_aprovacao" && user?.role === "admin";
   const canReject = contract.status === "pendente_aprovacao" && user?.role === "admin";
   const canReopen = contract.status === "aprovado" && user?.role === "admin";
-  const canCancel = ["rascunho", "pendente_aprovacao"].includes(contract.status);
 
   const addToHistory = (newStatus, comments = "") => {
     const history = contract.status_history ? JSON.parse(contract.status_history) : [];
@@ -37,23 +36,11 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
       return;
     }
 
-    // Validar PDF obrigatório para envio de aprovação
-    if (action === "send_approval" && !contract.contract_pdf_url) {
-      alert("⚠️ É obrigatório anexar o PDF do contrato antes de enviar para aprovação");
-      return;
-    }
-
     setLoading(true);
     try {
       let updateData = {};
 
       switch (action) {
-        case "send_approval":
-          updateData = {
-            status: "pendente_aprovacao",
-            status_history: addToHistory("pendente_aprovacao"),
-          };
-          break;
         case "approve":
           updateData = {
             status: "aprovado",
@@ -64,21 +51,15 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
           break;
         case "reject":
           updateData = {
-            status: "rascunho",
+            status: "cancelado", // Devolvido para Correção
             rejection_comments: comments,
-            status_history: addToHistory("rascunho", comments),
-          };
-          break;
-        case "cancel":
-          updateData = {
-            status: "cancelado",
             status_history: addToHistory("cancelado", comments),
           };
           break;
         case "reopen":
           updateData = {
-            status: "rascunho",
-            status_history: addToHistory("rascunho", comments),
+            status: "cancelado", // Devolvido para Correção
+            status_history: addToHistory("cancelado", comments),
           };
           break;
       }
@@ -135,17 +116,6 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
   return (
     <>
       <div className="flex gap-2 flex-wrap">
-        {canSendApproval && (
-          <Button
-            size="sm"
-            variant="default"
-            onClick={() => openDialog("send_approval")}
-            className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700"
-          >
-            <Send className="w-3.5 h-3.5" />
-            Enviar para Aprovação
-          </Button>
-        )}
         {canApprove && (
           <Button
             size="sm"
@@ -165,7 +135,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             className="gap-1.5 text-xs"
           >
             <XCircle className="w-3.5 h-3.5" />
-            Recusar
+            Devolver para Correção
           </Button>
         )}
         {canReopen && (
@@ -176,19 +146,9 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             className="gap-1.5 text-xs"
           >
             <Edit className="w-3.5 h-3.5" />
-            Reabrir para Edição
+            Devolver para Correção
           </Button>
         )}
-         {canCancel && (
-           <Button
-             size="sm"
-             variant="outline"
-             onClick={() => openDialog("cancel")}
-             className="gap-1.5 text-xs"
-           >
-             Cancelar Contrato
-           </Button>
-         )}
         <Button
           size="sm"
           variant="outline"
@@ -204,25 +164,19 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {action === "send_approval" && "Enviar para Aprovação"}
               {action === "approve" && "Aprovar Contrato"}
-              {action === "reject" && "Recusar Contrato"}
-              {action === "cancel" && "Cancelar Contrato"}
-              {action === "reopen" && "Reabrir Contrato para Edição"}
+              {action === "reject" && "Devolver para Correção"}
+              {action === "reopen" && "Devolver Contrato para Correção"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {action === "send_approval" && (
-              <p className="text-sm text-slate-600">
-                O contrato será enviado para análise e aprovação. Deseja continuar?
-              </p>
-            )}
             {action === "reopen" && (
               <p className="text-sm text-slate-600">
-                O contrato voltará ao status de rascunho e poderá ser editado novamente.
+                O contrato voltará para edição (Devolvido para Correção) e, ao ser salvo
+                novamente, retorna para a fila de aprovação.
               </p>
             )}
-            {(action === "approve" || action === "reject" || action === "cancel") && (
+            {(action === "approve" || action === "reject") && (
               <div className="space-y-2">
                 <Label className="text-sm">
                   Comentários {action === "reject" && <span className="text-red-600">*</span>}
@@ -230,7 +184,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
                 <Textarea
                   value={comments}
                   onChange={(e) => setComments(e.target.value)}
-                  placeholder={action === "reject" ? "Obrigatório" : "Opcional"}
+                  placeholder={action === "reject" ? "Explique o que precisa ser corrigido" : "Opcional"}
                   className="min-h-24"
                 />
               </div>

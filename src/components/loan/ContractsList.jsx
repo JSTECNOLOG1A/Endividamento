@@ -2,7 +2,8 @@ import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Building2, FileText, Trash2, Eye, Edit, Copy } from "lucide-react";
+import { Building2, FileText, Trash2, Copy, ChevronRight } from "lucide-react";
+import { statusLabel, statusBadgeClass, EDITABLE_STATUSES } from "@/lib/contractStatus";
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("pt-BR", {
@@ -11,13 +12,6 @@ function formatCurrency(value) {
     minimumFractionDigits: 2,
   }).format(value || 0);
 }
-
-const statusColors = {
-  aprovado: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  rascunho: "bg-blue-100 text-blue-800 border-blue-200",
-  pendente_aprovacao: "bg-amber-100 text-amber-800 border-amber-200",
-  cancelado: "bg-red-100 text-red-800 border-red-200",
-};
 
 const systemLabels = {
   SAC: "SAC",
@@ -57,8 +51,25 @@ export default function ContractsList({ contracts, banks, onView, onEdit, onDele
     <div className="space-y-3">
       {contracts.map((c) => {
         const bankName = banks?.find(b => b.id === c.bank_id)?.bank_name || "N/A";
+        const isEditable = EDITABLE_STATUSES.includes(c.status || "rascunho");
+        // Clicar no card sempre "dá andamento" no contrato: rascunho/devolvido
+        // abrem no Simulador para continuar editando; pendente/aprovado abrem
+        // a tela de revisão (com os botões de Aprovar/Devolver, se aplicável).
+        const openContract = () => (isEditable ? onEdit(c) : onView(c));
         return (
-          <Card key={c.id} className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+          <Card
+            key={c.id}
+            role="button"
+            tabIndex={0}
+            onClick={openContract}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                openContract();
+              }
+            }}
+            className="border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-shadow cursor-pointer"
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4 min-w-0">
@@ -69,8 +80,8 @@ export default function ContractsList({ contracts, banks, onView, onEdit, onDele
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-sm font-semibold text-slate-800 truncate">{bankName}</h3>
                       <Badge variant="outline" className="text-xs font-mono">{c.contract_number}</Badge>
-                      <Badge className={`text-xs border ${statusColors[c.status || "rascunho"]}`}>
-                        {c.status?.replace("_", " ") || "rascunho"}
+                      <Badge className={`text-xs border ${statusBadgeClass(c.status)}`}>
+                        {statusLabel(c.status)}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
@@ -91,32 +102,32 @@ export default function ContractsList({ contracts, banks, onView, onEdit, onDele
                   </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <Button variant="ghost" size="icon" onClick={() => onView(c)} className="h-8 w-8 text-slate-400 hover:text-blue-600" title="Visualizar">
-                    <Eye className="w-4 h-4" />
-                  </Button>
-                  {c.status === "rascunho" && onEdit && (
-                    <Button variant="ghost" size="icon" onClick={() => onEdit(c)} className="h-8 w-8 text-slate-400 hover:text-amber-600" title="Editar">
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                  )}
-                  <Button variant="ghost" size="icon" onClick={() => onDuplicate(c)} className="h-8 w-8 text-slate-400 hover:text-purple-600" title="Duplicar">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => { e.stopPropagation(); onDuplicate(c); }}
+                    className="h-8 w-8 text-slate-400 hover:text-purple-600"
+                    title="Duplicar"
+                  >
                     <Copy className="w-4 h-4" />
                   </Button>
-                  {["rascunho", "cancelado"].includes(c.status) && onDelete && (
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => {
+                  {isEditable && onDelete && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
                         if (window.confirm("⚠️ Tem certeza que deseja excluir este contrato?\n\nEsta ação não poderá ser desfeita.")) {
                           onDelete(c.id);
                         }
-                      }} 
-                      className="h-8 w-8 text-slate-400 hover:text-red-500" 
+                      }}
+                      className="h-8 w-8 text-slate-400 hover:text-red-500"
                       title="Excluir"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   )}
+                  <ChevronRight className="w-4 h-4 text-slate-300" />
                 </div>
               </div>
             </CardContent>

@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function Login({ onSubmit, error, loading }) {
-  const [email, setEmail] = useState("admin@fincalc.local");
+  const [email, setEmail] = useState("admin@endividamento.local");
   const [password, setPassword] = useState("");
 
   const handleSubmit = (event) => {
@@ -16,7 +16,7 @@ export default function Login({ onSubmit, error, loading }) {
     <div className="fixed inset-0 flex items-center justify-center bg-slate-50 p-6">
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 bg-white border border-slate-200 rounded-xl p-6">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">FinCalc</h1>
+          <h1 className="text-lg font-semibold text-slate-900">Endividamento</h1>
           <p className="text-sm text-slate-500 mt-1">Entre com a conta local para acessar o sistema.</p>
         </div>
         <div className="space-y-1.5">

@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Save, RotateCcw, X, FileText, Trash2 } from "lucide-react";
+import { Save, Send, RotateCcw, X, FileText, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "../utils";
 import ContractForm from "../components/loan/ContractForm";
@@ -17,6 +17,7 @@ import ZeroRiskRegressionTest from "../components/loan/ZeroRiskRegressionTest";
 import IntegrityValidator from "../components/loan/IntegrityValidator";
 import ScenarioTests from "../components/loan/ScenarioTests";
 import { calculateAmortizationSchedule } from "../lib/runCalculation";
+import { toBRDecimalString } from "../lib/brNumber";
 
 export default function Simulator() {
   const navigate = useNavigate();
@@ -28,6 +29,7 @@ export default function Simulator() {
   const [activeTab, setActiveTab] = useState("tabela");
   const [reopenData, setReopenData] = useState(null);
   const [editingContractId, setEditingContractId] = useState(null);
+  const [editingContractMeta, setEditingContractMeta] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [uploadedPdfUrl, setUploadedPdfUrl] = useState(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
@@ -70,60 +72,124 @@ export default function Simulator() {
     try {
       const contract = await base44.entities.LoanContract.get(contractId);
       const scheduleData = JSON.parse(contract.schedule_data);
-      
-      setEditingContractId(contractId);
-      
+
+      // Parsear exchange_rates ANTES de montar o objeto, para que o mesmo
+      // objeto sirva tanto para inicializar o formulário (reopenData) quanto
+      // para os botões de Salvar/Enviar (formParams) — sem essa peça faltando.
+      let parsedExchangeRates = null;
+      if (contract.exchange_rates) {
+        try {
+          parsedExchangeRates = JSON.parse(contract.exchange_rates);
+        } catch (err) {
+          console.error("Erro ao parsear exchange_rates do contrato:", err);
+        }
+      }
+
+      // contractFormData: valores NUMÉRICOS (ou string com PONTO decimal),
+      // no mesmo formato que o payload processado do submit do ContractForm
+      // (o que sai de handleSubmit → onCalculate). É isso que formParams/
+      // lastCalculatedParams precisam conter, pois persistContract() e
+      // handleRecalculate() enviam esses valores DIRETO pro backend/engine,
+      // sem passar pelo parser BR do formulário.
       const contractFormData = {
         group_id: contract.group_id,
         entity_id: contract.entity_id,
         bank_id: contract.bank_id,
         currency_id: contract.currency_id || "",
         exchange_lag: contract.exchange_lag !== undefined ? contract.exchange_lag : 1,
+        // Alias em camelCase — é o que persistContract() lê ao montar os
+        // dados para salvar (mesmo padrão usado pelo submit do ContractForm).
+        exchangeLag: contract.exchange_lag !== undefined ? contract.exchange_lag : 1,
         exchange_rates: contract.exchange_rates || null,
+        exchangeRates: parsedExchangeRates,
         contract_number: contract.contract_number || "",
         operation_category: contract.operation_category || "",
         operation_type: contract.operation_type || "",
         operation_value: contract.operation_value?.toString() || "",
-        signal_value: (contract.signal_value || 0).toString(),
-        iof_value: (contract.iof_value || 0).toString(),
+        amount_foreign: contract.amount_foreign || null,
+        exchange_rate_closing: contract.exchange_rate_closing || null,
+        signal_value: contract.signal_value ?? 0,
+        iof_value: contract.iof_value ?? 0,
         iof_financed: contract.iof_financed || false,
-        other_fees: (contract.other_fees || 0).toString(),
+        encargo_garantia_value: contract.encargo_garantia_value ?? 0,
+        encargo_garantia_financed: contract.encargo_garantia_financed || false,
+        other_fees: contract.other_fees ?? 0,
         other_fees_financed: contract.other_fees_financed || false,
-        fixed_rate: contract.fixed_rate?.toString() || "",
+        fixed_rate: contract.fixed_rate ?? 0,
         indexer: contract.indexer || "NA",
-        indexer_spread: (contract.indexer_spread || 0).toString(),
+        indexer_spread: contract.indexer_spread ?? 0,
         operation_date: contract.operation_date || new Date().toISOString().split("T")[0],
         first_payment_date: contract.first_payment_date || "",
-        principal_grace_months: (contract.principal_grace_months || 0).toString(),
-        interest_grace_months: (contract.interest_grace_months || 0).toString(),
+        principal_grace_months: contract.principal_grace_months || 0,
+        interest_grace_months: contract.interest_grace_months || 0,
         grace_action: contract.grace_action || "capitalizar",
         grace_interest_behavior: contract.grace_interest_behavior || (contract.grace_action === "pagar" ? "INTEREST_ONLY" : "CAPITALIZAR"),
         amortization_trigger: contract.amortization_trigger || "END_OF_GRACE",
-        principal_installments: contract.principal_installments?.toString() || "",
-        interest_installments: (contract.interest_installments || contract.principal_installments)?.toString() || "",
+        principal_installments: contract.principal_installments || "",
+        interest_installments: contract.interest_installments || contract.principal_installments || "",
         principal_frequency: contract.principal_frequency || "1",
         interest_frequency: contract.interest_frequency || "1",
         calculation_system: contract.calculation_system || "SAC",
-        total_term_months: contract.total_term_months !== undefined && contract.total_term_months !== null ? contract.total_term_months.toString() : "",
+        total_term_months: contract.total_term_months !== undefined && contract.total_term_months !== null ? contract.total_term_months : "",
         final_maturity_date: contract.final_maturity_date || "",
         amortization_percentages: contract.amortization_percentages || "",
         percentage_base: contract.percentage_base || "saldo_devedor",
       };
-      
-      setReopenData(contractFormData);
-      setFormParams(null);
-      setLastCalculatedParams(null);
-      setUploadedPdfUrl(contract.contract_pdf_url || null);
-      
-      // Carregar exchange_rates se existir
-      if (contract.exchange_rates) {
-        try {
-          const parsedRates = JSON.parse(contract.exchange_rates);
-          contractFormData.exchangeRates = parsedRates;
-        } catch (err) {
-          console.error("Erro ao parsear exchange_rates do contrato:", err);
-        }
+
+      // reopenFormData: mesmos dados, mas para USO EXCLUSIVO como `initialData`
+      // do <ContractForm>. O ContractForm guarda tudo como STRING no seu
+      // estado local e, ao clicar em Calcular, faz o parse assumindo formato
+      // BR (vírgula decimal, ponto como separador de milhar):
+      //   form.fixed_rate.replace(/\./g, '').replace(',', '.')
+      // Se aqui alimentarmos esse campo com Number.toString() (que usa PONTO
+      // decimal, ex. "18.15"), o parser remove o ponto como se fosse
+      // separador de milhar e infla o valor em 10x-1000x (18.15 → "1815" →
+      // 1815%). Isso só se manifesta depois de salvar e reabrir o contrato
+      // (na criação, o usuário sempre digita no formato BR direto no
+      // campo) — daí o FINANCIAL_INTEGRITY_ERROR aparecer só nesse fluxo.
+      // Por isso, para os campos que passam por esse parser, convertemos
+      // para string com VÍRGULA decimal antes de entregar ao formulário.
+      const reopenFormData = {
+        ...contractFormData,
+        amount_foreign: contract.amount_foreign ? toBRDecimalString(contract.amount_foreign) : null,
+        exchange_rate_closing: contract.exchange_rate_closing ? toBRDecimalString(contract.exchange_rate_closing) : null,
+        signal_value: toBRDecimalString(contract.signal_value ?? 0),
+        iof_value: toBRDecimalString(contract.iof_value ?? 0),
+        encargo_garantia_value: toBRDecimalString(contract.encargo_garantia_value ?? 0),
+        other_fees: toBRDecimalString(contract.other_fees ?? 0),
+        fixed_rate: toBRDecimalString(contract.fixed_rate),
+        indexer_spread: toBRDecimalString(contract.indexer_spread ?? 0),
+        principal_grace_months: (contract.principal_grace_months || 0).toString(),
+        interest_grace_months: (contract.interest_grace_months || 0).toString(),
+        principal_installments: contract.principal_installments?.toString() || "",
+        interest_installments: (contract.interest_installments || contract.principal_installments)?.toString() || "",
+        total_term_months: contract.total_term_months !== undefined && contract.total_term_months !== null ? contract.total_term_months.toString() : "",
+      };
+
+      // Descarta qualquer rascunho local (autosave do navegador) que tenha
+      // sobrado de uma edição anterior deste mesmo contrato — a partir daqui
+      // o registro recém-carregado do banco é a fonte da verdade, e não
+      // queremos que o banner "Continuar rascunho" ofereça restaurar dados
+      // antigos por cima do que acabou de ser carregado.
+      try {
+        localStorage.removeItem(`endividamento_draft_${contractId}`);
+      } catch (err) {
+        console.error("Erro ao limpar rascunho local:", err);
       }
+
+      setEditingContractId(contractId);
+      setEditingContractMeta({
+        status: contract.status || "rascunho",
+        rejectionComments: contract.rejection_comments || "",
+      });
+      setReopenData(reopenFormData);
+      // Preenche formParams/lastCalculatedParams com os mesmos dados já
+      // salvos — assim os botões de Salvar/Enviar funcionam imediatamente,
+      // sem exigir que o usuário clique em Calcular de novo só para reabrir.
+      setFormParams(contractFormData);
+      setLastCalculatedParams(contractFormData);
+      setHasUnsavedChanges(false);
+      setUploadedPdfUrl(contract.contract_pdf_url || null);
 
       // Load result
       const resultData = {
@@ -133,9 +199,9 @@ export default function Simulator() {
         totalPrestacao: (scheduleData.schedule || []).reduce((s, r) => s + (r.prestacao || 0), 0),
         cdiRatesSnapshot: scheduleData.cdiRates || [],
       };
-      
+
       setResult(resultData);
-      
+
       window.history.replaceState({}, "", window.location.pathname);
     } catch (error) {
       console.error("Failed to load contract:", error);
@@ -247,6 +313,8 @@ export default function Simulator() {
         signalValue: formData.signal_value,
         iofValue: formData.iof_value,
         iofFinanced: formData.iof_financed,
+        encargoGarantiaValue: formData.encargo_garantia_value,
+        encargoGarantiaFinanced: formData.encargo_garantia_financed,
         otherFees: formData.other_fees,
         otherFeesFinanced: formData.other_fees_financed,
         fixedRate: formData.fixed_rate,
@@ -310,25 +378,40 @@ export default function Simulator() {
 
   const canSave = !editingContractId || hasUnsavedChanges;
 
-  const handleSave = async () => {
+  // targetStatus: "rascunho" (Salvar como Rascunho, sem exigir PDF) ou
+  // "pendente_aprovacao" (Enviar para Revisão, exige PDF anexado).
+  const persistContract = async (targetStatus) => {
     if (!formParams || !result) return;
+
+    // Validação: Grupo/Entidade/Banco são obrigatórios no banco (foreign
+    // keys). Sem essa checagem, um contrato com algum desses campos vazio
+    // (ex.: um registro antigo que ficou sem grupo associado) só falha no
+    // servidor com "Erro interno", sem indicar qual campo é o problema.
+    if (!formParams.group_id || !formParams.entity_id || !formParams.bank_id) {
+      alert(
+        "⚠️ Este contrato está sem Grupo Econômico, Entidade ou Banco selecionado.\n\n" +
+        "Verifique esses três campos no topo do formulário (à esquerda) e selecione-os novamente antes de salvar."
+      );
+      return;
+    }
+
     setSaving(true);
-    
+
     try {
       // Validar duplicidade: mesmo número, banco e valor (em qualquer status)
       const existingContracts = await base44.entities.LoanContract.list("", 10000);
-      
+
       const isDuplicate = existingContracts.some((contract) => {
         // Se editando, ignorar o contrato atual
         if (editingContractId && contract.id === editingContractId) return false;
-        
+
         return (
           contract.contract_number === formParams.contract_number &&
           contract.bank_id === formParams.bank_id &&
           contract.operation_value === parseFloat(formParams.operation_value)
         );
       });
-      
+
       if (isDuplicate) {
         alert("⚠️ Já existe um contrato com este número, Banco e Valor. Altere um desses campos.");
         setSaving(false);
@@ -339,12 +422,20 @@ export default function Simulator() {
       setSaving(false);
       return;
     }
-    
+
+    // Enviar para Revisão exige o PDF assinado anexado. Salvar como
+    // Rascunho não exige — o preparador pode continuar sem ele.
+    if (targetStatus === "pendente_aprovacao" && !uploadedPdfUrl) {
+      alert("⚠️ É obrigatório anexar o PDF do contrato antes de enviar para revisão.");
+      setSaving(false);
+      return;
+    }
+
     const contractData = {
       group_id: formParams.group_id,
       entity_id: formParams.entity_id,
       bank_id: formParams.bank_id,
-      currency_id: formParams.currency_id || "",
+      currency_id: formParams.currency_id || null,
       exchange_lag: formParams.exchangeLag !== undefined ? formParams.exchangeLag : 1,
       exchange_rates: formParams.exchangeRates ? JSON.stringify(formParams.exchangeRates) : null,
       contract_number: formParams.contract_number || `SIM-${Date.now()}`,
@@ -356,6 +447,8 @@ export default function Simulator() {
       signal_value: formParams.signal_value,
       iof_value: formParams.iof_value,
       iof_financed: formParams.iof_financed,
+      encargo_garantia_value: formParams.encargo_garantia_value,
+      encargo_garantia_financed: formParams.encargo_garantia_financed,
       other_fees: formParams.other_fees,
       other_fees_financed: formParams.other_fees_financed,
       fixed_rate: formParams.fixed_rate,
@@ -381,25 +474,59 @@ export default function Simulator() {
         schedule: result.schedule,
         cdiRates: result.cdiRatesSnapshot || [],
       }),
-      status: "rascunho",
+      status: targetStatus,
       contract_pdf_url: uploadedPdfUrl || null,
     };
 
+    const successMessage = targetStatus === "rascunho"
+      ? "Rascunho salvo com sucesso!"
+      : (editingContractId ? "Contrato atualizado e enviado para revisão!" : "Contrato enviado para revisão!");
+
+    // Chave do rascunho local (autosave) ANTES de salvar — usada para
+    // limpar o rascunho certo depois que os dados forem persistidos no
+    // banco (ver comentário abaixo sobre por que não usamos handleReset()).
+    const previousDraftKey = editingContractId || "new";
+
     try {
+      let saved;
       if (editingContractId) {
-        await base44.entities.LoanContract.update(editingContractId, contractData);
-        alert("Contrato atualizado com sucesso!");
+        saved = await base44.entities.LoanContract.update(editingContractId, contractData);
       } else {
-        await base44.entities.LoanContract.create(contractData);
-        alert("Contrato salvo com sucesso!");
+        saved = await base44.entities.LoanContract.create(contractData);
       }
-      handleReset();
+      alert(successMessage);
+
+      // IMPORTANTE: não usar handleReset() aqui. handleReset() limpa a tela
+      // inteira de volta para "novo contrato" (Grupo/Entidade/Banco/Tipo em
+      // branco) imediatamente após salvar — como o usuário permanece na
+      // mesma página, isso parecia (e foi reportado) como se os dados de
+      // Identificação tivessem "sumido" ao salvar/reabrir, mesmo o registro
+      // no banco estando correto (confirmado via log). Em vez de resetar,
+      // mantemos o contrato aberto na tela com os dados recém-salvos e, no
+      // caso de uma criação nova, passamos a editar o registro que acabou
+      // de ser criado (para que o próximo "Salvar" atualize esse mesmo
+      // contrato em vez de criar um duplicado).
+      const savedId = saved?.id || editingContractId;
+      if (savedId) {
+        setEditingContractId(savedId);
+        setEditingContractMeta({
+          status: targetStatus,
+          rejectionComments: "",
+        });
+        clearDraft(previousDraftKey);
+        if (savedId !== previousDraftKey) clearDraft(savedId);
+      }
+      setLastCalculatedParams(formParams);
+      setHasUnsavedChanges(false);
     } catch (error) {
       alert("Erro ao salvar: " + error.message);
     }
-    
+
     setSaving(false);
   };
+
+  const handleSaveDraft = () => persistContract("rascunho");
+  const handleSubmitForReview = () => persistContract("pendente_aprovacao");
 
   const handlePdfUpload = async (file) => {
     if (file === null) {
@@ -438,12 +565,22 @@ export default function Simulator() {
     }
   };
 
+  const clearDraft = (key) => {
+    try {
+      localStorage.removeItem(`endividamento_draft_${key}`);
+    } catch (err) {
+      console.error("Erro ao limpar rascunho salvo:", err);
+    }
+  };
+
   const handleReset = () => {
+    clearDraft(editingContractId || "new");
     setResult(null);
     setFormParams(null);
     setLastCalculatedParams(null);
     setHasUnsavedChanges(false);
     setEditingContractId(null);
+    setEditingContractMeta(null);
     setReopenData(null);
     setUploadedPdfUrl(null);
   };
@@ -455,6 +592,14 @@ export default function Simulator() {
     }
 
     const dataToSave = formParams || reopenData;
+
+    if (!dataToSave.group_id || !dataToSave.entity_id || !dataToSave.bank_id) {
+      alert(
+        "⚠️ Este contrato está sem Grupo Econômico, Entidade ou Banco selecionado.\n\n" +
+        "Verifique esses três campos no topo do formulário (à esquerda) e selecione-os novamente antes de fechar."
+      );
+      return;
+    }
 
     const confirmed = window.confirm(
       "Tem certeza que deseja fechar este contrato?\n\nO contrato será salvo com os parâmetros e cálculos atuais."
@@ -468,7 +613,7 @@ export default function Simulator() {
         group_id: dataToSave.group_id,
         entity_id: dataToSave.entity_id,
         bank_id: dataToSave.bank_id,
-        currency_id: dataToSave.currency_id || "",
+        currency_id: dataToSave.currency_id || null,
         exchange_lag: dataToSave.exchangeLag !== undefined ? dataToSave.exchangeLag : 1,
         exchange_rates: dataToSave.exchangeRates ? JSON.stringify(dataToSave.exchangeRates) : null,
         contract_number: dataToSave.contract_number || `SIM-${Date.now()}`,
@@ -478,6 +623,8 @@ export default function Simulator() {
         signal_value: dataToSave.signal_value,
         iof_value: dataToSave.iof_value,
         iof_financed: dataToSave.iof_financed,
+        encargo_garantia_value: dataToSave.encargo_garantia_value,
+        encargo_garantia_financed: dataToSave.encargo_garantia_financed,
         other_fees: dataToSave.other_fees,
         other_fees_financed: dataToSave.other_fees_financed,
         fixed_rate: dataToSave.fixed_rate,
@@ -503,10 +650,13 @@ export default function Simulator() {
           schedule: result.schedule,
           cdiRates: result.cdiRatesSnapshot || [],
         }) : JSON.stringify({ schedule: [], cdiRates: [] }),
+        // "Fechar Contrato" apenas guarda o estado atual como rascunho e
+        // sai da tela — não exige PDF nem envia para revisão.
         status: "rascunho",
       };
-      
+
       await base44.entities.LoanContract.update(editingContractId, closeContractData);
+      clearDraft(editingContractId);
       navigate(createPageUrl("Contracts"));
     } catch (error) {
       alert("Erro ao fechar contrato: " + error.message);
@@ -533,6 +683,8 @@ export default function Simulator() {
         signalValue: originalParams.signal_value,
         iofValue: originalParams.iof_value,
         iofFinanced: originalParams.iof_financed,
+        encargoGarantiaValue: originalParams.encargo_garantia_value,
+        encargoGarantiaFinanced: originalParams.encargo_garantia_financed,
         otherFees: originalParams.other_fees,
         otherFeesFinanced: originalParams.other_fees_financed,
         fixedRate: originalParams.fixed_rate,
@@ -588,14 +740,26 @@ export default function Simulator() {
                 </Button>
               )}
             </div>
+            {editingContractMeta?.status === "cancelado" && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <span className="font-semibold">Devolvido para Correção. </span>
+                {editingContractMeta.rejectionComments
+                  ? editingContractMeta.rejectionComments
+                  : "O aprovador solicitou ajustes neste contrato."}
+              </div>
+            )}
             <ContractForm
               onCalculate={handleCalculate}
+              onIdentificationChange={(fields) =>
+                setFormParams((prev) => (prev ? { ...prev, ...fields } : prev))
+              }
               groups={groups}
               entities={entities}
               banks={banks}
               currencies={currencies}
               initialData={reopenData && !loadingGroups && !loadingEntities && !loadingBanks ? reopenData : null}
               isEditing={!!editingContractId}
+              draftKey={editingContractId || "new"}
               isCalculating={isCalculating}
               uploadedPdfUrl={uploadedPdfUrl}
               onPdfUpload={handlePdfUpload}
@@ -617,9 +781,13 @@ export default function Simulator() {
                       Fechar Contrato
                     </Button>
                   )}
-                  <Button onClick={handleSave} disabled={saving} size="sm" className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <Button onClick={handleSaveDraft} disabled={saving} size="sm" variant="outline" className="gap-1.5 text-xs">
                     <Save className="w-3.5 h-3.5" />
-                    {saving ? "Salvando..." : (editingContractId ? "Atualizar contrato" : "Salvar contrato")}
+                    {saving ? "Salvando..." : "Salvar como Rascunho"}
+                  </Button>
+                  <Button onClick={handleSubmitForReview} disabled={saving} size="sm" className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <Send className="w-3.5 h-3.5" />
+                    {saving ? "Enviando..." : "Enviar para Revisão"}
                   </Button>
                 </div>
               </div>

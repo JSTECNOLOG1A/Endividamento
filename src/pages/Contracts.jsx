@@ -6,12 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, FileText, Edit, Clock, CheckCircle, XCircle } from "lucide-react";
+import { ArrowLeft, FileText, Edit, Clock, CheckCircle, RotateCcw } from "lucide-react";
 import ContractsList from "../components/loan/ContractsList";
 import AmortizationTable from "../components/loan/AmortizationTable";
 import ScheduleChart from "../components/loan/ScheduleChart";
 import ContractWorkflow from "../components/loan/ContractWorkflow";
 import { createPageUrl } from "../utils";
+import { statusLabel } from "../lib/contractStatus";
+import { toBRDecimalString } from "../lib/brNumber";
 
 export default function Contracts() {
   const [selected, setSelected] = useState(null);
@@ -65,7 +67,10 @@ export default function Contracts() {
     setSelected({
       contract,
       result: {
-        principal: contract.operation_value - (contract.signal_value || 0) + (contract.iof_financed ? (contract.iof_value || 0) : 0),
+        principal: contract.operation_value - (contract.signal_value || 0)
+          + (contract.iof_financed ? (contract.iof_value || 0) : 0)
+          + (contract.encargo_garantia_financed ? (contract.encargo_garantia_value || 0) : 0)
+          + (contract.other_fees_financed ? (contract.other_fees || 0) : 0),
         schedule,
         totalJuros: schedule.reduce((s, r) => s + (r.jurosFixosMes || 0) + (r.jurosVariaveisMes || 0), 0),
         totalPrestacao: schedule.reduce((s, r) => s + (r.prestacao || 0), 0),
@@ -78,6 +83,11 @@ export default function Contracts() {
   };
 
   const handleDuplicate = (contract) => {
+    // ⚠️ Os campos abaixo alimentam diretamente o `initialData` do
+    // <ContractForm>, cujo parser no submit assume formato BR (vírgula
+    // decimal). Números "crus" do banco (ponto decimal) inflariam o valor
+    // em 10x-1000x ou quebrariam o cálculo — mesmo bug corrigido no fluxo
+    // de reabrir/editar um contrato (ver Simulator.jsx/loadContractForEdit).
     const contractData = encodeURIComponent(JSON.stringify({
       group_id: contract.group_id,
       entity_id: contract.entity_id,
@@ -86,14 +96,16 @@ export default function Contracts() {
       contract_number: "",
       operation_type: contract.operation_type,
       operation_value: contract.operation_value,
-      signal_value: contract.signal_value,
-      iof_value: contract.iof_value,
+      signal_value: toBRDecimalString(contract.signal_value ?? 0),
+      iof_value: toBRDecimalString(contract.iof_value ?? 0),
       iof_financed: contract.iof_financed,
-      other_fees: contract.other_fees,
+      encargo_garantia_value: toBRDecimalString(contract.encargo_garantia_value ?? 0),
+      encargo_garantia_financed: contract.encargo_garantia_financed,
+      other_fees: toBRDecimalString(contract.other_fees ?? 0),
       other_fees_financed: contract.other_fees_financed,
-      fixed_rate: contract.fixed_rate,
+      fixed_rate: toBRDecimalString(contract.fixed_rate),
       indexer: contract.indexer,
-      indexer_spread: contract.indexer_spread,
+      indexer_spread: toBRDecimalString(contract.indexer_spread ?? 0),
       operation_date: contract.operation_date,
       first_payment_date: contract.first_payment_date,
       principal_grace_months: contract.principal_grace_months,
@@ -123,7 +135,7 @@ export default function Contracts() {
                 <CardTitle className="flex items-center gap-3">
                   {bankName} — {selected.contract.contract_number}
                   <Badge variant={selected.contract.status === "aprovado" ? "default" : "secondary"}>
-                    {selected.contract.status?.replace("_", " ")}
+                    {statusLabel(selected.contract.status)}
                   </Badge>
                 </CardTitle>
                 <p className="text-sm text-slate-500 mt-1">
@@ -141,6 +153,14 @@ export default function Contracts() {
                 onDuplicate={() => handleDuplicate(selected.contract)}
               />
             </CardHeader>
+            {selected.contract.status === "cancelado" && selected.contract.rejection_comments && (
+              <CardContent className="pt-0">
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  <span className="font-semibold">Motivo da devolução: </span>
+                  {selected.contract.rejection_comments}
+                </div>
+              </CardContent>
+            )}
           </Card>
 
           <Tabs defaultValue="tabela">
@@ -208,8 +228,8 @@ export default function Contracts() {
         <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("cancelado")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <XCircle className="w-4 h-4 text-red-500" />
-              <div className="text-xs text-slate-500">Cancelado</div>
+              <RotateCcw className="w-4 h-4 text-red-500" />
+              <div className="text-xs text-slate-500">Devolvido</div>
             </div>
             <div className="text-2xl font-bold mt-1 text-red-600">{statusCounts.cancelado}</div>
           </CardContent>
@@ -228,7 +248,7 @@ export default function Contracts() {
               <SelectItem value="rascunho">Rascunho</SelectItem>
               <SelectItem value="pendente_aprovacao">Pendente</SelectItem>
               <SelectItem value="aprovado">Aprovado</SelectItem>
-              <SelectItem value="cancelado">Cancelado</SelectItem>
+              <SelectItem value="cancelado">Devolvido para Correção</SelectItem>
             </SelectContent>
           </Select>
         </div>
