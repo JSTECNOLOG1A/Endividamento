@@ -1,4 +1,5 @@
 import { refreshPayableTitlesFromErp } from "../payables/erpIntegrate.js";
+import { refreshReceivableTitlesFromErp } from "../receivables/erpIntegrate.js";
 
 export const TASKS = {
   consultar_titulos_pagar: {
@@ -29,9 +30,21 @@ export const TASKS = {
     label: "Consultar títulos a receber no ERP",
     rotina: "Contas a receber",
     async run() {
+      const result = await refreshReceivableTitlesFromErp({ force: true, staleMinutes: 0 });
+      if (result.unavailable) {
+        return {
+          ok: false,
+          message: result.message || "Consulta de títulos a receber indisponível no ERP",
+          detalhes: result,
+        };
+      }
+      const consulted = result.consulted || 0;
+      const failed = result.failed || 0;
+      const skipped = result.skipped || 0;
       return {
-        ok: false,
-        message: "Consulta de títulos a receber no Protheus ainda não está publicada.",
+        ok: failed === 0,
+        message: `${consulted} ${consulted === 1 ? "título consultado" : "títulos consultados"} · ${failed} com erro · ${skipped} ignorados`,
+        detalhes: { consulted, failed, skipped, total: result.total },
       };
     },
   },

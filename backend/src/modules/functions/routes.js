@@ -8,6 +8,9 @@ import { syncPayableTitlesFromApprovedContracts } from "../payables/generate.js"
 import { classifyPayableTitles } from "../payables/classify.js";
 import { integratePayableTitles, reversePayableTitles, refreshPayableTitlesFromErp } from "../payables/erpIntegrate.js";
 import { lookupPayableErp } from "../payables/erpLookup.js";
+import { syncReceivableTitlesFromApprovedContracts } from "../receivables/generate.js";
+import { classifyReceivableTitles } from "../receivables/classify.js";
+import { integrateReceivableTitles, reverseReceivableTitles, refreshReceivableTitlesFromErp } from "../receivables/erpIntegrate.js";
 
 function toIsoDate(date) {
   return date.toISOString().slice(0, 10);
@@ -155,11 +158,16 @@ const handlers = {
   previewChartAccounts: () => previewChartAccounts(),
   integrateChartAccounts: (payload, req) => integrateChartAccounts(payload, req.user?.email || "system"),
   syncPayableTitles: () => syncPayableTitlesFromApprovedContracts(),
+  syncReceivableTitles: () => syncReceivableTitlesFromApprovedContracts(),
   classifyPayableTitles: (payload) => classifyPayableTitles(payload || {}),
   integratePayableTitles: (payload) => integratePayableTitles(payload || {}),
   reversePayableTitles: (payload) => reversePayableTitles(payload || {}),
   refreshPayableTitlesFromErp: (payload) => refreshPayableTitlesFromErp(payload || {}),
   lookupPayableErp: (payload) => lookupPayableErp(payload || {}),
+  classifyReceivableTitles: (payload) => classifyReceivableTitles(payload || {}),
+  integrateReceivableTitles: (payload) => integrateReceivableTitles(payload || {}),
+  reverseReceivableTitles: (payload) => reverseReceivableTitles(payload || {}),
+  refreshReceivableTitlesFromErp: (payload) => refreshReceivableTitlesFromErp(payload || {}),
 };
 
 export const functionsRouter = Router();

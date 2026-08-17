@@ -70,6 +70,9 @@ export const CADASTRO_LINK_OPTIONS = [
   { value: "titulos_pagar_extornar", label: "Estorno de títulos a pagar" },
   { value: "titulos_pagar_consultar", label: "Consulta de títulos a pagar" },
   { value: "titulos_receber", label: "Títulos a receber" },
+  { value: "titulos_receber_extornar", label: "Estorno de títulos a receber" },
+  { value: "titulos_receber_consultar", label: "Consulta de títulos a receber" },
+  { value: "clientes", label: "Clientes" },
 ];
 
 export const CADASTRO_KEY_LABELS = Object.fromEntries(

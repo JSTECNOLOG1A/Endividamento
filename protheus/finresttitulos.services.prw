@@ -50,13 +50,26 @@ Class FinRestTitulosSvc
 	Method TituloTemSE5()
 	Method ApagaSE2Aberto()
 	Method ExcluirPagar()
+	Method CorrigeE1()
+	Method PosicionaReceber()
+	Method ReceberComMovimento()
+	Method ReceberFoiAlterado()
+	Method TemMovSE1()
+	Method TemBaixaE1()
+	Method ApagaSE1Aberto()
+	Method ExcluirReceber()
+	Method ConsultarReceber()
 	Method IsoDate()
 	Method ConsultarPagar()
 	Method ConsultarFornecedores()
 	Method ConsultarTipos()
+	Method ConsultarClientes()
 	Method FornecedorBloqueado()
 	Method AddFornecedorItem()
 	Method VarreSA2()
+	Method ClienteBloqueado()
+	Method AddClienteItem()
+	Method VarreSA1()
 
 EndClass
 
@@ -440,9 +453,13 @@ Method ExisteCliente(cCliente, cLoja) Class FinRestTitulosSvc
 	Default cLoja    := ""
 
 	aArea := GetArea()
-	DbSelectArea("SA1")
-	SA1->(DbSetOrder(1))
-	lOk := SA1->(DbSeek(xFilial("SA1") + PadR(cCliente, Self:TamCampo("A1_COD", 6)) + PadR(cLoja, Self:TamCampo("A1_LOJA", 2))))
+	Begin Sequence
+		DbSelectArea("SA1")
+		SA1->(DbSetOrder(1))
+		lOk := SA1->(DbSeek(xFilial("SA1") + PadR(cCliente, Self:TamCampo("A1_COD", 6)) + PadR(cLoja, Self:TamCampo("A1_LOJA", 2))))
+	Recover
+		lOk := .F.
+	End Sequence
 	RestArea(aArea)
 
 Return lOk
@@ -494,11 +511,11 @@ Return lOk
 
 /*/{Protheus.doc} IncluirReceber
 Inclui titulo a receber (SE1) via FINA040 / opcao 3.
+Garante E1_FILIAL do JSON (M0_CODIGO). Nao muta cFilAnt.
 /*/
 Method IncluirReceber() Class FinRestTitulosSvc
 
 	Local aCampos   := {} As Array
-	Local aArea     As Array
 	Local cFilAux   := "" As Character
 	Local cPrefixo  := "" As Character
 	Local cNumero   := "" As Character
@@ -511,7 +528,8 @@ Method IncluirReceber() Class FinRestTitulosSvc
 	Local cCC       := "" As Character
 	Local cFilOrig  := "" As Character
 	Local cNome     := "" As Character
-	Local cChave    := "" As Character
+	Local cFilSE    := "" As Character
+	Local cLog      := "" As Character
 	Local dEmissao  := CToD("") As Date
 	Local dVencto   := CToD("") As Date
 	Local nValor    := 0 As Numeric
@@ -567,7 +585,9 @@ Method IncluirReceber() Class FinRestTitulosSvc
 		Return .F.
 	EndIf
 
-	AAdd(aCampos, {"E1_FILIAL" , PadR(cFilAux, Self:TamCampo("E1_FILIAL", 2)), Nil})
+	cFilSE := PadR(cFilAux, Self:TamCampo("E1_FILIAL", 2))
+
+	AAdd(aCampos, {"E1_FILIAL" , cFilSE, Nil})
 	AAdd(aCampos, {"E1_PREFIXO", PadR(cPrefixo, Self:TamCampo("E1_PREFIXO", 3)), Nil})
 	AAdd(aCampos, {"E1_NUM"    , PadR(cNumero, Self:TamCampo("E1_NUM", 9)), Nil})
 	AAdd(aCampos, {"E1_PARCELA", PadR(cParcela, Self:TamCampo("E1_PARCELA", 2)), Nil})
@@ -584,6 +604,16 @@ Method IncluirReceber() Class FinRestTitulosSvc
 	If !Empty(cHist)
 		AAdd(aCampos, {"E1_HIST", PadR(cHist, Self:TamCampo("E1_HIST", 40)), Nil})
 	EndIf
+
+	Begin Sequence
+		DbSelectArea("SE1")
+		SE1->(DbSetOrder(1))
+	Recover
+		Self:RespErro("Nao foi possivel abrir o SE1 no job REST.")
+		Self:RestauraAmbiente()
+		Return .F.
+	End Sequence
+
 	If !Empty(cFilOrig) .And. SE1->(FieldPos("E1_FILORIG")) > 0
 		AAdd(aCampos, {"E1_FILORIG", PadR(cFilOrig, Self:TamCampo("E1_FILORIG", 4)), Nil})
 	EndIf
@@ -592,8 +622,10 @@ Method IncluirReceber() Class FinRestTitulosSvc
 	If Empty(cNome)
 		cNome := AllTrim(Posicione("SA1", 1, xFilial("SA1") + PadR(cCliente, Self:TamCampo("A1_COD", 6)) + PadR(cLoja, Self:TamCampo("A1_LOJA", 2)), "A1_NOME"))
 	EndIf
-	If !Empty(cNome) .And. SE1->(FieldPos("E1_NOMCLI")) > 0
-		AAdd(aCampos, {"E1_NOMCLI", PadR(cNome, Self:TamCampo("E1_NOMCLI", 20)), Nil})
+	If !Empty(cNome)
+		If SE1->(FieldPos("E1_NOMCLI")) > 0
+			AAdd(aCampos, {"E1_NOMCLI", PadR(cNome, Self:TamCampo("E1_NOMCLI", 20)), Nil})
+		EndIf
 	EndIf
 
 	If !Empty(cCC)
@@ -605,35 +637,57 @@ Method IncluirReceber() Class FinRestTitulosSvc
 	EndIf
 
 	aCampos := FWVetByDic(aCampos, "SE1", .F.)
+	Self:GaranteCampo(@aCampos, "E1_FILIAL", cFilSE)
 
-	Begin Transaction
-		MsExecAuto({|a, n| FINA040(a, n)}, aCampos, 3)
-		If lMsErroAuto
-			DisarmTransaction()
-		EndIf
-	End Transaction
+	Begin Sequence
+		Begin Transaction
+			MsExecAuto({|a, n| FINA040(a, n)}, aCampos, 3)
+			If lMsErroAuto
+				DisarmTransaction()
+			EndIf
+		End Transaction
 
-	lErro := lMsErroAuto
+		lErro := lMsErroAuto
+		cLog := Self:AutoLog()
 
-	If !lErro
-		aArea := GetArea()
-		DbSelectArea("SE1")
-		SE1->(DbSetOrder(1))
-		cChave := PadR(cFilAux, Self:TamCampo("E1_FILIAL", 2))
-		cChave += PadR(cPrefixo, Self:TamCampo("E1_PREFIXO", 3))
-		cChave += PadR(cNumero, Self:TamCampo("E1_NUM", 9))
-		cChave += PadR(cParcela, Self:TamCampo("E1_PARCELA", 2))
-		cChave += PadR(cTipo, Self:TamCampo("E1_TIPO", 3))
-		If !SE1->(DbSeek(cChave))
-			lErro := .T.
-			Self:RespErro("Titulo a receber nao localizado apos FINA040. " + Self:AutoLog())
+		If !lErro
+			If Self:CorrigeE1(cFilSE, cFilOrig, cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja)
+				Self:RespOk("receber", cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja, nValor, AllTrim(SE1->E1_FILIAL))
+			Else
+				If Self:PosicionaReceber(cFilSE, cFilOrig, cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja)
+					Self:ApagaSE1Aberto()
+				EndIf
+				Self:RespErro("FINA040 gravou E1_FILIAL da sessao HTTP. Nao foi possivel corrigir para " + AllTrim(cFilSE) + ".")
+			EndIf
+		ElseIf ("FA040NUM" $ Upper(cLog) .Or. "JA EXISTE" $ Upper(cLog)) .And. Self:PosicionaReceber(cFilSE, cFilOrig, cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja)
+			If Self:CorrigeE1(cFilSE, cFilOrig, cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja)
+				Self:RespOk("receber", cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja, nValor, AllTrim(SE1->E1_FILIAL))
+			ElseIf AllTrim(SE1->E1_FILIAL) <> AllTrim(cFilSE) .And. Self:ApagaSE1Aberto()
+				lMsErroAuto := .F.
+				Begin Sequence
+					Begin Transaction
+						MsExecAuto({|a, n| FINA040(a, n)}, aCampos, 3)
+						If lMsErroAuto
+							DisarmTransaction()
+						EndIf
+					End Transaction
+				Recover
+					lMsErroAuto := .T.
+				End Sequence
+				If !lMsErroAuto .And. Self:CorrigeE1(cFilSE, cFilOrig, cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja)
+					Self:RespOk("receber", cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja, nValor, AllTrim(SE1->E1_FILIAL))
+				Else
+					Self:RespErro("Titulo ja existia na filial da sessao HTTP. Nao foi possivel regravar com E1_FILIAL=" + AllTrim(cFilSE) + ".")
+				EndIf
+			Else
+				Self:RespErro("Titulo ja existe no SE1 com E1_FILIAL=" + AllTrim(SE1->E1_FILIAL) + ". Esperado " + AllTrim(cFilSE) + ".")
+			EndIf
 		Else
-			Self:RespOk("receber", cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja, nValor, cFilAux)
+			Self:RespErro("FINA040 recusou o titulo a receber. " + cLog)
 		EndIf
-		RestArea(aArea)
-	Else
-		Self:RespErro("FINA040 recusou o titulo a receber. " + Self:AutoLog())
-	EndIf
+	Recover
+		Self:RespErro("FINA040 quebrou no job HTTP REST. Reinicie o job e recompile FinRestTitulos.")
+	End Sequence
 
 	Self:RestauraAmbiente()
 
@@ -645,7 +699,6 @@ Inclui titulo a pagar (SE2) via FINA050 / opcao 3.
 Method IncluirPagar() Class FinRestTitulosSvc
 
 	Local aCampos   := {} As Array
-	Local aArea     As Array
 	Local cFilAux   := "" As Character
 	Local cPrefixo  := "" As Character
 	Local cNumero   := "" As Character
@@ -658,7 +711,6 @@ Method IncluirPagar() Class FinRestTitulosSvc
 	Local cCC       := "" As Character
 	Local cFilOrig  := "" As Character
 	Local cNome     := "" As Character
-	Local cChave    := "" As Character
 	Local cFilSE    := "" As Character
 	Local cLog      := "" As Character
 	Local dEmissao  := CToD("") As Date
@@ -1729,6 +1781,807 @@ Method ConsultarTipos() Class FinRestTitulosSvc
 		cJson += aJson[nI]
 	Next
 	cJson += '],"total":' + cValToChar(Len(aJson)) + ',"truncated":false}'
+
+	Self:lSuccess  := .T.
+	Self:cJsonRet  := cJson
+	Self:cError    := ""
+	Self:cErrorMsg := ""
+
+Return .T.
+
+/*/{Protheus.doc} CorrigeE1
+Garante E1_FILIAL do JSON. O FINA040 grava a filial da sessao HTTP (01).
+Corrige para a filial do titulo (M0_CODIGO, ex. 03) se nao houver movimento.
+So retorna .T. se o SE1 posicionado tiver E1_FILIAL igual ao pedido.
+/*/
+Method CorrigeE1(cFilWant, cFilOrig, cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja) Class FinRestTitulosSvc
+
+	Local cWant := "" As Character
+	Local cSuf  := "" As Character
+	Local nTam  := 2 As Numeric
+	Local nRec  := 0 As Numeric
+	Local lOk   := .F. As Logical
+	Local lLock := .F. As Logical
+
+	Default cFilWant := ""
+	Default cFilOrig := ""
+	Default cPrefixo := ""
+	Default cNumero  := ""
+	Default cParcela := ""
+	Default cTipo    := ""
+	Default cCliente := ""
+	Default cLoja    := ""
+
+	If !Self:PosicionaReceber(cFilWant, cFilOrig, cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja)
+		Return .F.
+	EndIf
+
+	nTam := Self:TamCampo("E1_FILIAL", 2)
+	cWant := PadR(AllTrim(cFilWant), nTam)
+	cSuf := PadR(cPrefixo, Self:TamCampo("E1_PREFIXO", 3))
+	cSuf += PadR(cNumero, Self:TamCampo("E1_NUM", 9))
+	cSuf += PadR(cParcela, Self:TamCampo("E1_PARCELA", 2))
+	cSuf += PadR(cTipo, Self:TamCampo("E1_TIPO", 3))
+
+	If AllTrim(SE1->E1_FILIAL) == AllTrim(cWant)
+		If SE1->(FieldPos("E1_FILORIG")) > 0 .And. !Empty(cFilOrig) .And. AllTrim(SE1->E1_FILORIG) <> AllTrim(cFilOrig)
+			Begin Sequence
+				If RecLock("SE1", .F.)
+					Replace E1_FILORIG With PadR(cFilOrig, Self:TamCampo("E1_FILORIG", 4))
+					SE1->(MsUnlock())
+					SE1->(DbCommit())
+				EndIf
+			Recover
+				SE1->(MsUnlock())
+			End Sequence
+		EndIf
+		Return .T.
+	EndIf
+
+	If Self:TemBaixaE1()
+		Return .F.
+	EndIf
+
+	nRec := SE1->(Recno())
+	Begin Sequence
+		If RecLock("SE1", .F.)
+			Replace E1_FILIAL With cWant
+			If SE1->(FieldPos("E1_FILORIG")) > 0 .And. !Empty(cFilOrig)
+				Replace E1_FILORIG With PadR(cFilOrig, Self:TamCampo("E1_FILORIG", 4))
+			EndIf
+			SE1->(MsUnlock())
+			SE1->(DbCommit())
+			lLock := .T.
+		EndIf
+	Recover
+		lLock := .F.
+		SE1->(MsUnlock())
+	End Sequence
+
+	If !lLock
+		Return .F.
+	EndIf
+
+	Begin Sequence
+		DbSelectArea("SE1")
+		SE1->(DbSetOrder(1))
+		If SE1->(DbSeek(cWant + cSuf))
+			lOk := AllTrim(SE1->E1_FILIAL) == AllTrim(cWant)
+		ElseIf nRec > 0
+			SE1->(DbGoTo(nRec))
+			lOk := AllTrim(SE1->E1_FILIAL) == AllTrim(cWant)
+		EndIf
+	Recover
+		lOk := .F.
+	End Sequence
+
+Return lOk
+
+/*/{Protheus.doc} PosicionaReceber
+Localiza SE1 pela chave (filial+prefixo+num+parcela+tipo).
+Tenta a filial do JSON, 03, 01 e o sufixo de filOrig.
+Confere cliente/loja quando informados. Nao usa SetDeleted.
+/*/
+Method PosicionaReceber(cFilWant, cFilOrig, cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja) Class FinRestTitulosSvc
+
+	Local aFils := {} As Array
+	Local cSuf  := "" As Character
+	Local cTry  := "" As Character
+	Local nI    := 0 As Numeric
+	Local nTam  := 2 As Numeric
+	Local lOk   := .F. As Logical
+
+	Default cFilWant := ""
+	Default cFilOrig := ""
+	Default cPrefixo := ""
+	Default cNumero  := ""
+	Default cParcela := ""
+	Default cTipo    := ""
+	Default cCliente := ""
+	Default cLoja    := ""
+
+	nTam := Self:TamCampo("E1_FILIAL", 2)
+	cSuf := PadR(cPrefixo, Self:TamCampo("E1_PREFIXO", 3))
+	cSuf += PadR(cNumero, Self:TamCampo("E1_NUM", 9))
+	cSuf += PadR(cParcela, Self:TamCampo("E1_PARCELA", 2))
+	cSuf += PadR(cTipo, Self:TamCampo("E1_TIPO", 3))
+
+	AAdd(aFils, PadR(AllTrim(cFilWant), nTam))
+	If Type("cFilAnt") == "C" .And. !Empty(AllTrim(cFilAnt))
+		AAdd(aFils, PadR(AllTrim(cFilAnt), nTam))
+	EndIf
+	AAdd(aFils, PadR("03", nTam))
+	AAdd(aFils, PadR("01", nTam))
+	If Len(AllTrim(cFilOrig)) >= 2
+		AAdd(aFils, PadR(Right(AllTrim(cFilOrig), 2), nTam))
+	EndIf
+
+	Begin Sequence
+		DbSelectArea("SE1")
+		SE1->(DbSetOrder(1))
+	Recover
+		Return .F.
+	End Sequence
+
+	For nI := 1 To Len(aFils)
+		cTry := aFils[nI]
+		If Empty(AllTrim(cTry))
+			Loop
+		EndIf
+		If nI > 1 .And. AScan(aFils, cTry) < nI
+			Loop
+		EndIf
+		Begin Sequence
+			If SE1->(DbSeek(cTry + cSuf))
+				lOk := .T.
+				If !Empty(cCliente) .And. AllTrim(SE1->E1_CLIENTE) <> AllTrim(cCliente)
+					lOk := .F.
+				EndIf
+				If lOk .And. !Empty(cLoja) .And. AllTrim(SE1->E1_LOJA) <> AllTrim(cLoja)
+					lOk := .F.
+				EndIf
+			EndIf
+		Recover
+			lOk := .F.
+		End Sequence
+		If lOk
+			nI := Len(aFils)
+		EndIf
+	Next
+
+Return lOk
+
+/*/{Protheus.doc} ReceberComMovimento
+Titulo com baixa, bordero, valor liquidado ou movimento no SE5 nao pode ser estornado.
+E1_LA e E1_MOVIMEN da inclusao FINA040 nao sao baixa.
+/*/
+Method ReceberComMovimento() Class FinRestTitulosSvc
+
+Return Self:TemBaixaE1()
+
+/*/{Protheus.doc} TemBaixaE1
+Baixa real no SE1 (saldo, data de baixa, SE5). Ignora E1_LA da inclusao FINA040.
+/*/
+Method TemBaixaE1() Class FinRestTitulosSvc
+
+	If Abs(SE1->E1_SALDO - SE1->E1_VALOR) > 0.009
+		Return .T.
+	EndIf
+	If !Empty(SE1->E1_BAIXA)
+		Return .T.
+	EndIf
+	If SE1->(FieldPos("E1_VALLIQ")) > 0 .And. SE1->E1_VALLIQ > 0
+		Return .T.
+	EndIf
+	If SE1->(FieldPos("E1_NUMBOR")) > 0 .And. !Empty(AllTrim(SE1->E1_NUMBOR))
+		Return .T.
+	EndIf
+	If SE1->(FieldPos("E1_IDCNAB")) > 0 .And. !Empty(AllTrim(SE1->E1_IDCNAB))
+		Return .T.
+	EndIf
+	If SE1->(FieldPos("E1_FATURA")) > 0 .And. !Empty(AllTrim(SE1->E1_FATURA))
+		Return .T.
+	EndIf
+	If Self:TemMovSE1()
+		Return .T.
+	EndIf
+
+Return .F.
+
+/*/{Protheus.doc} TemMovSE1
+Titulo a receber com movimento no SE5 nao pode ser estornado.
+/*/
+Method TemMovSE1() Class FinRestTitulosSvc
+
+	Local aArea  As Array
+	Local cChave := "" As Character
+	Local lMov   := .F. As Logical
+
+	aArea := GetArea()
+	DbSelectArea("SE5")
+	Begin Sequence
+		SE5->(DbSetOrder(7))
+		cChave := PadR(SE1->E1_FILIAL, Self:TamCampo("E5_FILIAL", 2))
+		cChave += PadR(SE1->E1_PREFIXO, Self:TamCampo("E5_PREFIXO", 3))
+		cChave += PadR(SE1->E1_NUM, Self:TamCampo("E5_NUMERO", 9))
+		cChave += PadR(SE1->E1_PARCELA, Self:TamCampo("E5_PARCELA", 2))
+		cChave += PadR(SE1->E1_TIPO, Self:TamCampo("E5_TIPO", 3))
+		cChave += PadR(SE1->E1_CLIENTE, Self:TamCampo("E5_CLIFOR", 6))
+		cChave += PadR(SE1->E1_LOJA, Self:TamCampo("E5_LOJA", 2))
+		If SE5->(DbSeek(cChave))
+			lMov := .T.
+		EndIf
+	Recover
+		lMov := .F.
+	End Sequence
+	RestArea(aArea)
+
+Return lMov
+
+/*/{Protheus.doc} ReceberFoiAlterado
+Compara o SE1 com o payload do FinCalc.
+/*/
+Method ReceberFoiAlterado(nValor, cNatureza, dVencto) Class FinRestTitulosSvc
+
+	Default nValor    := 0
+	Default cNatureza := ""
+	Default dVencto   := CToD("")
+
+	If nValor > 0 .And. Abs(SE1->E1_VALOR - nValor) > 0.009
+		Return .T.
+	EndIf
+	If !Empty(AllTrim(cNatureza)) .And. SE1->(FieldPos("E1_NATUREZ")) > 0
+		If AllTrim(SE1->E1_NATUREZ) <> AllTrim(cNatureza)
+			Return .T.
+		EndIf
+	EndIf
+	If !Empty(dVencto) .And. SE1->E1_VENCTO <> dVencto
+		Return .T.
+	EndIf
+
+Return .F.
+
+/*/{Protheus.doc} ApagaSE1Aberto
+Estorna o SE1 posicionado com DbDelete(). Nao acessar D_E_L_E_T_.
+/*/
+Method ApagaSE1Aberto() Class FinRestTitulosSvc
+
+	Local lOk := .F. As Logical
+
+	If Self:TemBaixaE1()
+		Return .F.
+	EndIf
+
+	Begin Sequence
+		If RecLock("SE1", .F.)
+			SE1->(DbDelete())
+			SE1->(MsUnlock())
+			SE1->(DbCommit())
+			lOk := .T.
+		EndIf
+	Recover
+		lOk := .F.
+		SE1->(MsUnlock())
+	End Sequence
+
+Return lOk
+
+/*/{Protheus.doc} ExcluirReceber
+Estorna titulo a receber sem movimentacao nem alteracao.
+/*/
+Method ExcluirReceber() Class FinRestTitulosSvc
+
+	Local cFilAux    := "" As Character
+	Local cPrefixo   := "" As Character
+	Local cNumero    := "" As Character
+	Local cParcela   := "" As Character
+	Local cTipo      := "" As Character
+	Local cCliente   := "" As Character
+	Local cLoja      := "" As Character
+	Local cFilOrig   := "" As Character
+	Local cFilSE     := "" As Character
+	Local nValor     := 0 As Numeric
+	Local nValorEsp  := 0 As Numeric
+	Local cNaturEsp  := "" As Character
+	Local dVenctoEsp := CToD("") As Date
+	Local lErro      := .F. As Logical
+	Local nCopia     := 0 As Numeric
+
+	Private lMsErroAuto := .F.
+	Private lMsHelpAuto := .T.
+	Private lAutoErrNoFile := .T.
+
+	If !Self:ParsePayload()
+		Return .F.
+	EndIf
+
+	cFilAux    := Self:JsonText("filial")
+	cPrefixo   := Self:JsonText("prefixo")
+	cNumero    := Self:JsonText("numero")
+	cParcela   := Self:JsonText("parcela")
+	cTipo      := Self:JsonText("tipo")
+	cCliente   := Self:JsonText("cliente")
+	cLoja      := Self:JsonText("loja")
+	cFilOrig   := Self:JsonText("filOrig")
+	nValorEsp  := Self:JsonNum("valor")
+	cNaturEsp  := Self:JsonText("natureza")
+	dVenctoEsp := Self:ParseDate(Self:JsonText("vencimento"))
+
+	If Empty(cParcela)
+		cParcela := "1"
+	EndIf
+	If Empty(cNumero)
+		Self:RespErro("Campo 'numero' e obrigatorio.")
+		Return .F.
+	EndIf
+	If Empty(cTipo)
+		Self:RespErro("Campo 'tipo' e obrigatorio.")
+		Return .F.
+	EndIf
+	If Empty(cCliente)
+		Self:RespErro("Campo 'cliente' e obrigatorio.")
+		Return .F.
+	EndIf
+	If Empty(cLoja)
+		cLoja := "01"
+	EndIf
+	If !Self:PreparaAmbiente(@cFilAux, @cFilOrig)
+		Return .F.
+	EndIf
+
+	cFilSE := PadR(cFilAux, Self:TamCampo("E1_FILIAL", 2))
+
+	Begin Sequence
+		If !Self:PosicionaReceber(cFilSE, cFilOrig, cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja)
+			Self:RestauraAmbiente()
+			Self:RespErro("Titulo a receber nao encontrado no SE1.")
+			Return .F.
+		EndIf
+
+		If Self:ReceberComMovimento()
+			Self:RestauraAmbiente()
+			Self:RespErro("Titulo possui movimentacao e nao pode ser estornado.")
+			Return .F.
+		EndIf
+
+		If Self:ReceberFoiAlterado(nValorEsp, cNaturEsp, dVenctoEsp)
+			Self:RestauraAmbiente()
+			Self:RespErro("Titulo foi alterado no Protheus e nao pode ser estornado.")
+			Return .F.
+		EndIf
+
+		nValor := SE1->E1_VALOR
+
+		For nCopia := 1 To 4
+			If !Self:PosicionaReceber(cFilSE, cFilOrig, cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja)
+				Exit
+			EndIf
+			If Self:ReceberComMovimento()
+				lErro := .T.
+				Self:RespErro("Titulo possui movimentacao e nao pode ser estornado.")
+				Exit
+			EndIf
+			If Self:ReceberFoiAlterado(nValorEsp, cNaturEsp, dVenctoEsp)
+				lErro := .T.
+				Self:RespErro("Titulo foi alterado no Protheus e nao pode ser estornado.")
+				Exit
+			EndIf
+			If !Self:ApagaSE1Aberto()
+				lErro := .T.
+				Self:RespErro("Nao foi possivel excluir o titulo no SE1.")
+				Exit
+			EndIf
+		Next
+
+		If !lErro .And. Self:PosicionaReceber(cFilSE, cFilOrig, cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja)
+			Self:RespErro("Titulo permanece ativo no SE1 apos o estorno.")
+		ElseIf !lErro
+			Self:RespOk("extornar-receber", cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja, nValor, cFilSE)
+		EndIf
+	Recover
+		Self:RespErro("Falha ao estornar o titulo no SE1. Compile FinRestTitulos e reinicie o job HTTP REST.")
+	End Sequence
+
+	Self:RestauraAmbiente()
+
+Return Self:lSuccess
+
+/*/{Protheus.doc} ConsultarReceber
+Le saldo, baixa e situacao do titulo no SE1. Nao grava nada.
+/*/
+Method ConsultarReceber() Class FinRestTitulosSvc
+
+	Local oResp    As Object
+	Local cFilAux  := "" As Character
+	Local cPrefixo := "" As Character
+	Local cNumero  := "" As Character
+	Local cParcela := "" As Character
+	Local cTipo    := "" As Character
+	Local cCliente := "" As Character
+	Local cLoja    := "" As Character
+	Local cFilOrig := "" As Character
+	Local cFilSE   := "" As Character
+	Local cSit     := "" As Character
+	Local cHist    := "" As Character
+	Local cNatur   := "" As Character
+	Local nValor   := 0 As Numeric
+	Local nSaldo   := 0 As Numeric
+
+	If !Self:ParsePayload()
+		Return .F.
+	EndIf
+
+	cFilAux  := Self:JsonText("filial")
+	cPrefixo := Self:JsonText("prefixo")
+	cNumero  := Self:JsonText("numero")
+	cParcela := Self:JsonText("parcela")
+	cTipo    := Self:JsonText("tipo")
+	cCliente := Self:JsonText("cliente")
+	cLoja    := Self:JsonText("loja")
+	cFilOrig := Self:JsonText("filOrig")
+
+	If Empty(cParcela)
+		cParcela := "1"
+	EndIf
+	If Empty(cNumero)
+		Self:RespErro("Campo 'numero' e obrigatorio.")
+		Return .F.
+	EndIf
+	If Empty(cTipo)
+		Self:RespErro("Campo 'tipo' e obrigatorio.")
+		Return .F.
+	EndIf
+	If Empty(cCliente)
+		Self:RespErro("Campo 'cliente' e obrigatorio.")
+		Return .F.
+	EndIf
+	If Empty(cLoja)
+		cLoja := "01"
+	EndIf
+	If !Self:PreparaAmbiente(@cFilAux, @cFilOrig)
+		Return .F.
+	EndIf
+
+	cFilSE := PadR(cFilAux, Self:TamCampo("E1_FILIAL", 2))
+	oResp := JsonObject():New()
+
+	Begin Sequence
+		If !Self:PosicionaReceber(cFilSE, cFilOrig, cPrefixo, cNumero, cParcela, cTipo, cCliente, cLoja)
+			oResp["code"]       := "200"
+			oResp["message"]    := "Titulo nao encontrado no SE1"
+			oResp["encontrado"] := 0
+			oResp["situacao"]   := "nao_encontrado"
+			oResp["prefixo"]    := AllTrim(cPrefixo)
+			oResp["numero"]     := AllTrim(cNumero)
+			oResp["parcela"]    := AllTrim(cParcela)
+			oResp["tipo"]       := AllTrim(cTipo)
+			oResp["cliente"]    := AllTrim(cCliente)
+			oResp["loja"]       := AllTrim(cLoja)
+			Self:lSuccess  := .T.
+			Self:cJsonRet  := oResp:ToJson()
+			Self:cError    := ""
+			Self:cErrorMsg := ""
+		Else
+			nValor := SE1->E1_VALOR
+			nSaldo := SE1->E1_SALDO
+			If nSaldo <= 0
+				cSit := "baixado"
+			ElseIf nSaldo < nValor .Or. !Empty(SE1->E1_BAIXA)
+				cSit := "parcial"
+			Else
+				cSit := "aberto"
+			EndIf
+
+			If SE1->(FieldPos("E1_HIST")) > 0
+				cHist := AllTrim(SE1->E1_HIST)
+			EndIf
+			If SE1->(FieldPos("E1_NATUREZ")) > 0
+				cNatur := AllTrim(SE1->E1_NATUREZ)
+			EndIf
+
+			oResp["code"]       := "200"
+			oResp["message"]    := "Titulo localizado no SE1"
+			oResp["encontrado"] := 1
+			oResp["situacao"]   := cSit
+			oResp["filial"]     := AllTrim(SE1->E1_FILIAL)
+			If SE1->(FieldPos("E1_FILORIG")) > 0
+				oResp["filOrig"] := AllTrim(SE1->E1_FILORIG)
+			Else
+				oResp["filOrig"] := AllTrim(cFilOrig)
+			EndIf
+			oResp["prefixo"]    := AllTrim(SE1->E1_PREFIXO)
+			oResp["numero"]     := AllTrim(SE1->E1_NUM)
+			oResp["parcela"]    := AllTrim(SE1->E1_PARCELA)
+			oResp["tipo"]       := AllTrim(SE1->E1_TIPO)
+			oResp["cliente"]    := AllTrim(SE1->E1_CLIENTE)
+			oResp["loja"]       := AllTrim(SE1->E1_LOJA)
+			oResp["natureza"]   := cNatur
+			oResp["historico"]  := cHist
+			oResp["valor"]      := nValor
+			oResp["saldo"]      := nSaldo
+			oResp["emissao"]    := Self:IsoDate(SE1->E1_EMISSAO)
+			oResp["vencimento"] := Self:IsoDate(SE1->E1_VENCTO)
+			oResp["baixa"]      := Self:IsoDate(SE1->E1_BAIXA)
+
+			Self:lSuccess  := .T.
+			Self:cJsonRet  := oResp:ToJson()
+			Self:cError    := ""
+			Self:cErrorMsg := ""
+		EndIf
+	Recover
+		Self:RespErro("Falha ao consultar o titulo no SE1.")
+	End Sequence
+
+	Self:RestauraAmbiente()
+
+Return Self:lSuccess
+
+/*/{Protheus.doc} ClienteBloqueado
+A1_MSBLQL 1 ou S = bloqueado. 2 ou vazio = ativo.
+/*/
+Method ClienteBloqueado() Class FinRestTitulosSvc
+
+	Local cBlq := "" As Character
+
+	If SA1->(FieldPos("A1_MSBLQL")) > 0
+		cBlq := AllTrim(Upper(SA1->A1_MSBLQL))
+		If cBlq == "1" .Or. cBlq == "S"
+			Return .T.
+		EndIf
+	EndIf
+
+Return .F.
+
+/*/{Protheus.doc} AddClienteItem
+Acrescenta o SA1 posicionado na lista JSON, sem duplicar.
+/*/
+Method AddClienteItem(aJson, aSeen, nMax) Class FinRestTitulosSvc
+
+	Local oItem As Object
+	Local cId   := "" As Character
+	Local cNome := "" As Character
+	Local cCgc  := "" As Character
+
+	Default nMax := 40
+
+	If Len(aJson) >= nMax
+		Return .F.
+	EndIf
+	If Self:ClienteBloqueado()
+		Return .F.
+	EndIf
+
+	cId := PadR(SA1->A1_COD, 6) + PadR(SA1->A1_LOJA, 2)
+	If AScan(aSeen, cId) > 0
+		Return .F.
+	EndIf
+
+	cNome := AllTrim(SA1->A1_NREDUZ)
+	If Empty(cNome)
+		cNome := AllTrim(SA1->A1_NOME)
+	EndIf
+	If SA1->(FieldPos("A1_CGC")) > 0
+		cCgc := AllTrim(SA1->A1_CGC)
+	EndIf
+
+	AAdd(aSeen, cId)
+	oItem := JsonObject():New()
+	oItem["codigo"] := AllTrim(SA1->A1_COD)
+	oItem["loja"]   := AllTrim(SA1->A1_LOJA)
+	oItem["nome"]   := cNome
+	oItem["razao"]  := AllTrim(SA1->A1_NOME)
+	oItem["cnpj"]   := cCgc
+	AAdd(aJson, oItem:ToJson())
+	FwFreeObj(oItem)
+
+Return .T.
+
+/*/{Protheus.doc} VarreSA1
+Seek suave no indice SA1 e coleta ate nMax.
+/*/
+Method VarreSA1(nOrder, cFilPad, cPrefix, cCampo, cBusca, cDig, aJson, aSeen, nMax) Class FinRestTitulosSvc
+
+	Local nScan  := 0 As Numeric
+	Local nLim   := 400 As Numeric
+	Local cValor := "" As Character
+	Local cNorm  := "" As Character
+	Local cCmp   := "" As Character
+	Local lOk    := .F. As Logical
+
+	Default nOrder  := 0
+	Default cFilPad := ""
+	Default cPrefix := ""
+	Default cCampo  := "NREDUZ"
+	Default cBusca  := ""
+	Default cDig    := ""
+	Default nMax    := 40
+
+	If nOrder <= 0 .Or. Empty(cPrefix) .Or. Len(aJson) >= nMax
+		Return .F.
+	EndIf
+
+	cNorm := Upper(StrTran(AllTrim(cBusca), " ", ""))
+	SA1->(DbSetOrder(nOrder))
+	If !SA1->(DbSeek(cFilPad + cPrefix, .T.))
+		Return .F.
+	EndIf
+
+	While !SA1->(Eof()) .And. nScan < nLim .And. Len(aJson) < nMax
+		nScan++
+		If SA1->A1_FILIAL <> cFilPad
+			Exit
+		EndIf
+
+		If cCampo == "COD"
+			cValor := AllTrim(SA1->A1_COD)
+		ElseIf cCampo == "CGC"
+			If SA1->(FieldPos("A1_CGC")) > 0
+				cValor := AllTrim(SA1->A1_CGC)
+			EndIf
+		ElseIf cCampo == "NOME"
+			cValor := AllTrim(SA1->A1_NOME)
+		Else
+			cValor := AllTrim(SA1->A1_NREDUZ)
+		EndIf
+
+		If cCampo == "COD"
+			If PadL(cValor, 6, "0") <> PadL(AllTrim(cPrefix), 6, "0") .And. Upper(Left(cValor, Len(AllTrim(cPrefix)))) <> Upper(AllTrim(cPrefix))
+				Exit
+			EndIf
+		ElseIf cCampo == "CGC"
+			If !(cPrefix $ StrTran(cValor, " ", ""))
+				Exit
+			EndIf
+		ElseIf Upper(Left(cValor, Len(cPrefix))) <> Upper(cPrefix)
+			Exit
+		EndIf
+
+		cCmp := Upper(StrTran(cValor, " ", ""))
+		lOk  := Empty(cNorm)
+		If !lOk
+			If cNorm $ cCmp .Or. cNorm $ Upper(StrTran(AllTrim(SA1->A1_NREDUZ), " ", "")) .Or. cNorm $ Upper(StrTran(AllTrim(SA1->A1_NOME), " ", "")) .Or. cNorm $ AllTrim(SA1->A1_COD)
+				lOk := .T.
+			ElseIf !Empty(cDig) .And. SA1->(FieldPos("A1_CGC")) > 0 .And. cDig $ AllTrim(SA1->A1_CGC)
+				lOk := .T.
+			EndIf
+		EndIf
+		If lOk
+			Self:AddClienteItem(@aJson, @aSeen, nMax)
+		EndIf
+		SA1->(DbSkip())
+	EndDo
+
+Return Len(aJson) > 0
+
+/*/{Protheus.doc} ConsultarClientes
+Busca indexada no SA1. Nao pagina a tabela e nao troca empresa/filial do job.
+/*/
+Method ConsultarClientes() Class FinRestTitulosSvc
+
+	Local aArea    As Array
+	Local aJson    := {} As Array
+	Local aSeen    := {} As Array
+	Local nMax     := 40 As Numeric
+	Local nOrdRed  := 0 As Numeric
+	Local nOrdNom  := 0 As Numeric
+	Local nOrdCgc  := 0 As Numeric
+	Local nTamFil  := 2 As Numeric
+	Local cBusca   := "" As Character
+	Local cDig     := "" As Character
+	Local cPref    := "" As Character
+	Local cPref2   := "" As Character
+	Local cFilPad  := "" As Character
+	Local cJson    := "" As Character
+	Local nI       := 0 As Numeric
+	Local cMsg     := "" As Character
+
+	If !Self:ParsePayload()
+		Return .F.
+	EndIf
+
+	cBusca := Self:JsonText("busca")
+	If Empty(cBusca)
+		cBusca := Self:JsonText("search")
+	EndIf
+	If Empty(cBusca)
+		cBusca := Self:JsonText("nome")
+	EndIf
+	If Empty(cBusca)
+		cBusca := Self:JsonText("codigo")
+	EndIf
+	cBusca := AllTrim(cBusca)
+
+	nMax := Self:JsonNum("limit")
+	If nMax < 1
+		nMax := 40
+	ElseIf nMax > 80
+		nMax := 80
+	EndIf
+
+	If Len(cBusca) < 2
+		Self:lSuccess  := .T.
+		Self:cJsonRet  := '{"code":"200","message":"Informe ao menos 2 caracteres","items":[],"total":0}'
+		Self:cError    := ""
+		Self:cErrorMsg := ""
+		Return .T.
+	EndIf
+
+	cDig := ""
+	For nI := 1 To Len(cBusca)
+		If SubStr(cBusca, nI, 1) $ "0123456789"
+			cDig += SubStr(cBusca, nI, 1)
+		EndIf
+	Next
+
+	aArea   := GetArea()
+	DbSelectArea("SA1")
+	nTamFil := Len(SA1->A1_FILIAL)
+	If nTamFil < 1
+		nTamFil := Self:TamCampo("A1_FILIAL", 4)
+	EndIf
+	cFilPad := xFilial("SA1")
+	cFilPad := PadR(cFilPad, nTamFil)
+	nOrdRed := RetOrdem("SA1", "A1_FILIAL+A1_NREDUZ")
+	nOrdNom := RetOrdem("SA1", "A1_FILIAL+A1_NOME")
+	nOrdCgc := RetOrdem("SA1", "A1_FILIAL+A1_CGC")
+	If nOrdRed <= 0
+		nOrdRed := 3
+	EndIf
+	If nOrdNom <= 0
+		nOrdNom := 4
+	EndIf
+	If nOrdCgc <= 0
+		nOrdCgc := 5
+	EndIf
+
+	If Len(cDig) >= 8
+		Self:VarreSA1(nOrdCgc, cFilPad, cDig, "CGC", cBusca, cDig, @aJson, @aSeen, nMax)
+	EndIf
+
+	If Len(aJson) < nMax .And. !Empty(cDig) .And. Len(cDig) <= 6 .And. cDig == StrTran(cBusca, " ", "")
+		Self:VarreSA1(1, cFilPad, PadL(cDig, Self:TamCampo("A1_COD", 6), "0"), "COD", cBusca, cDig, @aJson, @aSeen, nMax)
+		If Len(aJson) == 0
+			Self:VarreSA1(1, cFilPad, cDig, "COD", cBusca, cDig, @aJson, @aSeen, nMax)
+		EndIf
+	EndIf
+
+	If Len(aJson) < nMax
+		cPref  := Upper(Left(StrTran(cBusca, " ", ""), 2))
+		cPref2 := Upper(Left(cBusca, 2))
+		Self:VarreSA1(nOrdRed, cFilPad, cPref, "NREDUZ", cBusca, cDig, @aJson, @aSeen, nMax)
+		If Len(aJson) < nMax
+			Self:VarreSA1(nOrdNom, cFilPad, cPref, "NOME", cBusca, cDig, @aJson, @aSeen, nMax)
+		EndIf
+		If Len(aJson) < nMax .And. cPref2 <> cPref
+			Self:VarreSA1(nOrdRed, cFilPad, cPref2, "NREDUZ", cBusca, cDig, @aJson, @aSeen, nMax)
+			If Len(aJson) < nMax
+				Self:VarreSA1(nOrdNom, cFilPad, cPref2, "NOME", cBusca, cDig, @aJson, @aSeen, nMax)
+			EndIf
+		EndIf
+	EndIf
+
+	RestArea(aArea)
+
+	If Len(aJson) == 0
+		cMsg := "Nenhum cliente ativo encontrado"
+	Else
+		cMsg := "Consulta SA1 por indice"
+	EndIf
+
+	cJson := '{"code":"200","message":"' + cMsg + '","origem":"indice","items":['
+	For nI := 1 To Len(aJson)
+		If nI > 1
+			cJson += ","
+		EndIf
+		cJson += aJson[nI]
+	Next
+	cJson += '],"total":' + cValToChar(Len(aJson))
+	If Len(aJson) >= nMax
+		cJson += ',"truncated":true'
+	Else
+		cJson += ',"truncated":false'
+	EndIf
+	cJson += '}'
 
 	Self:lSuccess  := .T.
 	Self:cJsonRet  := cJson

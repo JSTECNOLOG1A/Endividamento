@@ -49,6 +49,17 @@ export const ENTITIES = {
     booleans: ["integrado_erp"],
     numbers: ["valor", "saldo"],
   },
+  ReceivableTitle: {
+    table: "receivable_titles",
+    columns: [
+      "entity_id", "contract_id", "parcela", "titulo_numero", "tipo", "prefixo",
+      "emissao", "vencimento", "valor", "saldo", "natureza", "historico", "status", "origem",
+      "cliente", "cliente_loja", "cliente_nome", "filial", "filial_origem",
+      "integrado_erp", "integrado_erp_em", "erp_mensagem", "erp_status", "erp_consultado_em",
+    ],
+    booleans: ["integrado_erp"],
+    numbers: ["valor", "saldo"],
+  },
   LoanContract: {
     table: "loan_contracts",
     columns: [
@@ -62,12 +73,12 @@ export const ENTITIES = {
       "principal_installments", "interest_installments", "principal_frequency", "interest_frequency",
       "calculation_system", "amortization_percentages", "percentage_base", "schedule_data",
       "contract_pdf_url", "status", "status_history", "approved_by", "approved_date",
-      "rejection_comments", "exported_to_payables", "current_snapshot_id", "approved_snapshot_id",
+      "rejection_comments", "exported_to_payables", "exported_to_receivables", "current_snapshot_id", "approved_snapshot_id",
       "last_recalculated_at",
     ],
     booleans: [
       "iof_financed", "other_fees_financed", "mip_embedded", "dfi_embedded",
-      "other_insurance_embedded", "exported_to_payables",
+      "other_insurance_embedded", "exported_to_payables", "exported_to_receivables",
     ],
     numbers: [
       "operation_value", "amount_foreign", "exchange_rate_closing", "signal_value", "iof_value",

@@ -376,7 +376,7 @@ export default function IntegrationForm({
                 <Trash2 className="w-4 h-4" />
               </Button>
             </div>
-            <Field label="Vincular cadastro" className="md:col-span-6" hint="GET lista, POST grava. Tipos de título (SX5) e fornecedores (SA2) alimentam a lupa na classificação, sem cadastro local." error={errors[`endpoints.${index}.cadastroKey`]}>
+            <Field label="Vincular cadastro" className="md:col-span-6" hint="GET lista, POST grava. Tipos (SX5), fornecedores (SA2) e clientes (SA1) alimentam a lupa na classificação." error={errors[`endpoints.${index}.cadastroKey`]}>
               <NativeSelect
                 value={endpoint.cadastroKey || "__none"}
                 onValueChange={(value) => updateEndpoint(endpoint.key, "cadastroKey", value === "__none" ? "" : value)}

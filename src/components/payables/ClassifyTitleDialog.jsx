@@ -36,15 +36,19 @@ export default function ClassifyTitleDialog({
   entities = [],
   submitting = false,
   onSubmit,
+  kind = "pagar",
 }) {
+  const isReceber = kind === "receber";
+  const partyLabel = isReceber ? "Cliente" : "Fornecedor";
+  const partyLookup = isReceber ? "clientes" : "fornecedores";
   const entityId = titles[0]?.entity_id || "";
   const entity = entities.find((item) => item.id === entityId) || null;
 
   const [tipo, setTipo] = useState(titles[0]?.tipo || "NP");
   const [natureza, setNatureza] = useState(titles[0]?.natureza || "");
-  const [fornecedor, setFornecedor] = useState(titles[0]?.fornecedor || "");
-  const [fornecedorLoja, setFornecedorLoja] = useState(titles[0]?.fornecedor_loja || "01");
-  const [fornecedorNome, setFornecedorNome] = useState(titles[0]?.fornecedor_nome || "");
+  const [partyCode, setPartyCode] = useState(isReceber ? (titles[0]?.cliente || "") : (titles[0]?.fornecedor || ""));
+  const [partyLoja, setPartyLoja] = useState(isReceber ? (titles[0]?.cliente_loja || "01") : (titles[0]?.fornecedor_loja || "01"));
+  const [partyNome, setPartyNome] = useState(isReceber ? (titles[0]?.cliente_nome || "") : (titles[0]?.fornecedor_nome || ""));
   const [applyByType, setApplyByType] = useState(true);
   const [lookup, setLookup] = useState(null);
 
@@ -52,12 +56,12 @@ export default function ClassifyTitleDialog({
     if (!open) return;
     setTipo(titles[0]?.tipo || "NP");
     setNatureza(titles[0]?.natureza || "");
-    setFornecedor(titles[0]?.fornecedor || "");
-    setFornecedorLoja(titles[0]?.fornecedor_loja || "01");
-    setFornecedorNome(titles[0]?.fornecedor_nome || "");
+    setPartyCode(isReceber ? (titles[0]?.cliente || "") : (titles[0]?.fornecedor || ""));
+    setPartyLoja(isReceber ? (titles[0]?.cliente_loja || "01") : (titles[0]?.fornecedor_loja || "01"));
+    setPartyNome(isReceber ? (titles[0]?.cliente_nome || "") : (titles[0]?.fornecedor_nome || ""));
     setApplyByType(true);
     setLookup(null);
-  }, [open, titles]);
+  }, [open, titles, isReceber]);
 
   const availableNatures = naturesForEntity(natures, entity);
   const typeCount = allTitles.filter((item) => (
@@ -73,10 +77,10 @@ export default function ClassifyTitleDialog({
       entity_id: entityId,
       tipo,
       natureza,
-      fornecedor,
-      fornecedor_loja: fornecedorLoja,
-      fornecedor_nome: fornecedorNome,
       applyByType,
+      ...(isReceber
+        ? { cliente: partyCode, cliente_loja: partyLoja, cliente_nome: partyNome }
+        : { fornecedor: partyCode, fornecedor_loja: partyLoja, fornecedor_nome: partyNome }),
     });
   };
 
@@ -84,20 +88,20 @@ export default function ClassifyTitleDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{lookup ? (lookup === "tipos" ? "Consultar tipos de título" : "Consultar fornecedores") : "Classificar títulos"}</DialogTitle>
+            <DialogTitle>{lookup ? (lookup === "tipos" ? "Consultar tipos de título" : `Consultar ${isReceber ? "clientes" : "fornecedores"}`) : "Classificar títulos"}</DialogTitle>
           </DialogHeader>
           {lookup ? (
             <ErpLookupPanel
               kind={lookup}
               empresa={entity?.codigo_empresa || ""}
-              initialSearch={lookup === "fornecedores" ? (fornecedorNome || fornecedor) : tipo}
+              initialSearch={lookup === partyLookup ? (partyNome || partyCode) : tipo}
               onBack={() => setLookup(null)}
               onSelect={(item) => {
                 if (lookup === "tipos") setTipo(item.codigo);
                 else {
-                  setFornecedor(item.codigo);
-                  setFornecedorLoja(item.loja || "01");
-                  setFornecedorNome(item.nome || item.razao || "");
+                  setPartyCode(item.codigo);
+                  setPartyLoja(item.loja || "01");
+                  setPartyNome(item.nome || item.razao || "");
                 }
                 setLookup(null);
               }}
@@ -105,7 +109,7 @@ export default function ClassifyTitleDialog({
           ) : (
           <div className="space-y-4 py-2">
             <p className="text-sm text-slate-600">
-              Informe o código da natureza (ED_CODIGO). Tipo e fornecedor podem ser buscados direto no Protheus pela lupa.
+              Informe o código da natureza (ED_CODIGO). Tipo e {isReceber ? "cliente" : "fornecedor"} podem ser buscados direto no Protheus pela lupa.
             </p>
             <LookupField
               label="Tipo de título"
@@ -133,21 +137,21 @@ export default function ClassifyTitleDialog({
             <div className="grid grid-cols-3 gap-3">
               <LookupField
                 className="col-span-2"
-                label="Fornecedor"
-                value={fornecedor}
-                onChange={setFornecedor}
-                onLookup={() => setLookup("fornecedores")}
-                placeholder="Código SA2"
+                label={partyLabel}
+                value={partyCode}
+                onChange={setPartyCode}
+                onLookup={() => setLookup(partyLookup)}
+                placeholder={isReceber ? "Código SA1" : "Código SA2"}
                 mono
               />
               <div className="space-y-1">
                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Loja</Label>
-                <Input value={fornecedorLoja} onChange={(event) => setFornecedorLoja(event.target.value)} className="h-9 font-mono" placeholder="01" />
+                <Input value={partyLoja} onChange={(event) => setPartyLoja(event.target.value)} className="h-9 font-mono" placeholder="01" />
               </div>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nome do fornecedor</Label>
-              <Input value={fornecedorNome} onChange={(event) => setFornecedorNome(event.target.value)} className="h-9" />
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nome do {isReceber ? "cliente" : "fornecedor"}</Label>
+              <Input value={partyNome} onChange={(event) => setPartyNome(event.target.value)} className="h-9" />
             </div>
             <label className="flex items-start gap-2 text-sm text-slate-700">
               <Checkbox checked={applyByType} onCheckedChange={(value) => setApplyByType(value === true)} className="mt-0.5" />

@@ -338,6 +338,7 @@ export default function AccountsPayable() {
       } else {
         toast.success(`${data.integrated || 0} ${data.integrated === 1 ? "título integrado" : "títulos integrados"} no ERP`);
       }
+      if ((data.integrated || 0) > 0) setErpFilter("integrado");
       setSelectedIds([]);
       refresh();
     } catch (error) {
@@ -376,6 +377,7 @@ export default function AccountsPayable() {
       } else {
         toast.success(`${data.reversed || 0} ${data.reversed === 1 ? "título estornado" : "títulos estornados"} no ERP`);
       }
+      if ((data.reversed || 0) > 0) setErpFilter("estornado");
       setExtornoItems([]);
       setSelectedIds([]);
       refresh();
@@ -501,11 +503,22 @@ export default function AccountsPayable() {
               <Receipt className="w-6 h-6 text-slate-300" />
             </div>
             <p className="text-sm text-slate-600 font-medium">
-              {isFetching ? "Carregando títulos..." : "Nenhum título a pagar"}
+              {isFetching
+                ? "Carregando títulos..."
+                : (titles || []).length > 0
+                  ? "Nenhum título neste filtro"
+                  : "Nenhum título a pagar"}
             </p>
             <p className="text-xs text-slate-400 mt-1">
-              As parcelas entram aqui quando o contrato é aprovado.
+              {(titles || []).length > 0
+                ? "O título integrado fica em Status ERP = Integrado. Troque o filtro para Todos para ver a lista completa."
+                : "As parcelas entram aqui quando o contrato é aprovado."}
             </p>
+            {(titles || []).length > 0 && erpFilter !== "todas" && (
+              <Button type="button" variant="outline" className="mt-4 h-8 text-xs" onClick={() => setErpFilter("todas")}>
+                Ver todos os títulos
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (

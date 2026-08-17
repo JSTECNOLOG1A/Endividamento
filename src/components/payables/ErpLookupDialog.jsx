@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/lib/notify";
 import { base44 } from "@/api/base44Client";
 
-const MIN_FORNECEDOR = 2;
+const MIN_PARTY = 2;
 
 function formatCnpj(value) {
   const digits = String(value || "").replace(/\D/g, "");
@@ -28,6 +28,9 @@ export default function ErpLookupPanel({
   onBack,
 }) {
   const isTipos = kind === "tipos";
+  const isClientes = kind === "clientes";
+  const partyKind = isClientes ? "clientes" : "fornecedores";
+  const partyLabel = isClientes ? "Clientes no Protheus" : "Fornecedores no Protheus";
   const [search, setSearch] = useState(initialSearch || "");
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
@@ -40,7 +43,7 @@ export default function ErpLookupPanel({
   useEffect(() => {
     if (!kind) return undefined;
     const query = String(search || "").trim();
-    if (!isTipos && query.length < MIN_FORNECEDOR) {
+    if (!isTipos && query.length < MIN_PARTY) {
       setItems([]);
       setMeta(null);
       setLoading(false);
@@ -51,7 +54,7 @@ export default function ErpLookupPanel({
     const handle = setTimeout(() => {
       setLoading(true);
       base44.functions.invoke("lookupPayableErp", {
-        kind: isTipos ? "tipos" : "fornecedores",
+        kind: isTipos ? "tipos" : partyKind,
         search: query,
         empresa,
         limit: 40,
@@ -77,10 +80,10 @@ export default function ErpLookupPanel({
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [kind, search, isTipos, empresa]);
+  }, [kind, search, isTipos, partyKind, empresa]);
 
   const query = String(search || "").trim();
-  const waitingChars = !isTipos && query.length < MIN_FORNECEDOR;
+  const waitingChars = !isTipos && query.length < MIN_PARTY;
   const showSpinner = loading && items.length === 0;
 
   return (
@@ -91,7 +94,7 @@ export default function ErpLookupPanel({
           Voltar
         </Button>
         <p className="text-sm font-medium text-slate-800">
-          {isTipos ? "Tipos de título no Protheus" : "Fornecedores no Protheus"}
+          {isTipos ? "Tipos de título no Protheus" : partyLabel}
         </p>
       </div>
       <p className="text-xs text-slate-500">
@@ -115,7 +118,7 @@ export default function ErpLookupPanel({
       <ScrollArea className="h-72 rounded-md border border-slate-200">
         {waitingChars ? (
           <div className="flex h-72 items-center justify-center px-6 text-center text-sm text-slate-500">
-            Digite ao menos {MIN_FORNECEDOR} caracteres para consultar o Protheus.
+            Digite ao menos {MIN_PARTY} caracteres para consultar o Protheus.
           </div>
         ) : showSpinner ? (
           <div className="flex h-72 items-center justify-center gap-2 text-sm text-slate-500">

@@ -444,6 +444,12 @@ export async function update(name, id, data) {
     } catch (error) {
       logger.error({ err: error, contractId: saved.id }, "falha ao gerar contas a pagar do contrato aprovado");
     }
+    try {
+      const { generateReceivableTitlesForContract } = await import("../receivables/generate.js");
+      await generateReceivableTitlesForContract(saved, saved.created_by || "system");
+    } catch (error) {
+      logger.error({ err: error, contractId: saved.id }, "falha ao gerar contas a receber do contrato aprovado");
+    }
   }
   return saved;
 }

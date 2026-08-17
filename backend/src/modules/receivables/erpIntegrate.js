@@ -4,7 +4,7 @@ import { fetchErpJson } from "../integrations/erpConnection.js";
 import * as integrationStore from "../integrations/store.js";
 import { applyProtheusContext, isProtheusErp } from "../integrations/protheus.js";
 import { fetchSm0Records, matchSm0ByEntity, resolveTitleBranch } from "../integrations/protheusScope.js";
-import { resolveNatureForEntity } from "./natureCode.js";
+import { resolveNatureForEntity } from "../payables/natureCode.js";
 import { logger } from "../../logger.js";
 
 function httpError(status, message) {
@@ -117,7 +117,7 @@ function messageFromErp(statusCode, data, ctx = {}) {
 async function setTitleErpStatus(id, erpStatus, message, extras = {}) {
   const integrado = erpStatus === "integrado" || erpStatus === "baixado";
   const params = [id, erpStatus, integrado, message ?? null];
-  let sql = `UPDATE payable_titles
+  let sql = `UPDATE receivable_titles
      SET erp_status = $2,
          integrado_erp = $3,
          erp_mensagem = $4,
@@ -134,7 +134,7 @@ async function setTitleErpStatus(id, erpStatus, message, extras = {}) {
   await pool.query(sql, params);
 }
 
-export function buildErpTitlePayload(title, entity, sm0Match = null, codes = null) {
+export function buildErpReceivablePayload(title, entity, sm0Match = null, codes = null) {
   const emissao = formatProtheusDate(title.emissao);
   const vencimento = formatProtheusDate(title.vencimento);
   const se2 = codes || resolveTitleBranch(title, entity, sm0Match);
@@ -145,8 +145,8 @@ export function buildErpTitlePayload(title, entity, sm0Match = null, codes = nul
   const parcela = erpParcela(title.parcela);
   const tipo = padRight(title.tipo || "", 3).trim();
   const natureza = String(title.natureza || "").trim();
-  const fornecedor = padLeft(title.fornecedor || "", 6);
-  const loja = String(title.fornecedor_loja || "01").trim() || "01";
+  const cliente = padLeft(title.cliente || "", 6);
+  const loja = String(title.cliente_loja || "01").trim() || "01";
   const valor = Number(title.valor) || 0;
   return {
     filial: e2Filial,
@@ -156,7 +156,7 @@ export function buildErpTitlePayload(title, entity, sm0Match = null, codes = nul
     parcela,
     tipo,
     natureza,
-    fornecedor,
+    cliente,
     loja,
     emissao,
     vencimento,
@@ -171,7 +171,7 @@ function actualSe2Filial(data) {
 }
 
 function filialMismatchMessage(expected, actual) {
-  return `O Protheus gravou E2_FILIAL=${actual || "?"} (esperado ${expected}). O título existe no SE2 com a filial da sessão HTTP. Estorne na filial ${actual || "?"} ou recompile FinRestTitulos.`;
+  return `O Protheus gravou E1_FILIAL=${actual || "?"} (esperado ${expected}). O título existe no SE1 com a filial da sessão HTTP. Estorne na filial ${actual || "?"} ou recompile FinRestTitulos.`;
 }
 
 async function consultIncludedTitle({ linked, credential, ctx, body, includePath }) {
@@ -187,7 +187,7 @@ async function consultIncludedTitle({ linked, credential, ctx, body, includePath
     username: linked.integration.username,
     credential,
     timeoutSeconds: Math.max(linked.integration.timeoutSeconds || 30, 60),
-    body,
+    body: withReceivableAcao(body, "consultar"),
     ...ctx,
   });
 }
@@ -201,13 +201,35 @@ function restJobContext(linked) {
   };
 }
 
-async function loadLinkedPayableEndpoint(cadastroKey = "titulos_pagar") {
+async function loadLinkedReceivableEndpoint(cadastroKey = "titulos_receber") {
   const labels = {
-    titulos_pagar: "Títulos a pagar",
-    titulos_pagar_extornar: "Estorno de títulos a pagar",
-    titulos_pagar_consultar: "Consulta de títulos a pagar",
+    titulos_receber: "Títulos a receber",
+    titulos_receber_extornar: "Estorno de títulos a receber",
+    titulos_receber_consultar: "Consulta de títulos a receber",
   };
-  const linked = await integrationStore.findLinkedCadastro(cadastroKey, "POST");
+  let linked = await integrationStore.findLinkedCadastro(cadastroKey, "POST");
+  if (!linked && cadastroKey.startsWith("titulos_receber")) {
+    const pagarKey = cadastroKey.replace("receber", "pagar");
+    const pagar = await integrationStore.findLinkedCadastro(pagarKey, "POST");
+    if (pagar) {
+      linked = {
+        integration: pagar.integration,
+        endpoint: {
+          ...pagar.endpoint,
+          path: String(pagar.endpoint.path || "").replace(/\/pagar/gi, "/receber"),
+        },
+      };
+    }
+  }
+  if (linked?.endpoint?.path) {
+    linked = {
+      ...linked,
+      endpoint: {
+        ...linked.endpoint,
+        path: receberPublishedPath(linked.endpoint.path),
+      },
+    };
+  }
   if (!linked) {
     throw httpError(
       400,
@@ -227,10 +249,10 @@ async function loadLinkedPayableEndpoint(cadastroKey = "titulos_pagar") {
   return { linked, credential };
 }
 
-async function loadPayableActionEndpoint(cadastroKey, derivePath) {
+async function loadReceivableActionEndpoint(cadastroKey, derivePath) {
   const dedicated = await integrationStore.findLinkedCadastro(cadastroKey, "POST");
-  if (dedicated) return loadLinkedPayableEndpoint(cadastroKey);
-  const fallback = await loadLinkedPayableEndpoint("titulos_pagar");
+  if (dedicated) return loadLinkedReceivableEndpoint(cadastroKey);
+  const fallback = await loadLinkedReceivableEndpoint("titulos_receber");
   return {
     ...fallback,
     linked: {
@@ -243,13 +265,13 @@ async function loadPayableActionEndpoint(cadastroKey, derivePath) {
   };
 }
 
-export async function integratePayableTitles(payload = {}) {
+export async function integrateReceivableTitles(payload = {}) {
   const ids = asIdList(payload.ids);
   if (!ids.length) throw httpError(400, "Selecione ao menos um título para integrar");
 
-  const { linked, credential } = await loadLinkedPayableEndpoint();
+  const { linked, credential } = await loadLinkedReceivableEndpoint();
   const titlesResult = await pool.query(
-    `SELECT * FROM payable_titles WHERE id = ANY($1::text[]) ORDER BY vencimento ASC, parcela ASC`,
+    `SELECT * FROM receivable_titles WHERE id = ANY($1::text[]) ORDER BY vencimento ASC, parcela ASC`,
     [ids]
   );
   if (!titlesResult.rows.length) throw httpError(400, "Nenhum título encontrado");
@@ -301,9 +323,9 @@ export async function integratePayableTitles(payload = {}) {
       results.push({ id: title.id, ok: false, message });
       continue;
     }
-    if (!String(title.fornecedor || "").trim()) {
+    if (!String(title.cliente || "").trim()) {
       failed += 1;
-      const message = "Informe o fornecedor antes de integrar";
+      const message = "Informe o cliente antes de integrar";
       await setTitleErpStatus(title.id, "falha", message);
       results.push({ id: title.id, ok: false, message });
       continue;
@@ -329,7 +351,7 @@ export async function integratePayableTitles(payload = {}) {
     if (nature.codigo !== title.natureza) {
       title.natureza = nature.codigo;
       await pool.query(
-        `UPDATE payable_titles SET natureza = $2, updated_date = now() WHERE id = $1`,
+        `UPDATE receivable_titles SET natureza = $2, updated_date = now() WHERE id = $1`,
         [title.id, nature.codigo]
       );
     }
@@ -345,7 +367,7 @@ export async function integratePayableTitles(payload = {}) {
     }
 
     await pool.query(
-      `UPDATE payable_titles SET filial = $2, filial_origem = $3, updated_date = now() WHERE id = $1`,
+      `UPDATE receivable_titles SET filial = $2, filial_origem = $3, updated_date = now() WHERE id = $1`,
       [title.id, codes.e2Filial || codes.filial, codes.filialOrigem]
     );
 
@@ -355,7 +377,7 @@ export async function integratePayableTitles(payload = {}) {
       : linked.endpoint.path;
 
     try {
-      const body = buildErpTitlePayload({ ...title, filial: codes.e2Filial || codes.filial, filial_origem: codes.filialOrigem }, entity, resolved.match, codes);
+      const body = buildErpReceivablePayload({ ...title, filial: codes.e2Filial || codes.filial, filial_origem: codes.filialOrigem }, entity, resolved.match, codes);
       if (!body.emissao || !body.vencimento) {
         failed += 1;
         const message = `Datas inválidas para o Protheus (emissão=${title.emissao || "vazia"}, vencimento=${title.vencimento || "vazio"})`;
@@ -365,7 +387,7 @@ export async function integratePayableTitles(payload = {}) {
       }
       logger.info({
         titleId: title.id,
-        tabela: "SE2010",
+        tabela: "SE1010",
         grupo: ctx.grupoEmpresas,
         filial: body.filial,
         filOrig: body.filOrig,
@@ -374,11 +396,11 @@ export async function integratePayableTitles(payload = {}) {
         parcela: body.parcela,
         tipo: body.tipo,
         natureza: body.natureza,
-        fornecedor: body.fornecedor,
+        cliente: body.cliente,
         emissao: body.emissao,
         vencimento: body.vencimento,
         valor: body.valor,
-      }, "enviando título a pagar ao ERP");
+      }, "enviando título a receber ao ERP");
       const response = await fetchErpJson({
         baseUrl: linked.integration.baseUrl,
         path,
@@ -396,7 +418,7 @@ export async function integratePayableTitles(payload = {}) {
         username: linked.integration.username,
       });
       if (!okRaw && response.statusCode >= 500) {
-        message = `${message} (SE2010 filial=${body.filial} filOrig=${body.filOrig})`;
+        message = `${message} (SE1010 filial=${body.filial} filOrig=${body.filOrig})`;
       }
       let ok = okRaw;
       let actualFilial = actualSe2Filial(response.data);
@@ -425,7 +447,7 @@ export async function integratePayableTitles(payload = {}) {
             }
           }
         } catch (consultError) {
-          logger.warn({ err: consultError, titleId: title.id }, "não foi possível conferir o SE2 após falha na inclusão");
+          logger.warn({ err: consultError, titleId: title.id }, "não foi possível conferir o SE1 após falha na inclusão");
         }
       }
       if (!ok) {
@@ -434,7 +456,7 @@ export async function integratePayableTitles(payload = {}) {
           statusCode: response.statusCode,
           message,
           body: previewErpBody(response.data),
-        }, "ERP recusou título a pagar");
+        }, "ERP recusou título a receber");
       }
       if (ok) {
         integrated += 1;
@@ -471,32 +493,39 @@ export async function integratePayableTitles(payload = {}) {
   };
 }
 
-export function extornoPathFromInclude(path) {
+export function receberPublishedPath(path) {
   const raw = String(path || "").trim();
   const [pathname, query] = raw.split("?");
-  const clean = pathname.replace(/\/+$/, "");
-  const next = /\/(extornar|estornar)$/i.test(clean)
-    ? clean
-    : `${clean || "/FinRestTitulos/pagar"}/extornar`;
+  const clean = String(pathname || "").replace(/\/+$/, "");
+  const root = clean.replace(/\/(pagar|receber|estornarReceber|consultarReceber|clientesReceber)(\/.*)?$/i, "") || "/FinRestTitulos";
+  const next = `${root}/receber`;
   return query ? `${next}?${query}` : next;
 }
 
-export async function reversePayableTitles(payload = {}) {
+function withReceivableAcao(body, acao) {
+  return { ...body, acao };
+}
+
+export function extornoPathFromInclude(path) {
+  return receberPublishedPath(path);
+}
+
+export async function reverseReceivableTitles(payload = {}) {
   const ids = asIdList(payload.ids);
   if (!ids.length) throw httpError(400, "Selecione ao menos um título para estornar");
 
-  const { linked, credential } = await loadPayableActionEndpoint("titulos_pagar_extornar", extornoPathFromInclude);
+  const { linked, credential } = await loadReceivableActionEndpoint("titulos_receber_extornar", extornoPathFromInclude);
   let consultLinked = null;
   let consultCredential = credential;
   try {
-    const consultEp = await loadPayableActionEndpoint("titulos_pagar_consultar", consultPathFromInclude);
+    const consultEp = await loadReceivableActionEndpoint("titulos_receber_consultar", consultPathFromInclude);
     consultLinked = consultEp.linked;
     consultCredential = consultEp.credential;
   } catch (error) {
     logger.warn({ err: error }, "consulta prévia do estorno indisponível; o Protheus ainda valida movimentação");
   }
   const titlesResult = await pool.query(
-    `SELECT * FROM payable_titles WHERE id = ANY($1::text[]) ORDER BY vencimento ASC, parcela ASC`,
+    `SELECT * FROM receivable_titles WHERE id = ANY($1::text[]) ORDER BY vencimento ASC, parcela ASC`,
     [ids]
   );
   if (!titlesResult.rows.length) throw httpError(400, "Nenhum título encontrado");
@@ -567,7 +596,11 @@ export async function reversePayableTitles(payload = {}) {
     const requestPath = isProtheusErp(ctx.erpNome) ? applyProtheusContext(path, ctx) : path;
 
     try {
-      const body = buildErpTitlePayload({ ...title, filial: codes.e2Filial || codes.filial, filial_origem: codes.filialOrigem }, entity, resolved.match, codes);
+      const body = withReceivableAcao(
+        buildErpReceivablePayload({ ...title, filial: codes.e2Filial || codes.filial, filial_origem: codes.filialOrigem }, entity, resolved.match, codes),
+        "estornar"
+      );
+      const consultBody = withReceivableAcao(body, "consultar");
 
       if (consultLinked) {
         const consultPath = isProtheusErp(ctx.erpNome)
@@ -582,7 +615,7 @@ export async function reversePayableTitles(payload = {}) {
           username: consultLinked.integration.username,
           credential: consultCredential,
           timeoutSeconds: Math.max(consultLinked.integration.timeoutSeconds || 30, 60),
-          body,
+          body: consultBody,
           ...restJobContext({ integration: consultLinked.integration }),
         });
         if (consulted.statusCode >= 500) {
@@ -605,7 +638,7 @@ export async function reversePayableTitles(payload = {}) {
           if (!check.ok) {
             failed += 1;
             await pool.query(
-              `UPDATE payable_titles SET erp_mensagem = $2, updated_date = now() WHERE id = $1`,
+              `UPDATE receivable_titles SET erp_mensagem = $2, updated_date = now() WHERE id = $1`,
               [title.id, check.message]
             );
             results.push({ id: title.id, ok: false, message: check.message });
@@ -622,7 +655,7 @@ export async function reversePayableTitles(payload = {}) {
         numero: body.numero,
         parcela: body.parcela,
         path: requestPath,
-      }, "estornando título a pagar no ERP");
+      }, "estornando título a receber no ERP");
       const response = await fetchErpJson({
         baseUrl: linked.integration.baseUrl,
         path: requestPath,
@@ -636,9 +669,14 @@ export async function reversePayableTitles(payload = {}) {
         ...ctx,
       });
       const ok = erpAccepted(response.statusCode, response.data);
-      const message = messageFromErp(response.statusCode, response.data, {
+      let message = messageFromErp(response.statusCode, response.data, {
         username: linked.integration.username,
       });
+      if (response.statusCode === 404) {
+        message = "O job HTTP REST não publicou /FinRestTitulos/receber. Confira o serviço no Protheus.";
+      } else if (/ja existe/i.test(message) || /inclu[ií]do com sucesso/i.test(message)) {
+        message = "O Protheus ainda está na versão antiga de /receber (só inclui). Compile finresttitulos.controller.prw e finresttitulos.services.prw e reinicie o job HTTP REST.";
+      }
       if (ok) {
         reversed += 1;
         await setTitleErpStatus(title.id, "estornado", message || "Estornado no ERP");
@@ -650,9 +688,9 @@ export async function reversePayableTitles(payload = {}) {
           statusCode: response.statusCode,
           message,
           body: previewErpBody(response.data),
-        }, "ERP recusou estorno de título a pagar");
+        }, "ERP recusou estorno de título a receber");
         await pool.query(
-          `UPDATE payable_titles SET erp_mensagem = $2, updated_date = now() WHERE id = $1`,
+          `UPDATE receivable_titles SET erp_mensagem = $2, updated_date = now() WHERE id = $1`,
           [title.id, message]
         );
         results.push({ id: title.id, ok: false, message });
@@ -665,7 +703,7 @@ export async function reversePayableTitles(payload = {}) {
       failed += 1;
       const message = error.message || "Falha ao estornar no ERP";
       await pool.query(
-        `UPDATE payable_titles SET erp_mensagem = $2, updated_date = now() WHERE id = $1`,
+        `UPDATE receivable_titles SET erp_mensagem = $2, updated_date = now() WHERE id = $1`,
         [title.id, message]
       );
       results.push({ id: title.id, ok: false, message });
@@ -720,13 +758,7 @@ function titleAlteredInErp(title, data) {
 }
 
 export function consultPathFromInclude(path) {
-  const raw = String(path || "").trim();
-  const [pathname, query] = raw.split("?");
-  const clean = pathname.replace(/\/+$/, "");
-  const next = /\/consultar$/i.test(clean)
-    ? clean
-    : `${clean || "/FinRestTitulos/pagar"}/consultar`;
-  return query ? `${next}?${query}` : next;
+  return receberPublishedPath(path);
 }
 
 function isConsultFresh(title, staleMinutes) {
@@ -812,7 +844,7 @@ function publicTitlePatch(row) {
 
 async function applyConsultPatch(id, patch) {
   const result = await pool.query(
-    `UPDATE payable_titles SET
+    `UPDATE receivable_titles SET
         saldo = COALESCE($2::numeric, saldo),
         valor = COALESCE($3::numeric, valor),
         status = COALESCE($4, status),
@@ -849,7 +881,7 @@ async function applyConsultPatch(id, patch) {
   return result.rows[0];
 }
 
-export async function refreshPayableTitlesFromErp(payload = {}) {
+export async function refreshReceivableTitlesFromErp(payload = {}) {
   const ids = asIdList(payload.ids);
   const force = Boolean(payload.force);
   const staleMinutes = Number.isFinite(Number(payload.staleMinutes))
@@ -859,7 +891,7 @@ export async function refreshPayableTitlesFromErp(payload = {}) {
   let linked;
   let credential;
   try {
-    ({ linked, credential } = await loadPayableActionEndpoint("titulos_pagar_consultar", consultPathFromInclude));
+    ({ linked, credential } = await loadReceivableActionEndpoint("titulos_receber_consultar", consultPathFromInclude));
   } catch (error) {
     if (!force && error.status === 400) {
       logger.warn({ err: error }, "consulta ERP ignorada: integração não configurada");
@@ -869,7 +901,7 @@ export async function refreshPayableTitlesFromErp(payload = {}) {
   }
 
   const params = [];
-  let sql = `SELECT * FROM payable_titles
+  let sql = `SELECT * FROM receivable_titles
      WHERE (integrado_erp IS TRUE OR erp_status IN ('integrado', 'baixado'))`;
   if (ids.length) {
     params.push(ids);
@@ -933,11 +965,14 @@ export async function refreshPayableTitlesFromErp(payload = {}) {
     const requestPath = isProtheusErp(ctx.erpNome) ? applyProtheusContext(path, ctx) : path;
 
     try {
-      const body = buildErpTitlePayload(
-        { ...title, filial: codes.e2Filial || codes.filial, filial_origem: codes.filialOrigem },
-        entity,
-        resolved.match,
-        codes
+      const body = withReceivableAcao(
+        buildErpReceivablePayload(
+          { ...title, filial: codes.e2Filial || codes.filial, filial_origem: codes.filialOrigem },
+          entity,
+          resolved.match,
+          codes
+        ),
+        "consultar"
       );
       logger.info({
         titleId: title.id,
@@ -947,7 +982,7 @@ export async function refreshPayableTitlesFromErp(payload = {}) {
         numero: body.numero,
         parcela: body.parcela,
         path: requestPath,
-      }, "consultando título a pagar no ERP");
+      }, "consultando título a receber no ERP");
       const response = await fetchErpJson({
         baseUrl: linked.integration.baseUrl,
         path: requestPath,
@@ -969,7 +1004,7 @@ export async function refreshPayableTitlesFromErp(payload = {}) {
           skipped: skipped + (titlesResult.rows.length - consulted - failed - skipped),
           total: titlesResult.rows.length,
           unavailable: true,
-          message: "Endpoint de consulta não publicado no Protheus. Compile FinRestTitulos e reinicie o job HTTP REST.",
+          message: "O job HTTP REST não publicou /FinRestTitulos/receber. Confira o serviço no Protheus.",
           connection: linked.integration.nome,
           endpoint: path,
           results,

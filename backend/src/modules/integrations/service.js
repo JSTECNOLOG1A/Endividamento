@@ -18,6 +18,9 @@ export const CADASTRO_KEYS = [
   "titulos_pagar_extornar",
   "titulos_pagar_consultar",
   "titulos_receber",
+  "titulos_receber_extornar",
+  "titulos_receber_consultar",
+  "clientes",
 ];
 
 const AUTH_TYPES = ["none", "api_key", "bearer", "basic"];

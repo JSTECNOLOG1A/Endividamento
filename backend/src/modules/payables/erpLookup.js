@@ -18,9 +18,11 @@ const TABLEDATA_PAGE_SIZE = 200;
 const TABLEDATA_MAX_PAGES = 40;
 const TABLEDATA_CONCURRENCY = 4;
 const SUPPLIER_FIELDS = "A2_COD,A2_LOJA,A2_NREDUZ,A2_NOME,A2_CGC,A2_MSBLQL";
+const CLIENT_FIELDS = "A1_COD,A1_LOJA,A1_NREDUZ,A1_NOME,A1_CGC,A1_MSBLQL";
 const CACHE_MS = 10 * 60 * 1000;
 
 const supplierCache = new Map();
+const clientCache = new Map();
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -28,14 +30,22 @@ function httpError(status, message) {
   return err;
 }
 
-export function lookupPathFromTitulos(path, resource) {
+export function lookupPathFromTitulos(path, resource, family = "pagar") {
   const raw = String(path || "").trim();
   const [pathname, query] = raw.split("?");
   const clean = String(pathname || "").replace(/\/+$/, "");
-  const pagarBase = /\/pagar$/i.test(clean)
-    ? clean
-    : `${clean.replace(/\/pagar(\/.*)?$/i, "") || "/FinRestTitulos"}/pagar`;
-  const next = `${pagarBase}/${resource}`;
+  const root = clean.replace(/\/(pagar|receber)(\/.*)?$/i, "") || "/FinRestTitulos";
+  let next;
+  if (family === "receber" && resource === "clientes") {
+    next = `${root}/receber`;
+  } else if (family === "receber") {
+    next = `${root}/${resource === "tipos" ? "pagar/tipos" : resource}`;
+  } else {
+    const familyBase = /\/(pagar|receber)$/i.test(clean)
+      ? clean.replace(/\/(pagar|receber)$/i, "/pagar")
+      : `${root}/pagar`;
+    next = `${familyBase}/${resource}`;
+  }
   return query ? `${next}?${query}` : next;
 }
 
@@ -158,15 +168,15 @@ export function parseSuppliersFromErp(payload) {
     if (isErpDeletedRecord(record) || isErpBlockedRecord(record)) continue;
 
     const codigo = padCode(lookupLoose(record, [
-      "a2_cod", "codigo", "code", "fornecedor", "codfor", "vendor", "supplier",
+      "a2_cod", "a1_cod", "codigo", "code", "fornecedor", "cliente", "codfor", "vendor", "supplier",
     ]), 6);
     if (!codigo) continue;
-    const loja = padCode(lookupLoose(record, ["a2_loja", "loja", "store", "branch"]) || "01", 2) || "01";
+    const loja = padCode(lookupLoose(record, ["a2_loja", "a1_loja", "loja", "store", "branch"]) || "01", 2) || "01";
     const nome = asTrimmedString(lookupLoose(record, [
-      "a2_nreduz", "a2_nome", "nome", "nomereduz", "razao", "descricao", "name",
+      "a2_nreduz", "a1_nreduz", "a2_nome", "a1_nome", "nome", "nomereduz", "razao", "descricao", "name",
     ])) || codigo;
-    const razao = asTrimmedString(lookupLoose(record, ["a2_nome", "razao", "nomerazao"])) || "";
-    const cnpj = String(lookupLoose(record, ["a2_cgc", "cgc", "cnpj", "cpf"]) || "").replace(/\D/g, "");
+    const razao = asTrimmedString(lookupLoose(record, ["a2_nome", "a1_nome", "razao", "nomerazao"])) || "";
+    const cnpj = String(lookupLoose(record, ["a2_cgc", "a1_cgc", "cgc", "cnpj", "cpf"]) || "").replace(/\D/g, "");
     const key = `${codigo}::${loja}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -176,51 +186,61 @@ export function parseSuppliersFromErp(payload) {
 }
 
 async function tryFinRestLookup(resource, search, limit) {
-  const linked = await integrationStore.findLinkedCadastro("titulos_pagar", "POST");
-  if (!linked || linked.integration.status !== "ativo") return null;
-  if (!isProtheusErp(linked.integration.erpNome)) return null;
+  const family = resource === "clientes" ? "receber" : "pagar";
+  const cadastroKeys = resource === "clientes"
+    ? ["titulos_receber", "titulos_pagar"]
+    : ["titulos_pagar", "titulos_receber"];
 
-  let credential;
-  try {
-    credential = await loadCredential(linked.integration);
-  } catch {
-    return null;
-  }
+  for (const cadastroKey of cadastroKeys) {
+    const linked = await integrationStore.findLinkedCadastro(cadastroKey, "POST");
+    if (!linked || linked.integration.status !== "ativo") continue;
+    if (!isProtheusErp(linked.integration.erpNome)) continue;
 
-  const nested = lookupPathFromTitulos(linked.endpoint.path, resource);
-  const legacy = nested.replace(/\/pagar\/([^/?]+)/i, "/$1");
-  const paths = [...new Set([nested, legacy])];
-
-  for (const path of paths) {
+    let credential;
     try {
-      const fetched = await fetchErpJson(requestParams(linked.integration, credential, path, {
-        method: "POST",
-        body: { busca: search, search, limit },
-      }));
-      if (fetched.statusCode === 404 || fetched.statusCode === 405) continue;
-      if (fetched.statusCode < 200 || fetched.statusCode >= 300) {
-        logger.warn({ path, statusCode: fetched.statusCode }, "FinRest lookup falhou neste caminho");
-        continue;
+      credential = await loadCredential(linked.integration);
+    } catch {
+      continue;
+    }
+
+    const nested = lookupPathFromTitulos(linked.endpoint.path, resource, family);
+    const legacy = nested.replace(/\/(pagar|receber)\/([^/?]+)/i, "/$2");
+    const paths = [...new Set([nested, legacy])];
+
+    for (const path of paths) {
+      try {
+        const fetched = await fetchErpJson(requestParams(linked.integration, credential, path, {
+          method: "POST",
+          body: resource === "clientes"
+            ? { busca: search, search, limit, acao: "clientes" }
+            : { busca: search, search, limit },
+        }));
+        if (fetched.statusCode === 404 || fetched.statusCode === 405) continue;
+        if (fetched.statusCode < 200 || fetched.statusCode >= 300) {
+          logger.warn({ path, statusCode: fetched.statusCode }, "FinRest lookup falhou neste caminho");
+          continue;
+        }
+        const parsed = resource === "tipos"
+          ? parseTitleTypesFromErp(fetched.data)
+          : parseSuppliersFromErp(fetched.data);
+        const kind = resource === "tipos" ? "tipos" : resource;
+        return {
+          kind,
+          search,
+          total: parsed.length,
+          truncated: Boolean(fetched.data?.truncated) || parsed.length > limit,
+          origem: fetched.data?.origem || "indice",
+          connection: linked.integration.nome,
+          endpoint: path,
+          items: parsed.filter((item) => (
+            resource === "tipos"
+              ? matchesSearch([item.codigo, item.descricao], search)
+              : matchesSearch([item.codigo, item.loja, item.nome, item.razao, item.cnpj], search)
+          )).slice(0, limit),
+        };
+      } catch (error) {
+        logger.warn({ err: error, path }, "FinRest lookup indisponível neste caminho");
       }
-      const parsed = resource === "tipos"
-        ? parseTitleTypesFromErp(fetched.data)
-        : parseSuppliersFromErp(fetched.data);
-      return {
-        kind: resource === "tipos" ? "tipos" : "fornecedores",
-        search,
-        total: parsed.length,
-        truncated: Boolean(fetched.data?.truncated) || parsed.length > limit,
-        origem: fetched.data?.origem || "indice",
-        connection: linked.integration.nome,
-        endpoint: path,
-        items: parsed.filter((item) => (
-          resource === "tipos"
-            ? matchesSearch([item.codigo, item.descricao], search)
-            : matchesSearch([item.codigo, item.loja, item.nome, item.razao, item.cnpj], search)
-        )).slice(0, limit),
-      };
-    } catch (error) {
-      logger.warn({ err: error, path }, "FinRest lookup indisponível neste caminho");
     }
   }
   return null;
@@ -290,6 +310,73 @@ async function loadAllSuppliersTabledata(linked, credential) {
   return items;
 }
 
+function sa1PathFromSa2(path) {
+  return String(path || "")
+    .replace(/SA2(\d{3}0)?/gi, (_, group) => `SA1${group || ""}`)
+    .replace(/A2_/g, "A1_");
+}
+
+async function loadLinkedClientsGet() {
+  try {
+    return await loadLinkedGet("clientes", "Clientes");
+  } catch (error) {
+    if (error.status !== 400) throw error;
+  }
+  const { linked, credential } = await loadLinkedGet("fornecedores", "Fornecedores");
+  return {
+    linked: {
+      ...linked,
+      endpoint: {
+        ...linked.endpoint,
+        path: sa1PathFromSa2(linked.endpoint.path),
+      },
+    },
+    credential,
+  };
+}
+
+async function loadAllClientsTabledata(linked, credential) {
+  const cacheKey = `${linked.integration.id}:${linked.endpoint.path}`;
+  const cached = clientCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached.items;
+
+  const basePath = setQueryParams(linked.endpoint.path, {
+    pageSize: String(TABLEDATA_PAGE_SIZE),
+    page: "1",
+    fields: CLIENT_FIELDS,
+  });
+  const first = await fetchTabledataPage(linked.integration, credential, basePath);
+  const firstItems = extractArray(first.data);
+  const total = Number(first.data?.total) || 0;
+  const pageCount = Math.min(
+    TABLEDATA_MAX_PAGES,
+    Math.max(1, total ? Math.ceil(total / TABLEDATA_PAGE_SIZE) : (first.data?.hasNext ? TABLEDATA_MAX_PAGES : 1))
+  );
+
+  const pages = [];
+  for (let page = 2; page <= pageCount; page += 1) pages.push(page);
+
+  const rest = await mapPool(pages, TABLEDATA_CONCURRENCY, async (page) => {
+    try {
+      const path = setQueryParams(linked.endpoint.path, {
+        pageSize: String(TABLEDATA_PAGE_SIZE),
+        page: String(page),
+        fields: CLIENT_FIELDS,
+      });
+      const fetched = await fetchTabledataPage(linked.integration, credential, path);
+      return extractArray(fetched.data);
+    } catch (error) {
+      logger.warn({ err: error, page }, "falha ao ler página SA1");
+      return [];
+    }
+  });
+
+  const items = parseSuppliersFromErp([...firstItems, ...rest.flat()]);
+  clientCache.set(cacheKey, { at: Date.now(), items });
+  logger.info({ total: items.length, pages: pageCount, connection: linked.integration.nome }, "SA1 carregado para lookup de clientes");
+  return items;
+}
+
 async function lookupTitleTypesTabledata(linked, credential, search) {
   const path = setQueryParams(linked.endpoint.path, {
     pageSize: "80",
@@ -306,13 +393,14 @@ export async function lookupPayableErp(payload = {}) {
   const search = String(payload.search || "").trim();
   const limit = Math.min(Math.max(Number(payload.limit) || RESULT_LIMIT, 1), 80);
   const isTipos = kind === "tipos" || kind === "tipos_titulo";
+  const isClientes = kind === "clientes" || kind === "cliente";
 
-  if (kind !== "tipos" && kind !== "tipos_titulo" && kind !== "fornecedores") {
-    throw httpError(400, "Informe kind=tipos ou kind=fornecedores");
+  if (kind !== "tipos" && kind !== "tipos_titulo" && kind !== "fornecedores" && !isClientes) {
+    throw httpError(400, "Informe kind=tipos, kind=fornecedores ou kind=clientes");
   }
   if (!isTipos && search.length < 2) {
     return {
-      kind: "fornecedores",
+      kind: isClientes ? "clientes" : "fornecedores",
       search,
       total: 0,
       truncated: false,
@@ -321,18 +409,14 @@ export async function lookupPayableErp(payload = {}) {
     };
   }
 
-  const resource = isTipos ? "tipos" : "fornecedores";
+  const resource = isTipos ? "tipos" : (isClientes ? "clientes" : "fornecedores");
   const indexed = await tryFinRestLookup(resource, search, limit);
   if (indexed && (indexed.items.length || indexed.origem === "indice")) {
     if (indexed.items.length || resource === "tipos") return indexed;
   }
 
-  const { linked, credential } = await loadLinkedGet(
-    isTipos ? "tipos_titulo" : "fornecedores",
-    isTipos ? "Tipos de título" : "Fornecedores"
-  );
-
   if (isTipos) {
+    const { linked, credential } = await loadLinkedGet("tipos_titulo", "Tipos de título");
     const items = await lookupTitleTypesTabledata(linked, credential, search);
     return {
       kind: resource,
@@ -346,7 +430,13 @@ export async function lookupPayableErp(payload = {}) {
     };
   }
 
-  const all = await loadAllSuppliersTabledata(linked, credential);
+  const { linked, credential } = isClientes
+    ? await loadLinkedClientsGet()
+    : await loadLinkedGet("fornecedores", "Fornecedores");
+
+  const all = isClientes
+    ? await loadAllClientsTabledata(linked, credential)
+    : await loadAllSuppliersTabledata(linked, credential);
   const items = all.filter((item) => (
     matchesSearch([item.codigo, item.loja, item.nome, item.razao, item.cnpj], search)
   ));

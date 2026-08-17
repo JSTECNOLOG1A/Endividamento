@@ -70,6 +70,7 @@ export function createApp() {
     natures: "Nature",
     "chart-of-accounts": "ChartOfAccount",
     "payable-titles": "PayableTitle",
+    "receivable-titles": "ReceivableTitle",
     contracts: "LoanContract",
     snapshots: "CalculationSnapshot",
     rates: "CDIRate",

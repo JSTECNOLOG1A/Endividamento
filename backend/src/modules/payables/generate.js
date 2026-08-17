@@ -21,6 +21,31 @@ function money(value) {
   return Math.round(amount * 100) / 100;
 }
 
+export function amortBrlAmount(row) {
+  return money(row?.amortizacao_BRL_fxAtual || row?.amortizacao);
+}
+
+export function totJurosAmount(row) {
+  const fx = money(row?.jurosTotal_BRL_fxAtual);
+  if (fx > 0) return fx;
+  return money((row?.jurosFixosMes || 0) + (row?.jurosVariaveisMes || 0));
+}
+
+function todayIsoDate() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+export function interestTipo(vencimento) {
+  const due = dateOnly(vencimento);
+  if (!due) return "PR";
+  return due <= todayIsoDate() ? "TX" : "PR";
+}
+
 function dateOnly(value) {
   if (!value) return null;
   if (value instanceof Date && Number.isFinite(value.getTime())) {
@@ -50,6 +75,8 @@ function prefixAndType(contract) {
   return { prefixo: "EMP", tipo: "NP" };
 }
 
+export { prefixAndType };
+
 export function supplierFromBank(bank) {
   const digits = String(bank?.bank_code || "").replace(/\D/g, "");
   return {
@@ -61,10 +88,9 @@ export function supplierFromBank(bank) {
 
 export function buildPayableTitles(contract, bank = null, entity = null) {
   if (!contract?.id || !contract.entity_id) return [];
-  const { prefixo, tipo } = prefixAndType(contract);
+  const amort = prefixAndType(contract);
   const tituloNumero = titleNumberFromContract(contract.contract_number);
   const emissao = dateOnly(contract.operation_date);
-  const natureza = "";
   const contractNumber = String(contract.contract_number || tituloNumero).trim();
   const supplier = supplierFromBank(bank);
   const se2 = se2FilialFromSm0(null, entity);
@@ -74,24 +100,18 @@ export function buildPayableTitles(contract, bank = null, entity = null) {
   for (const row of parseContractSchedule(contract)) {
     const parcela = parcelaCode(row?.parcela);
     if (!parcela || parcela === "000") continue;
-    const valor = money(row.prestacao ?? ((row.amortizacao || 0) + (row.jurosFixosMes || 0) + (row.jurosVariaveisMes || 0)));
-    if (valor <= 0) continue;
     if (seen.has(parcela)) continue;
     seen.add(parcela);
 
-    titles.push({
+    const vencimento = dateOnly(row.dataVencimento);
+    const base = {
       entity_id: contract.entity_id,
       contract_id: contract.id,
       parcela,
       titulo_numero: tituloNumero,
-      tipo,
-      prefixo,
       emissao,
-      vencimento: dateOnly(row.dataVencimento),
-      valor,
-      saldo: valor,
-      natureza,
-      historico: `Parcela ${parcela} do contrato ${contractNumber}`,
+      vencimento,
+      natureza: "",
       status: "aberto",
       origem: "contrato",
       fornecedor: supplier.fornecedor,
@@ -99,7 +119,31 @@ export function buildPayableTitles(contract, bank = null, entity = null) {
       fornecedor_nome: supplier.fornecedor_nome,
       filial: se2?.filial || "",
       filial_origem: se2?.filialOrigem || "",
-    });
+    };
+
+    const amortValor = amortBrlAmount(row);
+    if (amortValor > 0) {
+      titles.push({
+        ...base,
+        tipo: amort.tipo,
+        prefixo: amort.prefixo,
+        valor: amortValor,
+        saldo: amortValor,
+        historico: `Amortização parcela ${parcela} do contrato ${contractNumber}`,
+      });
+    }
+
+    const jurosValor = totJurosAmount(row);
+    if (jurosValor > 0) {
+      titles.push({
+        ...base,
+        tipo: interestTipo(vencimento),
+        prefixo: "JUR",
+        valor: jurosValor,
+        saldo: jurosValor,
+        historico: `Juros parcela ${parcela} do contrato ${contractNumber}`,
+      });
+    }
   }
   return titles;
 }
@@ -110,12 +154,13 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
   }
 
   const existing = await pool.query(
-    `SELECT COUNT(*)::int AS n FROM payable_titles WHERE contract_id = $1`,
+    `SELECT * FROM payable_titles WHERE contract_id = $1`,
     [contract.id]
   );
-  if (existing.rows[0].n > 0) {
-    return { created: 0, skipped: true };
-  }
+  const existingKeys = new Set(
+    existing.rows.map((row) => `${String(row.prefixo || "")}::${String(row.parcela || "")}`)
+  );
+  const template = existing.rows.find((row) => String(row.fornecedor || "").trim()) || existing.rows[0] || null;
 
   let bank = null;
   if (contract.bank_id) {
@@ -127,22 +172,32 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
     `SELECT codigo_empresa, codigo_filial FROM company_entities WHERE id = $1`,
     [contract.entity_id]
   );
-  const titles = buildPayableTitles(contract, bank, entityResult.rows[0] || null);
+  const titles = buildPayableTitles(contract, bank, entityResult.rows[0] || null)
+    .filter((title) => !existingKeys.has(`${title.prefixo}::${title.parcela}`));
   if (!titles.length) {
-    logger.warn({ contractId: contract.id }, "contrato aprovado sem parcelas para contas a pagar");
-    return { created: 0, skipped: false };
+    if (!existing.rows.length) {
+      logger.warn({ contractId: contract.id }, "contrato aprovado sem parcelas para contas a pagar");
+    }
+    return { created: 0, skipped: true };
   }
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     for (const title of titles) {
+      const fornecedor = title.fornecedor || template?.fornecedor || "";
+      const fornecedorLoja = title.fornecedor_loja || template?.fornecedor_loja || "01";
+      const fornecedorNome = title.fornecedor_nome || template?.fornecedor_nome || "";
+      const natureza = title.natureza || "";
+      const filial = title.filial || template?.filial || "";
+      const filialOrigem = title.filial_origem || template?.filial_origem || "";
       await client.query(
         `INSERT INTO payable_titles (
            id, entity_id, contract_id, parcela, titulo_numero, tipo, prefixo,
            emissao, vencimento, valor, saldo, natureza, historico, status, origem,
            fornecedor, fornecedor_loja, fornecedor_nome, filial, filial_origem, created_by
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+         ON CONFLICT (contract_id, prefixo, parcela) DO NOTHING`,
         [
           randomUUID(),
           title.entity_id,
@@ -155,15 +210,15 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
           title.vencimento,
           title.valor,
           title.saldo,
-          title.natureza,
+          natureza,
           title.historico,
           title.status,
           title.origem,
-          title.fornecedor,
-          title.fornecedor_loja,
-          title.fornecedor_nome,
-          title.filial,
-          title.filial_origem,
+          fornecedor,
+          fornecedorLoja,
+          fornecedorNome,
+          filial,
+          filialOrigem,
           createdBy,
         ]
       );
@@ -231,10 +286,7 @@ export async function syncPayableTitlesFromApprovedContracts() {
   await backfillPayableSuppliers();
   await backfillPayableFiliais();
   const result = await pool.query(
-    `SELECT * FROM loan_contracts
-     WHERE status = 'aprovado'
-       AND (exported_to_payables IS NOT TRUE
-            OR NOT EXISTS (SELECT 1 FROM payable_titles p WHERE p.contract_id = loan_contracts.id))`
+    `SELECT * FROM loan_contracts WHERE status = 'aprovado'`
   );
   let created = 0;
   let contracts = 0;

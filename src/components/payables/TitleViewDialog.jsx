@@ -59,6 +59,8 @@ export default function TitleViewDialog({
 
   const nature = natures.find((item) => item.codigo === title.natureza);
   const supplier = [title.fornecedor, title.fornecedor_nome].filter(Boolean).join(" — ") || "—";
+  const customer = [title.cliente, title.cliente_nome].filter(Boolean).join(" — ") || "—";
+  const isReceivable = title.cliente != null || title.cliente_nome != null;
   const natureText = title.natureza
     ? (nature?.descricao ? `${title.natureza} — ${nature.descricao}` : title.natureza)
     : "—";
@@ -82,9 +84,13 @@ export default function TitleViewDialog({
           <Field label="Número" value={title.titulo_numero} mono />
           <Field label="Parcela" value={title.parcela} mono />
           <Field label="Tipo" value={title.tipo} mono />
-          <Field label="Filial (E2_FILIAL)" value={title.filial} mono />
-          <Field label="Filial de origem (E2_FILORIG)" value={title.filial_origem} mono />
-          <Field label="Fornecedor" value={supplier} span />
+          <Field label={isReceivable ? "Filial (E1_FILIAL)" : "Filial (E2_FILIAL)"} value={title.filial} mono />
+          <Field label={isReceivable ? "Filial de origem (E1_FILORIG)" : "Filial de origem (E2_FILORIG)"} value={title.filial_origem} mono />
+          {isReceivable ? (
+            <Field label="Cliente" value={customer} span />
+          ) : (
+            <Field label="Fornecedor" value={supplier} span />
+          )}
           <Field label="Emissão" value={formatDate(title.emissao)} />
           <Field label="Vencimento" value={formatDate(title.vencimento)} />
           <Field label="Valor" value={formatMoney(title.valor)} />
