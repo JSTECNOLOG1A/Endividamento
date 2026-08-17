@@ -32,6 +32,7 @@ server/uploads
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+protheus/.vscode/
 .idea
 .DS_Store
 *.suo

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -216,12 +216,12 @@ export default function BankAccountImportModal({ open, onOpenChange, entities = 
   const handleConfirm = async () => {
     const selected = items.filter((item) => selectedKeys.has(rowKey(item)) && bankIsRegistered(item));
     if (!selected.length) {
-      toast.error("Selecione ao menos uma conta com banco cadastrado");
+      toast.warning("Selecione ao menos uma conta com banco cadastrado");
       return;
     }
     const linked = selected.filter((item) => item.entity_id && item.bank_id);
     if (!linked.length) {
-      toast.error("Nenhuma conta selecionada possui entidade e banco cadastrados com o mesmo código do ERP.");
+      toast.warning("Nenhuma conta selecionada possui entidade e banco cadastrados com o mesmo código do ERP.");
       return;
     }
     setConfirming(true);

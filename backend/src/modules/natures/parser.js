@@ -52,7 +52,7 @@ export function parseNaturesFromErp(payload, scope = {}) {
     if (!record) continue;
     if (isErpDeletedRecord(record) || isErpBlockedRecord(record)) continue;
 
-    const codigo = asTrimmedString(lookup(record, ["codigo", "ed_codigo", "code", "natureza", "codnatureza", "id"]));
+    const codigo = asTrimmedString(lookup(record, ["ed_codigo", "codigo", "code", "codnatureza"]));
     const descricao = asTrimmedString(lookup(record, ["descricao", "descricaoConsulta", "ed_descric", "description", "nome", "desc"]));
     if (!codigo || !descricao) continue;
 

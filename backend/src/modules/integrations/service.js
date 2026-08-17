@@ -12,7 +12,11 @@ export const CADASTRO_KEYS = [
   "plano_contas",
   "taxas",
   "contratos",
+  "tipos_titulo",
+  "fornecedores",
   "titulos_pagar",
+  "titulos_pagar_extornar",
+  "titulos_pagar_consultar",
   "titulos_receber",
 ];
 

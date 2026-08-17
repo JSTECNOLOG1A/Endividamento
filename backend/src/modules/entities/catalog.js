@@ -44,7 +44,7 @@ export const ENTITIES = {
       "entity_id", "contract_id", "parcela", "titulo_numero", "tipo", "prefixo",
       "emissao", "vencimento", "valor", "saldo", "natureza", "historico", "status", "origem",
       "fornecedor", "fornecedor_loja", "fornecedor_nome", "filial", "filial_origem",
-      "integrado_erp", "integrado_erp_em", "erp_mensagem",
+      "integrado_erp", "integrado_erp_em", "erp_mensagem", "erp_status", "erp_consultado_em",
     ],
     booleans: ["integrado_erp"],
     numbers: ["valor", "saldo"],

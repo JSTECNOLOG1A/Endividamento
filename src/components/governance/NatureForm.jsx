@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,11 +46,11 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.entity_id) {
-      toast.error("Selecione a entidade componente");
+      toast.warning("Selecione a entidade componente");
       return;
     }
     if (!empresaCode) {
-      toast.error("Informe o código da empresa Protheus na entidade antes de cadastrar a natureza");
+      toast.warning("Informe o código da empresa Protheus na entidade antes de cadastrar a natureza");
       return;
     }
     onSubmit({

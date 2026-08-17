@@ -61,8 +61,10 @@ export function isErpDeletedRecord(record) {
 export function isErpBlockedRecord(record) {
   return isErpBlockedValue(lookupLoose(record, [
     "msblql",
+    "a2_msblql",
     "a6_msblql",
     "ed_msblql",
+    "x5_msblql",
     "a6_block",
     "a6_bloqueado",
     "ct1_msblql",
@@ -86,7 +88,7 @@ export function extractArray(payload) {
   if (Array.isArray(payload)) return payload;
   const root = asRecord(payload);
   if (!root) return [];
-  for (const key of ["items", "data", "value", "results", "content", "tables", "companies", "branches", "naturezas", "contas", "bancos", "sa6", "ct1", "plano", "planoContas"]) {
+  for (const key of ["items", "data", "value", "results", "content", "tables", "companies", "branches", "naturezas", "contas", "bancos", "sa6", "sa2", "sx5", "ct1", "plano", "planoContas", "fornecedores", "tipos"]) {
     const nested = lookup(root, [key]);
     if (Array.isArray(nested)) return nested;
     const nestedRecord = asRecord(nested);

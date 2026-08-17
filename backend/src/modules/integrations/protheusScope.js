@@ -401,13 +401,39 @@ export function se2FilialFromSm0(match, entity) {
     filialOrigem = unidade;
     unidade = unidade.slice(-2);
   } else {
-    filialOrigem = `${empresa}${unidade}`;
+    filialOrigem = `${empresa}${unidade.slice(-2)}`;
   }
   return {
     empresa,
     unidade,
     filial: empresa,
     e2Filial: empresa,
+    filialOrigem,
+  };
+}
+
+export function resolveTitleBranch(title, entity, sm0Match = null) {
+  const computed = se2FilialFromSm0(sm0Match, entity);
+  const empresa = normalizeFilialCode(entity?.codigo_empresa) || computed?.empresa;
+  const unidade = normalizeFilialCode(entity?.codigo_filial) || computed?.unidade;
+  const storedFilial = normalizeFilialCode(title?.filial);
+  const computedFilial = computed?.e2Filial || empresa;
+  // E2_FILIAL is M0_CODIGO. Ignore a stored value that is the job/unidade (01) instead of the company (03).
+  const e2Filial = storedFilial && computedFilial && storedFilial === computedFilial
+    ? storedFilial
+    : (computedFilial || storedFilial);
+  if (!e2Filial) return null;
+
+  const storedOrig = String(title?.filial_origem || "").replace(/\D/g, "");
+  const filialOrigem = storedOrig.length >= 4
+    ? storedOrig
+    : (computed?.filialOrigem || (empresa && unidade ? `${empresa}${unidade.slice(-2)}` : ""));
+
+  return {
+    empresa: empresa || e2Filial,
+    unidade: unidade || (storedOrig.length >= 4 ? storedOrig.slice(-2) : ""),
+    filial: e2Filial,
+    e2Filial,
     filialOrigem,
   };
 }

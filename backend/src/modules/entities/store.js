@@ -70,7 +70,7 @@ function mapDbError(error) {
 const DATE_FIELDS = new Set([
   "operation_date", "first_payment_date", "final_maturity_date", "rate_date",
   "holiday_date", "trial_ends_at", "emissao", "vencimento", "approved_date",
-  "integrado_erp_em",
+  "integrado_erp_em", "erp_consultado_em",
 ]);
 
 function toDbValue(entity, key, value) {

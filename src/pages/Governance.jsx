@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Download } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import GroupForm from "../components/governance/GroupForm";
 import EntityForm from "../components/governance/EntityForm";
 import BankForm from "../components/governance/BankForm";
@@ -279,7 +279,7 @@ export default function Governance() {
 
   const handleEntitySubmit = (data) => {
     if (!data.group_id) {
-      toast.error("Selecione o grupo econômico");
+      toast.warning("Selecione o grupo econômico");
       return;
     }
     if (editingItem) {
@@ -595,7 +595,7 @@ export default function Governance() {
                   <Button
                     onClick={() => {
                       if (!banks.length) {
-                        toast.error("Cadastre o banco antes de criar a conta");
+                        toast.warning("Cadastre o banco antes de criar a conta");
                         return;
                       }
                       setEditingKind("account");

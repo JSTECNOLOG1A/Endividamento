@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -206,12 +206,12 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
   const handleConfirm = async () => {
     const selected = items.filter((item) => selectedKeys.has(rowKey(item)));
     if (!selected.length) {
-      toast.error("Selecione ao menos uma natureza");
+      toast.warning("Selecione ao menos uma natureza");
       return;
     }
     const linked = selected.filter((item) => item.entity_id);
     if (!linked.length) {
-      toast.error("Nenhuma natureza selecionada possui entidade com a mesma empresa Protheus.");
+      toast.warning("Nenhuma natureza selecionada possui entidade com a mesma empresa Protheus.");
       return;
     }
     setConfirming(true);

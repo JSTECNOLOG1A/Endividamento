@@ -64,7 +64,11 @@ export const CADASTRO_LINK_OPTIONS = [
   { value: "plano_contas", label: "Plano de contas" },
   { value: "taxas", label: "Taxas" },
   { value: "contratos", label: "Contratos" },
+  { value: "tipos_titulo", label: "Tipos de título" },
+  { value: "fornecedores", label: "Fornecedores" },
   { value: "titulos_pagar", label: "Títulos a pagar" },
+  { value: "titulos_pagar_extornar", label: "Estorno de títulos a pagar" },
+  { value: "titulos_pagar_consultar", label: "Consulta de títulos a pagar" },
   { value: "titulos_receber", label: "Títulos a receber" },
 ];
 

@@ -6,7 +6,8 @@ import { previewBankAccounts, integrateBankAccounts } from "../bankAccounts/inte
 import { previewChartAccounts, integrateChartAccounts } from "../chartAccounts/integrate.js";
 import { syncPayableTitlesFromApprovedContracts } from "../payables/generate.js";
 import { classifyPayableTitles } from "../payables/classify.js";
-import { integratePayableTitles } from "../payables/erpIntegrate.js";
+import { integratePayableTitles, reversePayableTitles, refreshPayableTitlesFromErp } from "../payables/erpIntegrate.js";
+import { lookupPayableErp } from "../payables/erpLookup.js";
 
 function toIsoDate(date) {
   return date.toISOString().slice(0, 10);
@@ -156,6 +157,9 @@ const handlers = {
   syncPayableTitles: () => syncPayableTitlesFromApprovedContracts(),
   classifyPayableTitles: (payload) => classifyPayableTitles(payload || {}),
   integratePayableTitles: (payload) => integratePayableTitles(payload || {}),
+  reversePayableTitles: (payload) => reversePayableTitles(payload || {}),
+  refreshPayableTitlesFromErp: (payload) => refreshPayableTitlesFromErp(payload || {}),
+  lookupPayableErp: (payload) => lookupPayableErp(payload || {}),
 };
 
 export const functionsRouter = Router();

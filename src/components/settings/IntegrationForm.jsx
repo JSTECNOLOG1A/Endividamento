@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Plug, KeyRound, Link2, Plus, Trash2, Unplug, Building2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -97,19 +97,19 @@ export default function IntegrationForm({
 
   async function handleTest(path, key = "base", metodo) {
     if (!formData.baseUrl.trim()) {
-      toast.error("Informe a URL base");
+      toast.warning("Informe a URL base");
       return;
     }
     if (needsCredential && !formData.credential.trim() && !canReuseSavedCredential) {
-      toast.error("Informe a credencial para testar");
+      toast.warning("Informe a credencial para testar");
       return;
     }
     if (isBasic && !formData.username.trim() && !canReuseSavedCredential) {
-      toast.error("Informe o usuário");
+      toast.warning("Informe o usuário");
       return;
     }
     if (path !== undefined && !path.trim().startsWith("/")) {
-      toast.error("O caminho deve começar com /");
+      toast.warning("O caminho deve começar com /");
       return;
     }
 
@@ -376,7 +376,7 @@ export default function IntegrationForm({
                 <Trash2 className="w-4 h-4" />
               </Button>
             </div>
-            <Field label="Vincular cadastro" className="md:col-span-6" hint="GET lista, POST grava. Cada cadastro + método só pode existir em uma conexão." error={errors[`endpoints.${index}.cadastroKey`]}>
+            <Field label="Vincular cadastro" className="md:col-span-6" hint="GET lista, POST grava. Tipos de título (SX5) e fornecedores (SA2) alimentam a lupa na classificação, sem cadastro local." error={errors[`endpoints.${index}.cadastroKey`]}>
               <NativeSelect
                 value={endpoint.cadastroKey || "__none"}
                 onValueChange={(value) => updateEndpoint(endpoint.key, "cadastroKey", value === "__none" ? "" : value)}

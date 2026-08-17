@@ -22,7 +22,7 @@ import {
 import { Download, ChevronLeft, ChevronRight, TrendingDown, DollarSign, BarChart3, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const PAGE_SIZE = 100;

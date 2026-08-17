@@ -1,5 +1,5 @@
 import { pool } from "../../db/pool.js";
-import { entityMatchesNature } from "../natures/entityMatch.js";
+import { resolveNatureForEntity } from "./natureCode.js";
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -19,20 +19,6 @@ function padFornecedor(value) {
     return digits.padStart(6, "0").slice(-6);
   }
   return text;
-}
-
-async function loadNature(codigo) {
-  const result = await pool.query(
-    `SELECT * FROM natures WHERE codigo = $1 AND status = 'ativo'`,
-    [codigo]
-  );
-  return result.rows;
-}
-
-function natureFitsEntity(nature, entity) {
-  if (!nature || !entity) return false;
-  if (nature.entity_id && nature.entity_id === entity.id) return true;
-  return entityMatchesNature(entity, nature.empresa, nature.filial);
 }
 
 export async function classifyPayableTitles(payload = {}) {
@@ -75,16 +61,15 @@ export async function classifyPayableTitles(payload = {}) {
   const entity = entityResult.rows[0];
   if (!entity) throw httpError(400, "A entidade informada não existe");
 
-  const natures = await loadNature(natureza);
-  const nature = natures.find((item) => natureFitsEntity(item, entity));
+  const nature = await resolveNatureForEntity(natureza, entity);
   if (!nature) {
-    throw httpError(400, "A natureza não pertence à empresa Protheus desta entidade");
+    throw httpError(400, "Informe o código da natureza (ED_CODIGO), não a descrição");
   }
   if (String(nature.tipo_natureza || "").toLowerCase() === "sintetica") {
     throw httpError(400, "Use uma natureza analítica para classificar o título");
   }
 
-  const params = [natureza, entityId, tipo];
+  const params = [nature.codigo, entityId, tipo];
   const sets = ["natureza = $1", "updated_date = now()"];
   if (fornecedor !== undefined) {
     params.push(fornecedor);
@@ -99,7 +84,7 @@ export async function classifyPayableTitles(payload = {}) {
     sets.push(`fornecedor_nome = $${params.length}`);
   }
 
-  let where = `entity_id = $2 AND upper(tipo) = $3 AND integrado_erp IS NOT TRUE AND status = 'aberto'`;
+  let where = `entity_id = $2 AND upper(tipo) = $3 AND integrado_erp IS NOT TRUE AND COALESCE(erp_status, 'pendente') NOT IN ('integrado', 'baixado') AND status = 'aberto'`;
   if (!applyByType) {
     params.push(ids);
     where += ` AND id = ANY($${params.length}::text[])`;
@@ -113,7 +98,7 @@ export async function classifyPayableTitles(payload = {}) {
   return {
     updated: result.rowCount,
     tipo,
-    natureza,
+    natureza: nature.codigo,
     applyByType,
     entity_id: entityId,
   };

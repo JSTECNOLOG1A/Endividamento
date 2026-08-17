@@ -64,7 +64,7 @@ export function buildPayableTitles(contract, bank = null, entity = null) {
   const { prefixo, tipo } = prefixAndType(contract);
   const tituloNumero = titleNumberFromContract(contract.contract_number);
   const emissao = dateOnly(contract.operation_date);
-  const natureza = String(contract.natureza || contract.nature_code || "").trim();
+  const natureza = "";
   const contractNumber = String(contract.contract_number || tituloNumero).trim();
   const supplier = supplierFromBank(bank);
   const se2 = se2FilialFromSm0(null, entity);

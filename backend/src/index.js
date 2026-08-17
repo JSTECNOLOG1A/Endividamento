@@ -4,6 +4,7 @@ import { migrate } from "./db/migrate.js";
 import { seed } from "./db/seed.js";
 import { createApp } from "./app.js";
 import { pool } from "./db/pool.js";
+import { startScheduler, stopScheduler } from "./modules/schedules/runner.js";
 
 async function main() {
   await migrate();
@@ -12,7 +13,9 @@ async function main() {
   const server = app.listen(config.port, "0.0.0.0", () => {
     logger.info({ port: config.port }, "API iniciada");
   });
+  startScheduler();
   const shutdown = async () => {
+    stopScheduler();
     server.close();
     await pool.end();
     process.exit(0);

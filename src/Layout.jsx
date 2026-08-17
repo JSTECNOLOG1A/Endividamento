@@ -13,10 +13,11 @@ import {
   Settings,
   Wallet,
   Receipt,
+  Banknote,
   ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
     icon: Wallet,
     children: [
       { name: "Contas a pagar", page: "AccountsPayable", icon: Receipt },
+      { name: "Contas a receber", page: "AccountsReceivable", icon: Banknote },
     ],
   },
   { name: "Indexadores e Feriados", page: "CDIManager", icon: Database },
@@ -53,7 +55,7 @@ function navClass(active) {
 export default function Layout({ children, currentPageName }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [mobileFinanceOpen, setMobileFinanceOpen] = React.useState(
-    currentPageName === "AccountsPayable"
+    currentPageName === "AccountsPayable" || currentPageName === "AccountsReceivable"
   );
 
   return (

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,15 +52,15 @@ export default function BankAccountForm({
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.bank_id) {
-      toast.error("Selecione o banco");
+      toast.warning("Selecione o banco");
       return;
     }
     if (!form.entity_id) {
-      toast.error("Selecione a entidade componente");
+      toast.warning("Selecione a entidade componente");
       return;
     }
     if (!empresaCode) {
-      toast.error("Informe o código da empresa Protheus na entidade antes de cadastrar a conta");
+      toast.warning("Informe o código da empresa Protheus na entidade antes de cadastrar a conta");
       return;
     }
     onSubmit({

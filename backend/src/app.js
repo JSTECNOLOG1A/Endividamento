@@ -16,6 +16,7 @@ import { entitiesRouter } from "./modules/entities/routes.js";
 import { functionsRouter } from "./modules/functions/routes.js";
 import { auditRouter } from "./modules/audit/routes.js";
 import { integrationsRouter } from "./modules/integrations/routes.js";
+import { schedulesRouter } from "./modules/schedules/routes.js";
 import { openApiDocument } from "./openapi.js";
 import * as store from "./modules/entities/store.js";
 
@@ -59,6 +60,7 @@ export function createApp() {
   app.use("/api/functions", functionsRouter);
   app.use("/api/audit-events", auditRouter);
   app.use("/api/integrations", integrationsRouter);
+  app.use("/api/schedules", schedulesRouter);
 
   const aliases = {
     groups: "Group",

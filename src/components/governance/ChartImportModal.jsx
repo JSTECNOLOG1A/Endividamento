@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -147,7 +147,7 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
   const handleConfirm = async () => {
     const selected = items.filter((item) => selectedKeys.has(rowKey(item)));
     if (!selected.length) {
-      toast.error("Selecione ao menos uma conta");
+      toast.warning("Selecione ao menos uma conta");
       return;
     }
     setConfirming(true);

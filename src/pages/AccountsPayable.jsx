@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { base44 } from "@/api/base44Client";
+import { schedulesApi } from "@/api/schedules";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,15 +15,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Receipt, Tags, Upload } from "lucide-react";
+import { Eye, MoreHorizontal, Receipt, RefreshCw, Tags, Undo2, Upload } from "lucide-react";
 import ClassifyTitleDialog from "../components/payables/ClassifyTitleDialog";
+import TitleViewDialog from "../components/payables/TitleViewDialog";
+import { erpStatusOf, ErpStatusBadge, ErpStatusLegend } from "@/lib/erpStatus";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 function formatMoney(value) {
   return new Intl.NumberFormat("pt-BR", {
@@ -39,35 +51,6 @@ function formatDate(value) {
   return `${day}/${month}/${year}`;
 }
 
-function StatusBadge({ status }) {
-  const styles = {
-    aberto: "bg-amber-100 text-amber-800 border-amber-200",
-    baixado: "bg-green-100 text-green-800 border-green-200",
-    cancelado: "bg-slate-100 text-slate-600 border-slate-200",
-  };
-  const labels = { aberto: "Aberto", baixado: "Baixado", cancelado: "Cancelado" };
-  return (
-    <Badge className={`text-xs border ${styles[status] || styles.aberto}`}>
-      {labels[status] || status || "—"}
-    </Badge>
-  );
-}
-
-function ErpBadge({ item }) {
-  if (item.integrado_erp) {
-    return (
-      <Badge className="text-xs border bg-blue-100 text-blue-800 border-blue-200" title={item.erp_mensagem || ""}>
-        Integrado
-      </Badge>
-    );
-  }
-  return (
-    <Badge className="text-xs border bg-slate-100 text-slate-600 border-slate-200" title={item.erp_mensagem || ""}>
-      Pendente
-    </Badge>
-  );
-}
-
 function supplierLabel(item) {
   const code = String(item.fornecedor || "").trim();
   const name = String(item.fornecedor_nome || "").trim();
@@ -75,21 +58,47 @@ function supplierLabel(item) {
   return name || code || "—";
 }
 
+function natureLabel(codigo, natures = []) {
+  const code = String(codigo || "").trim();
+  if (!code) return "—";
+  const nature = natures.find((item) => item.codigo === code);
+  if (nature?.descricao) return `${nature.codigo} — ${nature.descricao}`;
+  return code;
+}
+
+function canIntegrate(item) {
+  const status = erpStatusOf(item);
+  return status !== "integrado" && status !== "baixado";
+}
+
+function canReverse(item) {
+  if (erpStatusOf(item) !== "integrado") return false;
+  if (item.status && item.status !== "aberto") return false;
+  return Number(item.saldo) + 0.009 >= Number(item.valor);
+}
+
+function canConsult(item) {
+  const status = erpStatusOf(item);
+  return status === "integrado" || status === "baixado";
+}
+
 function canSelect(item) {
-  return item.status === "aberto" && !item.integrado_erp;
+  return canIntegrate(item) || canReverse(item);
 }
 
 export default function AccountsPayable() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [entityFilter, setEntityFilter] = useState("__all__");
-  const [statusFilter, setStatusFilter] = useState("abertos");
   const [tipoFilter, setTipoFilter] = useState("__all__");
-  const [erpFilter, setErpFilter] = useState("pendentes");
+  const [erpFilter, setErpFilter] = useState("todas");
   const [selectedIds, setSelectedIds] = useState([]);
   const [classifyOpen, setClassifyOpen] = useState(false);
   const [classifyTitles, setClassifyTitles] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [extornoItems, setExtornoItems] = useState([]);
+  const [viewTitle, setViewTitle] = useState(null);
+  const [viewRefreshing, setViewRefreshing] = useState(false);
 
   const { data: entities } = useQuery({
     queryKey: ["entities"],
@@ -130,12 +139,8 @@ export default function AccountsPayable() {
       }))
       .filter((item) => {
         if (entityFilter !== "__all__" && item.entity_id !== entityFilter) return false;
-        if (statusFilter === "abertos" && item.status !== "aberto") return false;
-        if (statusFilter === "baixados" && item.status !== "baixado") return false;
-        if (statusFilter === "cancelados" && item.status !== "cancelado") return false;
         if (tipoFilter !== "__all__" && String(item.tipo || "").toUpperCase() !== tipoFilter) return false;
-        if (erpFilter === "pendentes" && item.integrado_erp) return false;
-        if (erpFilter === "integrados" && !item.integrado_erp) return false;
+        if (erpFilter !== "todas" && erpStatusOf(item) !== erpFilter) return false;
         if (!term) return true;
         const haystack = [
           item.entity_name,
@@ -144,6 +149,7 @@ export default function AccountsPayable() {
           item.tipo,
           item.parcela,
           item.natureza,
+          natures.find((nature) => nature.codigo === item.natureza)?.descricao,
           item.historico,
           item.fornecedor,
           item.fornecedor_nome,
@@ -152,7 +158,7 @@ export default function AccountsPayable() {
         ].join(" ").toLowerCase();
         return haystack.includes(term);
       });
-  }, [titles, entityById, search, entityFilter, statusFilter, tipoFilter, erpFilter]);
+  }, [titles, natures, entityById, search, entityFilter, tipoFilter, erpFilter]);
 
   const tipos = useMemo(
     () => [...new Set((titles || []).map((item) => String(item.tipo || "").toUpperCase()).filter(Boolean))].sort(),
@@ -162,6 +168,8 @@ export default function AccountsPayable() {
   const selectableRows = rows.filter(canSelect);
   const selectedSet = new Set(selectedIds);
   const selectedRows = rows.filter((item) => selectedSet.has(item.id));
+  const selectedToIntegrate = selectedRows.filter(canIntegrate);
+  const selectedToReverse = selectedRows.filter(canReverse);
   const allSelectableChecked = selectableRows.length > 0 && selectableRows.every((item) => selectedSet.has(item.id));
 
   const totals = useMemo(
@@ -179,6 +187,89 @@ export default function AccountsPayable() {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["payable-titles"] });
 
+  const handleConsultNow = async () => {
+    setBusy(true);
+    try {
+      const result = await schedulesApi.runTask("consultar_titulos_pagar");
+      if (result.ok) toast.success(result.message || "Títulos consultados no ERP");
+      else toast.warning(result.message || "A consulta terminou com alerta");
+      refresh();
+    } catch (error) {
+      toast.error(error.data?.error || error.message || "Não foi possível consultar os títulos");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!viewTitle?.id) {
+      setViewRefreshing(false);
+      return undefined;
+    }
+    const status = erpStatusOf(viewTitle);
+    if (status !== "integrado" && status !== "baixado") return undefined;
+    const titleId = viewTitle.id;
+    let cancelled = false;
+    setViewRefreshing(true);
+    (async () => {
+      try {
+        const result = await base44.functions.invoke("refreshPayableTitlesFromErp", {
+          ids: [titleId],
+          force: true,
+        });
+        const data = result?.data || result || {};
+        const row = (data.results || []).find((item) => item.id === titleId);
+        if (cancelled) return;
+        if (row?.patch) {
+          setViewTitle((current) => (current && current.id === titleId ? { ...current, ...row.patch } : current));
+        }
+        queryClient.invalidateQueries({ queryKey: ["payable-titles"] });
+      } catch {
+        // A visualização segue com os dados locais se o Protheus não responder.
+      } finally {
+        if (!cancelled) setViewRefreshing(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [viewTitle?.id, queryClient]);
+
+  const handleRefreshErp = async (items) => {
+    const list = (items?.length ? items : selectedRows).filter(canConsult);
+    if (!list.length) {
+      toast.warning("Selecione títulos já integrados para consultar no ERP");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await base44.functions.invoke("refreshPayableTitlesFromErp", {
+        ids: list.map((item) => item.id),
+        force: true,
+      });
+      const data = result?.data || result || {};
+      if (data.unavailable) {
+        toast.warning("Consulta do ERP indisponível", { description: data.message });
+      } else if (data.failed) {
+        const detail = data.results?.find((item) => !item.ok && !item.skipped)?.message || "";
+        toast.warning("Alguns títulos não foram atualizados", {
+          description: `${data.consulted || 0} atualizados · ${data.failed} com erro${detail ? ` · ${detail}` : ""}`,
+        });
+      } else {
+        toast.success(`${data.consulted || 0} ${data.consulted === 1 ? "título atualizado" : "títulos atualizados"} do ERP`);
+      }
+      if (viewTitle && list.some((item) => item.id === viewTitle.id)) {
+        const row = (data.results || []).find((item) => item.id === viewTitle.id);
+        if (row?.patch) setViewTitle((current) => (current ? { ...current, ...row.patch } : current));
+      }
+      refresh();
+    } catch (error) {
+      toast.error(error.data?.error || error.message || "Não foi possível consultar o ERP");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggleAll = (checked) => {
     if (checked) setSelectedIds(selectableRows.map((item) => item.id));
     else setSelectedIds((current) => current.filter((id) => !selectableRows.some((item) => item.id === id)));
@@ -194,12 +285,12 @@ export default function AccountsPayable() {
   const openClassify = (items) => {
     const list = items?.length ? items : selectedRows;
     if (!list.length) {
-      toast.error("Selecione ao menos um título para classificar");
+      toast.warning("Selecione ao menos um título para classificar");
       return;
     }
     const entityIds = new Set(list.map((item) => item.entity_id));
     if (entityIds.size > 1) {
-      toast.error("Selecione títulos da mesma entidade para classificar");
+      toast.warning("Selecione títulos da mesma entidade para classificar");
       return;
     }
     setClassifyTitles(list);
@@ -223,14 +314,14 @@ export default function AccountsPayable() {
   };
 
   const handleIntegrate = async (items) => {
-    const list = (items?.length ? items : selectedRows).filter(canSelect);
+    const list = (items?.length ? items : selectedRows).filter(canIntegrate);
     if (!list.length) {
-      toast.error("Selecione títulos pendentes de integração");
+      toast.warning("Selecione títulos pendentes de integração");
       return;
     }
     const missing = list.filter((item) => !String(item.natureza || "").trim() || !String(item.fornecedor || "").trim());
     if (missing.length) {
-      toast.error("Classifique natureza e fornecedor antes de integrar");
+      toast.warning("Classifique natureza e fornecedor antes de integrar");
       return;
     }
     setBusy(true);
@@ -240,7 +331,10 @@ export default function AccountsPayable() {
       });
       const data = result?.data || result || {};
       if (data.failed) {
-        toast.error(`${data.integrated || 0} integrados, ${data.failed} com erro. ${data.results?.find((item) => !item.ok && !item.skipped)?.message || ""}`.trim());
+        const detail = data.results?.find((item) => !item.ok && !item.skipped)?.message || "";
+        toast.warning("Alguns títulos não foram para o ERP", {
+          description: `${data.integrated || 0} integrados · ${data.failed} com erro${detail ? ` · ${detail}` : ""}`,
+        });
       } else {
         toast.success(`${data.integrated || 0} ${data.integrated === 1 ? "título integrado" : "títulos integrados"} no ERP`);
       }
@@ -253,27 +347,78 @@ export default function AccountsPayable() {
     }
   };
 
+  const askReverse = (items) => {
+    const list = (items?.length ? items : selectedRows).filter(canReverse);
+    if (!list.length) {
+      toast.warning("Selecione títulos já integrados para estornar");
+      return;
+    }
+    setExtornoItems(list);
+  };
+
+  const handleReverse = async () => {
+    const list = extornoItems.filter(canReverse);
+    if (!list.length) {
+      setExtornoItems([]);
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await base44.functions.invoke("reversePayableTitles", {
+        ids: list.map((item) => item.id),
+      });
+      const data = result?.data || result || {};
+      if (data.failed) {
+        const detail = data.results?.find((item) => !item.ok && !item.skipped)?.message || "";
+        toast.warning("Alguns títulos não foram estornados", {
+          description: `${data.reversed || 0} estornados · ${data.failed} com erro${detail ? ` · ${detail}` : ""}`,
+        });
+      } else {
+        toast.success(`${data.reversed || 0} ${data.reversed === 1 ? "título estornado" : "títulos estornados"} no ERP`);
+      }
+      setExtornoItems([]);
+      setSelectedIds([]);
+      refresh();
+    } catch (error) {
+      toast.error(error.data?.error || error.message || "Não foi possível estornar no ERP");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contas a pagar</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Títulos gerados na aprovação do contrato. Classifique a natureza e integre os pendentes no ERP.
+            Títulos gerados na aprovação do contrato. Duplo clique na linha abre o título. Status e saldo vêm do Protheus.
           </p>
         </div>
-        {rows.length > 0 && (
-          <p className="text-xs text-slate-500">
-            {rows.length} {rows.length === 1 ? "título" : "títulos"}
-            <span className="mx-1.5 text-slate-300">•</span>
-            Total {formatMoney(totals.valor)}
-            <span className="mx-1.5 text-slate-300">•</span>
-            Saldo {formatMoney(totals.saldo)}
-          </p>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="outline" className="h-9 gap-1.5 border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 hover:text-sky-900" onClick={handleConsultNow} disabled={busy}>
+            <RefreshCw className={`w-3.5 h-3.5 ${busy ? "animate-spin" : ""}`} />
+            Consultar títulos
+          </Button>
+          {rows.length > 0 && (
+            <p className="text-xs text-slate-500">
+              {rows.length} {rows.length === 1 ? "título" : "títulos"}
+              <span className="mx-1.5 text-slate-300">•</span>
+              Total {formatMoney(totals.valor)}
+              <span className="mx-1.5 text-slate-300">•</span>
+              Saldo {formatMoney(totals.saldo)}
+            </p>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mb-4">
+        <div className="space-y-1 md:col-span-2">
+          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Legenda</Label>
+          <div className="flex min-h-9 items-center">
+            <ErpStatusLegend />
+          </div>
+        </div>
         <div className="space-y-1 xl:col-span-1">
           <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Busca</Label>
           <Input
@@ -308,25 +453,16 @@ export default function AccountsPayable() {
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Situação</Label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="abertos">Abertos</SelectItem>
-              <SelectItem value="todas">Todas</SelectItem>
-              <SelectItem value="baixados">Baixados</SelectItem>
-              <SelectItem value="cancelados">Cancelados</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Integração ERP</Label>
+          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status ERP</Label>
           <Select value={erpFilter} onValueChange={setErpFilter}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="pendentes">Não integrados</SelectItem>
-              <SelectItem value="integrados">Integrados</SelectItem>
               <SelectItem value="todas">Todos</SelectItem>
+              <SelectItem value="pendente">Pendente</SelectItem>
+              <SelectItem value="integrado">Integrado</SelectItem>
+              <SelectItem value="falha">Falha</SelectItem>
+              <SelectItem value="estornado">Estornado</SelectItem>
+              <SelectItem value="baixado">Baixado</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -337,14 +473,24 @@ export default function AccountsPayable() {
           <span className="text-xs font-medium text-blue-800 mr-auto">
             {selectedRows.length} {selectedRows.length === 1 ? "título selecionado" : "títulos selecionados"}
           </span>
-          <Button type="button" size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => openClassify(selectedRows)} disabled={busy}>
-            <Tags className="w-3.5 h-3.5" />
-            Classificar
-          </Button>
-          <Button type="button" size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => handleIntegrate(selectedRows)} disabled={busy}>
-            <Upload className="w-3.5 h-3.5" />
-            Integrar ERP
-          </Button>
+          {selectedToIntegrate.length > 0 && (
+            <Button type="button" size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => openClassify(selectedToIntegrate)} disabled={busy}>
+              <Tags className="w-3.5 h-3.5" />
+              Classificar
+            </Button>
+          )}
+          {selectedToIntegrate.length > 0 && (
+            <Button type="button" size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => handleIntegrate(selectedToIntegrate)} disabled={busy}>
+              <Upload className="w-3.5 h-3.5" />
+              Integrar ERP
+            </Button>
+          )}
+          {selectedToReverse.length > 0 && (
+            <Button type="button" size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-rose-200 text-rose-700 hover:bg-rose-50" onClick={() => askReverse(selectedToReverse)} disabled={busy}>
+              <Undo2 className="w-3.5 h-3.5" />
+              Estornar ERP
+            </Button>
+          )}
         </div>
       )}
 
@@ -372,9 +518,10 @@ export default function AccountsPayable() {
                     <Checkbox
                       checked={allSelectableChecked}
                       onCheckedChange={(value) => toggleAll(value === true)}
-                      aria-label="Selecionar títulos não integrados"
+                      aria-label="Selecionar títulos abertos"
                     />
                   </th>
+                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Status ERP</th>
                   <th className="h-10 px-3 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Entidade</th>
                   <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Filial</th>
                   <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Fil. origem</th>
@@ -387,9 +534,8 @@ export default function AccountsPayable() {
                   <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Vencimento</th>
                   <th className="h-10 px-2 text-right align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Valor</th>
                   <th className="h-10 px-2 text-right align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Saldo</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Natureza</th>
+                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Natureza (código)</th>
                   <th className="h-10 px-3 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Histórico</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">ERP</th>
                   <th className="h-10 px-3 text-right align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500 sticky right-0 bg-slate-50 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.18)]">
                     Ações
                   </th>
@@ -399,8 +545,15 @@ export default function AccountsPayable() {
                 {rows.map((item) => {
                   const selectable = canSelect(item);
                   return (
-                    <tr key={item.id} className="border-b last:border-0 hover:bg-slate-50/80">
-                      <td className="px-3 py-2.5 align-middle">
+                    <tr
+                      key={item.id}
+                      className="border-b last:border-0 hover:bg-slate-50/80 cursor-pointer"
+                      onDoubleClick={() => setViewTitle(item)}
+                    >
+                      <td
+                        className="px-3 py-2.5 align-middle"
+                        onDoubleClick={(event) => event.stopPropagation()}
+                      >
                         <Checkbox
                           checked={selectedSet.has(item.id)}
                           disabled={!selectable}
@@ -408,13 +561,14 @@ export default function AccountsPayable() {
                           aria-label={`Selecionar título ${item.titulo_numero} parcela ${item.parcela}`}
                         />
                       </td>
+                      <td className="px-2 py-2.5 align-middle"><ErpStatusBadge item={item} /></td>
                       <td className="px-3 py-2.5 align-middle font-medium text-slate-800 max-w-[180px] truncate" title={item.entity_name || ""}>
                         {item.entity_name || "—"}
                       </td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700" title="Empresa (M0_CODIGO). No SE2 a filial do título é a unidade 01">
+                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700" title="Empresa do título no SE2 (E2_FILIAL / M0_CODIGO)">
                         {item.filial || "—"}
                       </td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700" title="Filial de origem (E2_FILORIG = empresa + unidade, ex.: 0301)">
+                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700" title="Filial de origem (E2_FILORIG). Pode ser diferente da unidade da sessão, ex.: 0301 ou 0104">
                         {item.filial_origem || "—"}
                       </td>
                       <td className="px-2 py-2.5 align-middle text-xs text-slate-700 max-w-[200px] truncate" title={supplierLabel(item)}>
@@ -428,29 +582,52 @@ export default function AccountsPayable() {
                       <td className="px-2 py-2.5 align-middle text-xs text-slate-600 whitespace-nowrap">{formatDate(item.vencimento)}</td>
                       <td className="px-2 py-2.5 align-middle text-right text-xs tabular-nums whitespace-nowrap">{formatMoney(item.valor)}</td>
                       <td className="px-2 py-2.5 align-middle text-right text-xs tabular-nums whitespace-nowrap">{formatMoney(item.saldo)}</td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-600">{item.natureza || "—"}</td>
+                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-600 whitespace-nowrap" title={natureLabel(item.natureza, natures)}>
+                        {natureLabel(item.natureza, natures)}
+                      </td>
                       <td className="px-3 py-2.5 align-middle text-xs text-slate-600 max-w-[220px] truncate" title={item.historico || ""}>
                         {item.historico || "—"}
                       </td>
-                      <td className="px-2 py-2.5 align-middle"><ErpBadge item={item} /></td>
-                      <td className="px-3 py-2.5 align-middle text-right sticky right-0 bg-white shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.18)]">
+                      <td
+                        className="px-3 py-2.5 align-middle text-right sticky right-0 bg-white shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.18)]"
+                        onDoubleClick={(event) => event.stopPropagation()}
+                      >
                         <div className="flex items-center justify-end gap-2">
-                          <StatusBadge status={item.status} />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-slate-500" disabled={!selectable || busy}>
+                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-slate-500" disabled={busy}>
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => openClassify([item])}>
-                                <Tags className="w-3.5 h-3.5 mr-2" />
-                                Classificar
+                              <DropdownMenuItem onClick={() => setViewTitle(item)}>
+                                <Eye className="w-3.5 h-3.5 mr-2" />
+                                Visualizar
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleIntegrate([item])}>
-                                <Upload className="w-3.5 h-3.5 mr-2" />
-                                Integrar ERP
-                              </DropdownMenuItem>
+                              {canConsult(item) && (
+                                <DropdownMenuItem onClick={() => handleRefreshErp([item])}>
+                                  <RefreshCw className="w-3.5 h-3.5 mr-2" />
+                                  Atualizar no ERP
+                                </DropdownMenuItem>
+                              )}
+                              {canIntegrate(item) && (
+                                <>
+                                  <DropdownMenuItem onClick={() => openClassify([item])}>
+                                    <Tags className="w-3.5 h-3.5 mr-2" />
+                                    Classificar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleIntegrate([item])}>
+                                    <Upload className="w-3.5 h-3.5 mr-2" />
+                                    Integrar ERP
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              {canReverse(item) && (
+                                <DropdownMenuItem className="text-rose-700" onClick={() => askReverse([item])}>
+                                  <Undo2 className="w-3.5 h-3.5 mr-2" />
+                                  Estornar ERP
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -461,7 +638,7 @@ export default function AccountsPayable() {
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 border-t">
-                  <td className="px-3 py-2.5 text-xs font-medium text-slate-600" colSpan={10}>
+                  <td className="px-3 py-2.5 text-xs font-medium text-slate-600" colSpan={12}>
                     {rows.length} {rows.length === 1 ? "título" : "títulos"}
                   </td>
                   <td className="px-2 py-2.5 text-right text-xs font-semibold tabular-nums whitespace-nowrap text-slate-800">
@@ -470,7 +647,7 @@ export default function AccountsPayable() {
                   <td className="px-2 py-2.5 text-right text-xs font-semibold tabular-nums whitespace-nowrap text-slate-800">
                     {formatMoney(totals.saldo)}
                   </td>
-                  <td colSpan={3} />
+                  <td colSpan={2} />
                   <td className="sticky right-0 bg-slate-50" />
                 </tr>
               </tfoot>
@@ -478,6 +655,14 @@ export default function AccountsPayable() {
           </div>
         </div>
       )}
+
+      <TitleViewDialog
+        open={Boolean(viewTitle)}
+        onOpenChange={(open) => { if (!open) setViewTitle(null); }}
+        title={viewTitle}
+        natures={natures || []}
+        consulting={viewRefreshing}
+      />
 
       <ClassifyTitleDialog
         open={classifyOpen}
@@ -489,6 +674,33 @@ export default function AccountsPayable() {
         submitting={busy}
         onSubmit={handleClassify}
       />
+
+      <AlertDialog open={extornoItems.length > 0} onOpenChange={(open) => { if (!open && !busy) setExtornoItems([]); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Estornar {extornoItems.length === 1 ? "título" : `${extornoItems.length} títulos`} no ERP?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              O título sai do Protheus somente se ainda não tiver movimentação (baixa, bordero ou saldo diferente).
+              Depois disso, volta a ficar pendente de integração neste sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-rose-600 hover:bg-rose-700"
+              disabled={busy}
+              onClick={(event) => {
+                event.preventDefault();
+                handleReverse();
+              }}
+            >
+              Estornar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

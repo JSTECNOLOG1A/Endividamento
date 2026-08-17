@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,11 +41,11 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.group_id) {
-      toast.error("Selecione o grupo econômico");
+      toast.warning("Selecione o grupo econômico");
       return;
     }
     if (!String(form.entity_name || "").trim() || !String(form.document_number || "").trim()) {
-      toast.error("Preencha nome e documento");
+      toast.warning("Preencha nome e documento");
       return;
     }
     const codigoEmpresa = String(form.codigo_empresa || "").trim();

@@ -49,6 +49,7 @@
  */
 import Accounting from './pages/Accounting';
 import AccountsPayable from './pages/AccountsPayable';
+import AccountsReceivable from './pages/AccountsReceivable';
 import CDIManager from './pages/CDIManager';
 import Consolidation from './pages/Consolidation';
 import Contracts from './pages/Contracts';
@@ -62,6 +63,7 @@ import __Layout from './Layout.jsx';
 export const PAGES = {
     "Accounting": Accounting,
     "AccountsPayable": AccountsPayable,
+    "AccountsReceivable": AccountsReceivable,
     "CDIManager": CDIManager,
     "Consolidation": Consolidation,
     "Contracts": Contracts,

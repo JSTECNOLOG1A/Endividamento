@@ -50,5 +50,12 @@ export const openApiDocument = {
       put: { summary: "Atualizar conexão" },
       delete: { summary: "Excluir conexão" },
     },
+    "/schedules": {
+      get: { summary: "Listar agendamentos" },
+      post: { summary: "Criar agendamento" },
+    },
+    "/schedules/run-task": {
+      post: { summary: "Executar tarefa agora (manual)" },
+    },
   },
 };
