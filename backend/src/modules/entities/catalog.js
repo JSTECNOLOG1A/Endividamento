@@ -165,6 +165,12 @@ export const ENTITIES = {
     booleans: [],
     numbers: ["amount"],
   },
+  NotificationLog: {
+    table: "notification_log",
+    columns: ["event_type", "contract_id", "to_email", "subject", "body", "status", "error_message"],
+    booleans: [],
+    numbers: [],
+  },
   Tenant: {
     table: "tenants",
     columns: [

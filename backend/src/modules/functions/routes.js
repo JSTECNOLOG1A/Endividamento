@@ -14,6 +14,7 @@ import { lookupPayableErp } from "../payables/erpLookup.js";
 import { syncReceivableTitlesFromApprovedContracts } from "../receivables/generate.js";
 import { classifyReceivableTitles } from "../receivables/classify.js";
 import { integrateReceivableTitles, reverseReceivableTitles, refreshReceivableTitlesFromErp } from "../receivables/erpIntegrate.js";
+import { sendDocumentByEmail } from "../documents/sendByEmail.js";
 
 function toIsoDate(date) {
   return date.toISOString().slice(0, 10);
@@ -189,6 +190,7 @@ const handlers = {
   integrateReceivableTitles: (payload) => integrateReceivableTitles(payload || {}),
   reverseReceivableTitles: (payload) => reverseReceivableTitles(payload || {}),
   refreshReceivableTitlesFromErp: (payload) => refreshReceivableTitlesFromErp(payload || {}),
+  sendDocumentByEmail: (payload) => sendDocumentByEmail(payload || {}),
 };
 
 export const functionsRouter = Router();

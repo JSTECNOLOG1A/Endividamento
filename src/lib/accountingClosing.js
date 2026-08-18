@@ -31,7 +31,8 @@ export const SETTLEMENT_EVENT_TYPES = {
   TARIFA_BANCARIA: "tarifa_bancaria",
   CUSTO_TRANSACAO_INICIAL: "custo_transacao_inicial",
   CUSTO_TRANSACAO_APROPRIACAO: "custo_transacao_apropriacao",
-  RECLASSIFICACAO_CIRCULANTE: "reclassificacao_circulante",
+  RECLASSIFICACAO_CIRCULANTE_PRINCIPAL: "reclassificacao_circulante_principal",
+  RECLASSIFICACAO_CIRCULANTE_JUROS: "reclassificacao_circulante_juros",
   MULTA_MORA: "multa_mora",
   DESCONTO_FINANCEIRO: "desconto_financeiro",
   AJUSTE_ARREDONDAMENTO: "ajuste_arredondamento",
@@ -48,7 +49,8 @@ export const EVENT_TYPE_LABELS = {
   tarifa_bancaria: "Tarifa bancária",
   custo_transacao_inicial: "Custo de transação inicial",
   custo_transacao_apropriacao: "Apropriação de custo de transação",
-  reclassificacao_circulante: "Reclassificação para circulante",
+  reclassificacao_circulante_principal: "Reclassificação de principal para circulante",
+  reclassificacao_circulante_juros: "Reclassificação de juros para circulante",
   multa_mora: "Multa e mora",
   desconto_financeiro: "Desconto financeiro obtido",
   ajuste_arredondamento: "Ajuste de arredondamento / diferença de metodologia",
@@ -289,6 +291,81 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
   return result;
 }
 
+function addMonths(dateStr, delta) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1 + delta, d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Separa, a partir do cronograma contratual (schedule_data), o saldo ainda
+ * NÃO vencido de principal e de juros apropriados-mas-não-pagos entre
+ * "circulante" (liquida em até 12 meses da data de corte) e "não circulante"
+ * (depois disso) — mesma régua de 0-12 meses já usada em
+ * getDebtMaturityBreakdown (aba Posição Contábil), pra este módulo nunca
+ * destoar do que já é mostrado lá.
+ *
+ * Linhas já vencidas na data de corte (rowDate <= cutoff) não entram no
+ * split de principal — nesse ponto já são uma baixa a resolver no Step 1,
+ * não mais um problema de classificação LP/CP. Para juros, o que importa é
+ * o saldo ACUMULADO já apropriado e ainda não pago (jurosLedger) e a data
+ * do próximo pagamento de juros previsto: se essa liquidação está a mais de
+ * 12 meses da data de corte, o saldo inteiro é não circulante; senão, é
+ * circulante inteiro (não é um valor que se parcela ao longo do tempo como
+ * o principal — liquida de uma vez, na próxima parcela que pagar juros).
+ *
+ * @param {Object} contract
+ * @param {string} cutoffDate - YYYY-MM-DD (data-base do fechamento)
+ */
+export function splitCirculanteNaoCirculante(contract, cutoffDate) {
+  const result = { principalShort: 0, principalLong: 0, jurosShort: 0, jurosLong: 0 };
+  if (!contract.schedule_data) return result;
+
+  let schedule;
+  try {
+    schedule = JSON.parse(contract.schedule_data).schedule || [];
+  } catch {
+    return result;
+  }
+
+  const cutoff = new Date(cutoffDate + "T00:00:00");
+  let jurosLedger = 0;
+  let nextInterestPayment = null;
+
+  schedule.forEach((row) => {
+    const rowDate = new Date(row.dataVencimento + "T00:00:00");
+    const interestAccruedRow = (row.jurosFixosMes || 0) + (row.jurosVariaveisMes || 0);
+    const interestPaidRow = row.jurosPagos || 0;
+
+    if (rowDate <= cutoff) {
+      jurosLedger += interestAccruedRow - interestPaidRow;
+      return;
+    }
+
+    const daysToMaturity = Math.ceil((rowDate - cutoff) / (1000 * 60 * 60 * 24));
+    const monthsToMaturity = Math.floor(daysToMaturity / 30.44);
+    const isShort = monthsToMaturity <= 12;
+
+    if (row.amortizacao > 0) {
+      if (isShort) result.principalShort += row.amortizacao;
+      else result.principalLong += row.amortizacao;
+    }
+    if (!nextInterestPayment && interestPaidRow > 0) {
+      nextInterestPayment = { isShort };
+    }
+  });
+
+  const jurosBalance = r2(jurosLedger);
+  if (Math.abs(jurosBalance) > EPS) {
+    if (!nextInterestPayment || nextInterestPayment.isShort) result.jurosShort = jurosBalance;
+    else result.jurosLong = jurosBalance;
+  }
+
+  result.principalShort = r2(result.principalShort);
+  result.principalLong = r2(result.principalLong);
+  return result;
+}
+
 /**
  * Concilia todos os contratos de uma empresa para a competência e agrega os
  * eventos — a base do Step 2 (tabela de conciliação) e do Step 3 (insumo
@@ -296,8 +373,10 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
  *
  * @param {Array} contracts - contratos já filtrados por entity_id + aprovados
  * @param {Map<string, Array>} settlementsByContract - contract_id -> baixas
+ * @param {string} [dataBase] - data-base do fechamento (YYYY-MM-DD); se
+ *   omitida, cai no último dia do mês (competência fechada em cheio).
  */
-export function calculateClosingReconciliation(contracts, settlementsByContract, year, month) {
+export function calculateClosingReconciliation(contracts, settlementsByContract, year, month, dataBase) {
   const perContract = contracts.map((c) =>
     reconcileContractForCompetencia(c, year, month, settlementsByContract.get(c.id) || [])
   );
@@ -309,6 +388,42 @@ export function calculateClosingReconciliation(contracts, settlementsByContract,
       aggregatedEvents.push({ ...evt, contractId: c.contractId });
       eventTotals[evt.type] = r2((eventTotals[evt.type] || 0) + evt.amount);
     });
+  });
+
+  // Reclassificação circulante/não circulante — compara o saldo ainda não
+  // vencido (principal e juros apropriados não pagos) na data-base atual
+  // contra um mês antes, contrato por contrato. A diferença é o valor que
+  // "andou" de um balde pro outro só com a passagem do tempo.
+  const cutoff = dataBase || `${year}-${String(month).padStart(2, "0")}-${new Date(Number(year), Number(month), 0).getDate()}`;
+  const previousCutoff = addMonths(cutoff, -1);
+  contracts.forEach((contract) => {
+    const curr = splitCirculanteNaoCirculante(contract, cutoff);
+    const prev = splitCirculanteNaoCirculante(contract, previousCutoff);
+    const principalDelta = r2(curr.principalShort - prev.principalShort);
+    const jurosDelta = r2(curr.jurosShort - prev.jurosShort);
+
+    if (Math.abs(principalDelta) > EPS) {
+      const evt = {
+        type: SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_PRINCIPAL,
+        amount: Math.abs(principalDelta),
+        date: cutoff,
+        direction: principalDelta > 0 ? "to_circulante" : "to_nao_circulante",
+        contractId: contract.id,
+      };
+      aggregatedEvents.push(evt);
+      eventTotals[evt.type] = r2((eventTotals[evt.type] || 0) + evt.amount);
+    }
+    if (Math.abs(jurosDelta) > EPS) {
+      const evt = {
+        type: SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_JUROS,
+        amount: Math.abs(jurosDelta),
+        date: cutoff,
+        direction: jurosDelta > 0 ? "to_circulante" : "to_nao_circulante",
+        contractId: contract.id,
+      };
+      aggregatedEvents.push(evt);
+      eventTotals[evt.type] = r2((eventTotals[evt.type] || 0) + evt.amount);
+    }
   });
 
   const opening = perContract.reduce(
@@ -343,6 +458,11 @@ export function calculateClosingReconciliation(contracts, settlementsByContract,
  * @param {Array} eventMappings - AccountingEventMapping da empresa (ativos)
  * @param {string} entryDate - data de referência dos lançamentos (data-base)
  */
+const RECLASSIFICATION_EVENT_TYPES = new Set([
+  SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_PRINCIPAL,
+  SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_JUROS,
+]);
+
 export function buildJournalEntries(reconciliation, eventMappings, entryDate) {
   const mappingByType = new Map(eventMappings.filter((m) => m.status !== "inativo").map((m) => [m.event_type, m]));
   const entries = [];
@@ -356,11 +476,23 @@ export function buildJournalEntries(reconciliation, eventMappings, entryDate) {
       return;
     }
     const historico = `${EVENT_TYPE_LABELS[evt.type] || evt.type} — ${evt.date || entryDate}`;
+    // Nos dois eventos de reclassificação, "conta de débito" na matriz
+    // significa sempre "conta não circulante" e "conta de crédito" sempre
+    // "conta circulante" — mas qual das duas efetivamente debita e qual
+    // credita no lançamento depende do sentido do movimento do mês (o
+    // normal é migrar de não circulante pra circulante; o inverso só
+    // acontece se um recálculo esticar o prazo do contrato).
+    let debitAccountId = mapping.debit_account_id;
+    let creditAccountId = mapping.credit_account_id;
+    if (RECLASSIFICATION_EVENT_TYPES.has(evt.type) && evt.direction === "to_nao_circulante") {
+      debitAccountId = mapping.credit_account_id;
+      creditAccountId = mapping.debit_account_id;
+    }
     entries.push({
       contract_id: evt.contractId,
       event_type: evt.type,
       entry_date: evt.date || entryDate,
-      account_id: mapping.debit_account_id,
+      account_id: debitAccountId,
       side: "debito",
       amount: evt.amount,
       historico,
@@ -369,7 +501,7 @@ export function buildJournalEntries(reconciliation, eventMappings, entryDate) {
       contract_id: evt.contractId,
       event_type: evt.type,
       entry_date: evt.date || entryDate,
-      account_id: mapping.credit_account_id,
+      account_id: creditAccountId,
       side: "credito",
       amount: evt.amount,
       historico,

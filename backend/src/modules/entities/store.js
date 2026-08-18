@@ -454,6 +454,14 @@ export async function update(name, id, data) {
       logger.error({ err: error, contractId: saved.id }, "falha ao gerar contas a receber do contrato aprovado");
     }
   }
+  if (name === "LoanContract" && saved.status !== previous.status) {
+    try {
+      const { notifyContractStatusChange } = await import("../notifications/contractNotifications.js");
+      await notifyContractStatusChange(saved, previous.status);
+    } catch (error) {
+      logger.error({ err: error, contractId: saved.id }, "falha ao notificar mudança de status do contrato");
+    }
+  }
   return saved;
 }
 

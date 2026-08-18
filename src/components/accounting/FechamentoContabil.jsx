@@ -412,7 +412,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
         if (!settlementsByContract.has(s.contract_id)) settlementsByContract.set(s.contract_id, []);
         settlementsByContract.get(s.contract_id).push(s);
       });
-      const reconciliation = calculateClosingReconciliation(contracts, settlementsByContract, year, month);
+      const reconciliation = calculateClosingReconciliation(contracts, settlementsByContract, year, month, dataBase);
       setCalcResult(reconciliation);
       const nextStatus = reconciliation.hasBlockingDivergence ? "divergencia" : "calculado";
       await base44.entities.AccountingClosing.update(activeClosing.id, {

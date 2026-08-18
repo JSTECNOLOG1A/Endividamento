@@ -37,6 +37,8 @@ export default function Contracts() {
     initialData: [],
   });
 
+  const [deepLinkHandled, setDeepLinkHandled] = useState(false);
+
   const { data: user } = useQuery({
     queryKey: ["current-user"],
     queryFn: () => base44.auth.me(),
@@ -114,6 +116,19 @@ export default function Contracts() {
       },
     });
   };
+
+  // Deep-link vindo de e-mails de notificação (?contract=<id>) — abre o
+  // contrato direto na visão de revisão assim que a lista carregar.
+  React.useEffect(() => {
+    if (deepLinkHandled || !contracts.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const contractId = params.get("contract");
+    if (contractId) {
+      const contract = contracts.find((c) => c.id === contractId);
+      if (contract) handleView(contract);
+    }
+    setDeepLinkHandled(true);
+  }, [contracts, deepLinkHandled]);
 
   const handleEdit = (contract) => {
     window.location.href = createPageUrl("Simulator") + "?edit=" + contract.id;

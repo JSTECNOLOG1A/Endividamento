@@ -18,4 +18,7 @@ export const config = {
     .filter(Boolean),
   bcryptRounds: 12,
   uploadDir: process.env.UPLOAD_DIR || path.resolve(process.cwd(), "uploads"),
+  // Base pública do front-end, usada só pra montar links dentro de
+  // e-mails/notificações (ex.: "acesse o link para revisar").
+  appBaseUrl: (process.env.APP_BASE_URL || "http://localhost:5173").replace(/\/+$/, ""),
 };

@@ -54,6 +54,7 @@ import CDIManager from './pages/CDIManager';
 import Configuracoes from './pages/Configuracoes';
 import Consolidation from './pages/Consolidation';
 import Contracts from './pages/Contracts';
+import Documents from './pages/Documents';
 import Governance from './pages/Governance';
 import Settings from './pages/Settings';
 import Simulator from './pages/Simulator';
@@ -69,6 +70,7 @@ export const PAGES = {
     "Configuracoes": Configuracoes,
     "Consolidation": Consolidation,
     "Contracts": Contracts,
+    "Documents": Documents,
     "Governance": Governance,
     "Settings": Settings,
     "Simulator": Simulator,

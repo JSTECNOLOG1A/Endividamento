@@ -16,6 +16,11 @@ import { SETTLEMENT_EVENT_TYPES, EVENT_TYPE_LABELS } from "@/lib/accountingClosi
 
 const EVENT_TYPES_ORDERED = Object.values(SETTLEMENT_EVENT_TYPES);
 
+const RECLASSIFICATION_TYPES = new Set([
+  SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_PRINCIPAL,
+  SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_JUROS,
+]);
+
 export default function AccountingMatrixConfig({ entityId, open, onOpenChange }) {
   const queryClient = useQueryClient();
 
@@ -111,6 +116,12 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
                     <td className="px-2 py-2 text-slate-700">
                       {EVENT_TYPE_LABELS[type]}
                       {!configured && <span className="ml-1.5 text-[10px] text-amber-600">não configurado</span>}
+                      {RECLASSIFICATION_TYPES.has(type) && (
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          Débito = conta não circulante · Crédito = conta circulante (o sistema inverte o lado
+                          sozinho se o saldo migrar de volta pro não circulante)
+                        </p>
+                      )}
                     </td>
                     <td className="px-2 py-2">
                       <Select value={draft.debit_account_id || undefined} onValueChange={(v) => setDraft(type, { debit_account_id: v })}>
