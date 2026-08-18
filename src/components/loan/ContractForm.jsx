@@ -557,7 +557,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Garantia Real (Opcional)
+                Garantia Real
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
@@ -579,7 +579,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Garantia Pessoal / Fidejussória (Opcional)
+                Garantia Pessoal / Fidejussória
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
