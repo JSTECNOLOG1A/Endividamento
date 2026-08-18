@@ -1,4 +1,4 @@
-# FinCalc — Endividamento
+# Endividamento — Endividamento
 
 Cálculo e gestão de empréstimos/financiamentos, com API Node, PostgreSQL e Docker.
 
@@ -12,7 +12,7 @@ docker compose up --build
 - Interface: http://localhost:5173
 - API: http://127.0.0.1:3001/api/health
 - OpenAPI: http://127.0.0.1:3001/api/openapi.json
-- Login inicial: `admin@fincalc.local` / `FinCalc!Local1` (troque no `.env`)
+- Login inicial: `admin@endividamento.local` / `Endividamento!Local1` (troque no `.env`)
 
 ## Estrutura
 

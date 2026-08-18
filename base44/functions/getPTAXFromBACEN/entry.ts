@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
-        'User-Agent': 'FinCalc/1.0 (BACEN Data Consumer)'
+        'User-Agent': 'Endividamento/1.0 (BACEN Data Consumer)'
       }
     });
 

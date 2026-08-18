@@ -11,6 +11,7 @@ import {
   BarChart3,
   BookOpen,
   Settings,
+  Sigma,
   Wallet,
   Receipt,
   Banknote,
@@ -75,10 +76,10 @@ export default function Layout({ children, currentPageName }) {
           <div className="flex items-center justify-between h-14">
             <Link to={createPageUrl("Simulator")} className="flex items-center gap-2.5 group">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-sm shadow-blue-600/20 group-hover:shadow-md group-hover:shadow-blue-600/30 transition-shadow">
-                <Calculator className="w-4 h-4 text-white" />
+                <Sigma className="w-4 h-4 text-white" strokeWidth={2.5} />
               </div>
               <div>
-                <span className="text-sm font-bold text-slate-900 tracking-tight">FinCalc</span>
+                <span className="text-sm font-bold text-slate-900 tracking-tight">Endividamento</span>
                 <span className="text-[10px] text-slate-400 font-medium ml-1.5 hidden sm:inline">BACEN</span>
               </div>
             </Link>

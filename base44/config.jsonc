@@ -1,5 +1,5 @@
 {
-  "name": "FinCalc Pro",
+  "name": "Endividamento",
   "site": {
     "installCommand": "npm install",
     "buildCommand": "npm run build",

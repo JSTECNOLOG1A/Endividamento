@@ -116,6 +116,8 @@ async function generateCalculationHashStrict(inputs, engineVersion) {
     signalValue: inputs.signalValue || 0,
     iofValue: inputs.iofValue || 0,
     iofFinanced: inputs.iofFinanced || false,
+    encargoGarantiaValue: inputs.encargoGarantiaValue || 0,
+    encargoGarantiaFinanced: inputs.encargoGarantiaFinanced || false,
     otherFees: inputs.otherFees || 0,
     otherFeesFinanced: inputs.otherFeesFinanced || false,
     fixedRate: inputs.fixedRate,
@@ -167,6 +169,8 @@ async function generateCalculationHash(inputs, engineVersion) {
     signalValue: inputs.signalValue || 0,
     iofValue: inputs.iofValue || 0,
     iofFinanced: inputs.iofFinanced || false,
+    encargoGarantiaValue: inputs.encargoGarantiaValue || 0,
+    encargoGarantiaFinanced: inputs.encargoGarantiaFinanced || false,
     otherFees: inputs.otherFees || 0,
     otherFeesFinanced: inputs.otherFeesFinanced || false,
     fixedRate: inputs.fixedRate,
@@ -488,6 +492,8 @@ export async function calculateAmortizationSchedule(params) {
     signalValue = 0,
     iofValue = 0,
     iofFinanced = false,
+    encargoGarantiaValue = 0, // NOVO: Encargo por Concessão de Garantia (ECG)
+    encargoGarantiaFinanced = false, // NOVO: ECG financiado (soma ao principal)
     otherFees = 0,
     otherFeesFinanced = false,
     mipValue = 0, // NOVO: Seguro MIP
@@ -633,11 +639,13 @@ export async function calculateAmortizationSchedule(params) {
     // Se houver sinal ou taxas em BRL, converte para USD antes de abater do principal
     if (signalValue > 0) principal -= (signalValue / prevPtaxRate);
     if (iofFinanced) principal += (iofValue / prevPtaxRate);
+    if (encargoGarantiaFinanced) principal += (encargoGarantiaValue / prevPtaxRate);
     if (otherFeesFinanced) principal += (otherFees / prevPtaxRate);
   } else {
     // Operação padrão em BRL
     principal = operationValue - signalValue;
     if (iofFinanced) principal += iofValue;
+    if (encargoGarantiaFinanced) principal += encargoGarantiaValue;
     if (otherFeesFinanced) principal += otherFees;
   }
 
@@ -1289,7 +1297,26 @@ export async function calculateAmortizationSchedule(params) {
   
   // 🔐 VALIDAÇÃO FINAL
   const amortizationDiff = isUSD ? Math.abs(totalAmortizationUSD - principalValidacao) : Math.abs(totalAmortization - principalValidacao);
-  if (amortizationDiff > 0.01) throw new Error(`[FINANCIAL_INTEGRITY_ERROR] Diff=${amortizationDiff.toFixed(4)}`);
+  if (amortizationDiff > 0.01) {
+    // Diagnóstico detalhado — vai direto no alert() do frontend, sem
+    // precisar abrir o console do navegador para investigar.
+    const diag = {
+      diff: Number(amortizationDiff.toFixed(2)),
+      principalOriginal: Number((principal || 0).toFixed(2)),
+      principalUsadoNaValidacao: Number((principalValidacao || 0).toFixed(2)),
+      totalAmortizado: Number(((isUSD ? totalAmortizationUSD : totalAmortization) || 0).toFixed(2)),
+      hasGrace,
+      principalGraceMonths,
+      graceInterestBehavior: effectiveGraceInterestBehavior,
+      saldoPosCarencia: firstPrincipalRow ? Number(((isUSD ? firstPrincipalRow.sdInicial_USD : firstPrincipalRow.sdInicial) || 0).toFixed(2)) : null,
+      totalParcelas: schedule.length,
+      calculationSystem,
+      totalTermMonths,
+      principalInstallments,
+      interestInstallments,
+    };
+    throw new Error(`[FINANCIAL_INTEGRITY_ERROR] ${JSON.stringify(diag)}`);
+  }
 
   
   // Validação: Saldo devedor final ≈ 0 (tolerância: 0.01)
@@ -1337,9 +1364,9 @@ export async function calculateAmortizationSchedule(params) {
   const insurancePerInstallment = totalInsurance > 0 ? roundTo(totalInsurance / schedule.length, 2) : 0;
   
   // 🔐 APROPRIAÇÃO DE ENCARGOS (Norma BACEN)
-  // IOF Financiado e Taxas Financiadas: entram no SD mas são saída de caixa no momento zero para CET
-  const upFrontFees = (iofFinanced ? 0 : iofValue) + (otherFeesFinanced ? 0 : otherFees);
-  const financedFeesImpactOnCash = (iofFinanced ? iofValue : 0) + (otherFeesFinanced ? otherFees : 0);
+  // IOF, ECG e Taxas Financiadas: entram no SD mas são saída de caixa no momento zero para CET
+  const upFrontFees = (iofFinanced ? 0 : iofValue) + (encargoGarantiaFinanced ? 0 : encargoGarantiaValue) + (otherFeesFinanced ? 0 : otherFees);
+  const financedFeesImpactOnCash = (iofFinanced ? iofValue : 0) + (encargoGarantiaFinanced ? encargoGarantiaValue : 0) + (otherFeesFinanced ? otherFees : 0);
   
   // Seguros embutidos na parcela (recorrentes)
   const insuranceEmbeddedPerInstallment = roundTo(
@@ -1383,14 +1410,15 @@ export async function calculateAmortizationSchedule(params) {
     schedule.reduce((s, r) => s + r.prestacao, 0),
     2
   );
-  const totalFeesAndIOF = roundTo((iofValue || 0) + (otherFees || 0), 2);
-  
+  const totalFeesAndIOF = roundTo((iofValue || 0) + (encargoGarantiaValue || 0) + (otherFees || 0), 2);
+
   const regulatoryDisclosure = {
     principal: roundTo(principal, 2),
     totalInterest: totalInterest,
     totalInsurance: roundTo(totalInsurance, 2),
     totalFees: roundTo(otherFees || 0, 2),
     totalIOF: roundTo(iofValue || 0, 2),
+    totalEncargoGarantia: roundTo(encargoGarantiaValue || 0, 2),
     totalPaid: totalPaid,
     
     // 🔐 DUAL-VIEW CET: Exposição de Caixa Real
@@ -1712,6 +1740,7 @@ export async function calculateAmortizationSchedule(params) {
     total_juros: roundTo(totalInterest, 2),
     total_pago: roundTo(totalPaid, 2),
     total_iof: roundTo(iofValue || 0, 2),
+    total_encargo_garantia: roundTo(encargoGarantiaValue || 0, 2),
     total_taxas: roundTo(otherFees || 0, 2),
     total_seguros: roundTo(totalInsurance, 2),
     

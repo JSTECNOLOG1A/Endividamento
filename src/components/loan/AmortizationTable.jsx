@@ -398,7 +398,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
         `# Currency: BRL`,
         `# Snapshot Status: N/A (BRL)`,
         `# Generated At: ${new Date().toISOString()}`,
-        `# Source Version: FinCalc Simulator v1.0`,
+        `# Source Version: Endividamento Simulator v1.0`,
         ``,
       ];
       
@@ -446,7 +446,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
       `# Interest Source: ${result.snapshot?.interest_source || "USD_NATIVE"}`,
       `# `,
       `# Generated At: ${new Date().toISOString()}`,
-      `# Source Version: FinCalc Simulator v1.0`,
+      `# Source Version: Endividamento Simulator v1.0`,
       `# Engine Version: ${result.calculation_metadata?.engine_version || "1.2.1"}`,
       `# Engine Build ID: ${result.calculation_metadata?.engine_build_id || "N/A"}`,
       `# `,

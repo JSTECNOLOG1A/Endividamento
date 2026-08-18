@@ -1,6 +1,6 @@
 /**
  * 📊 CAMADA ANALÍTICA DE ENDIVIDAMENTO CORPORATIVO
- * 
+ *
  * Funções para Controller/Tesouraria:
  * - Debt Position by Date
  * - Maturity Breakdown (Circulante/Não Circulante)
@@ -10,7 +10,11 @@
  * - Debt by Structure
  * - Maturity Curve
  * - Debt KPIs
+ * - Exercício Range (mês de início configurável, para suportar ano-safra)
+ * - Payment Flow by Bank/Modality/Guarantee
  */
+
+import { combineGuaranteeLabel } from "@/lib/contractOptions";
 
 /**
  * 1️⃣ DEBT POSITION BY DATE
@@ -686,4 +690,268 @@ export function getDebtKPIs(contracts, targetDate) {
     numberOfContracts: contracts.filter(c => c.schedule_data).length,
     averageContractSize: position.totalBalance / contracts.filter(c => c.schedule_data).length
   };
+}
+
+/**
+ * 9️⃣ EXERCÍCIO RANGE
+ * Calcula a data de início do "exercício" corrente, dado um mês de início
+ * configurável (1-12, sem rótulos de safra — puramente numérico/genérico).
+ * Isso permite tanto ano civil (startMonth=1) quanto ano-safra (ex.: cana
+ * abril-março → startMonth=4, soja agosto-julho → startMonth=8), sem
+ * hardcodar nenhum nome de cultura.
+ *
+ * Regra: pega a ocorrência mais recente de "dia 1 do mês de início" que
+ * seja <= data-base. Se o mês da data-base for anterior ao mês de início,
+ * o exercício começou no ano civil anterior (efeito de virada de ano).
+ *
+ * @param {string} baseDate - Data-base (YYYY-MM-DD)
+ * @param {number} startMonth - Mês de início do exercício (1-12)
+ * @returns {string} Data de início do exercício (YYYY-MM-DD)
+ */
+export function getExercicioStart(baseDate, startMonth) {
+  const baseDateObj = new Date(baseDate + "T00:00:00");
+  const baseYear = baseDateObj.getFullYear();
+  const baseMonth = baseDateObj.getMonth() + 1; // 1-12
+  const normalizedStartMonth = Math.min(12, Math.max(1, parseInt(startMonth) || 1));
+
+  const exercicioYear = baseMonth < normalizedStartMonth ? baseYear - 1 : baseYear;
+
+  return `${exercicioYear}-${String(normalizedStartMonth).padStart(2, "0")}-01`;
+}
+
+/**
+ * 🔟 PAYMENT FLOW BY BANK / MODALITY / GUARANTEE
+ * Fluxo de pagamentos FUTUROS (estritamente após a data-base), agrupado por
+ * Banco + Modalidade (operation_type) + Garantia (rótulo combinado Real +
+ * Pessoal), com colunas por ano civil — os próximos `yearSpan` anos a partir
+ * do ano da data-base, mais uma coluna "catch-all" para tudo além disso.
+ *
+ * Cada linha traz os totais de Principal e de Juros separadamente por ano,
+ * para permitir alternar a visão entre "Só Principal" e "Principal + Juros"
+ * sem precisar reprocessar os contratos.
+ *
+ * @param {Array} contracts - Contratos (já filtrados para status aprovado)
+ * @param {string} baseDate - Data-base (YYYY-MM-DD)
+ * @param {number} yearSpan - Quantidade de colunas de ano explícitas (padrão 5)
+ * @returns {{ years: number[], catchAllLabel: string, rows: Array }}
+ */
+export function getPaymentFlowByBankModalityGuarantee(contracts, baseDate, yearSpan = 5) {
+  const baseDateObj = new Date(baseDate + "T00:00:00");
+  const baseYear = baseDateObj.getFullYear();
+  const years = Array.from({ length: yearSpan }, (_, i) => baseYear + i);
+  const lastExplicitYear = years[years.length - 1];
+  const catchAllLabel = `Após ${lastExplicitYear}`;
+
+  const rowsMap = new Map();
+
+  contracts.forEach((contract) => {
+    if (!contract.schedule_data) return;
+
+    let schedule;
+    try {
+      const parsed = JSON.parse(contract.schedule_data);
+      schedule = parsed.schedule || [];
+    } catch (error) {
+      console.warn(`Erro ao processar contrato ${contract.contract_number}:`, error);
+      return;
+    }
+
+    const guaranteeLabel = combineGuaranteeLabel(contract.guarantee_real_type, contract.guarantee_personal_type);
+    const key = `${contract.bank_id || "sem_banco"}|${contract.operation_type || "sem_tipo"}|${guaranteeLabel}`;
+
+    if (!rowsMap.has(key)) {
+      rowsMap.set(key, {
+        bankId: contract.bank_id || null,
+        operationType: contract.operation_type || null,
+        guarantee: guaranteeLabel,
+        byYear: {}, // year -> { principal, interest }
+        catchAll: { principal: 0, interest: 0 },
+      });
+    }
+    const rowEntry = rowsMap.get(key);
+
+    schedule.forEach((row) => {
+      const rowDate = new Date(row.dataVencimento + "T00:00:00");
+      if (rowDate <= baseDateObj) return; // só fluxo FUTURO, estritamente após a data-base
+
+      const principal = row.amortizacao || 0;
+      const interest = (row.jurosFixosMes || 0) + (row.jurosVariaveisMes || 0);
+      if (principal === 0 && interest === 0) return;
+
+      const rowYear = rowDate.getFullYear();
+      if (rowYear <= lastExplicitYear) {
+        if (!rowEntry.byYear[rowYear]) rowEntry.byYear[rowYear] = { principal: 0, interest: 0 };
+        rowEntry.byYear[rowYear].principal += principal;
+        rowEntry.byYear[rowYear].interest += interest;
+      } else {
+        rowEntry.catchAll.principal += principal;
+        rowEntry.catchAll.interest += interest;
+      }
+    });
+  });
+
+  const rows = Array.from(rowsMap.values())
+    .map((r) => ({
+      ...r,
+      byYear: Object.fromEntries(
+        Object.entries(r.byYear).map(([year, v]) => [
+          year,
+          { principal: Math.round(v.principal * 100) / 100, interest: Math.round(v.interest * 100) / 100 },
+        ])
+      ),
+      catchAll: {
+        principal: Math.round(r.catchAll.principal * 100) / 100,
+        interest: Math.round(r.catchAll.interest * 100) / 100,
+      },
+    }))
+    .filter((r) => {
+      const hasYearData = Object.values(r.byYear).some((v) => v.principal > 0 || v.interest > 0);
+      const hasCatchAll = r.catchAll.principal > 0 || r.catchAll.interest > 0;
+      return hasYearData || hasCatchAll;
+    });
+
+  return { years, catchAllLabel, rows };
+}
+
+/**
+ * 1️⃣1️⃣ MONTHLY ROLL-FORWARD (Movimentação Contábil do Mês)
+ * Concilia o saldo contábil do início ao fim de um mês de competência,
+ * quebrado em 3 componentes que sempre somam ao saldo total: Principal,
+ * Juros e Variação Cambial.
+ *
+ * Modelo (consistente com o motor de cálculo — CalculationEngine.js):
+ * - Cada parcela do cronograma acrescenta juros do período (jurosFixosMes +
+ *   jurosVariaveisMes) ao "ledger de juros" e SUBTRAI o que foi efetivamente
+ *   pago em caixa (jurosPagos). O que não foi pago fica capitalizado no
+ *   saldo — exatamente como o motor faz ao somar `jurosCapitalizados` ao
+ *   saldo devedor.
+ * - Amortização (principal pago) reduz o "ledger de principal"; o desembolso
+ *   inicial (sdInicial da primeira parcela) entra nesse ledger como nova
+ *   captação, contabilizada como "Apropriação de Principal" apenas se cair
+ *   dentro do mês analisado (senão já fazia parte do saldo de abertura).
+ * - Variação cambial (`varCambial`) acumula no "ledger de câmbio" — é uma
+ *   reavaliação contábil (regime de competência), sem uma baixa em caixa
+ *   separada nesta estrutura de dados.
+ * Por construção, abertura + apropriações − pagamentos = fechamento, em
+ * cada uma das 3 colunas e no total.
+ *
+ * @param {Array} contracts - Contratos (já filtrados para status aprovado)
+ * @param {number|string} year - Ano do mês de competência
+ * @param {number|string} month - Mês de competência (1-12)
+ */
+export function getMonthlyRollForward(contracts, year, month) {
+  const yearNum = parseInt(year);
+  const monthNum = parseInt(month);
+
+  const monthStart = new Date(yearNum, monthNum - 1, 1, 0, 0, 0, 0);
+  const monthEnd = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
+  const prevMonthEnd = new Date(yearNum, monthNum - 1, 0, 23, 59, 59, 999);
+
+  const totals = {
+    openingPrincipal: 0, openingInterest: 0, openingFx: 0,
+    newPrincipal: 0, interestAccrued: 0, fxAccrued: 0,
+    principalPaid: 0, interestPaid: 0,
+    closingPrincipal: 0, closingInterest: 0, closingFx: 0,
+  };
+
+  contracts.forEach((contract) => {
+    if (!contract.schedule_data) return;
+
+    let schedule;
+    try {
+      const parsed = JSON.parse(contract.schedule_data);
+      schedule = parsed.schedule || [];
+    } catch (error) {
+      console.warn(`Erro ao processar contrato ${contract.contract_number}:`, error);
+      return;
+    }
+    if (schedule.length === 0) return;
+
+    let principalLedger = 0;
+    let jurosLedger = 0;
+    let fxLedger = 0;
+    let openingSnapshot = null;
+    let closingSnapshot = null;
+
+    schedule.forEach((row, idx) => {
+      const rowDate = new Date(row.dataVencimento + "T12:00:00");
+
+      // Saldo de abertura: capturado ANTES de aplicar a movimentação desta
+      // linha, na primeira parcela cuja data é posterior ao fim do mês
+      // anterior (ou seja, o ledger acumulado só com o que já existia).
+      if (!openingSnapshot && rowDate > prevMonthEnd) {
+        openingSnapshot = { principal: principalLedger, interest: jurosLedger, fx: fxLedger };
+      }
+
+      const isWithinMonth = rowDate >= monthStart && rowDate <= monthEnd;
+      const newPrincipalRow = idx === 0 ? (row.sdInicial || 0) : 0;
+      const interestAccruedRow = (row.jurosFixosMes || 0) + (row.jurosVariaveisMes || 0);
+      const interestPaidRow = row.jurosPagos || 0;
+      const fxAccruedRow = row.varCambial || 0;
+      const principalPaidRow = row.amortizacao || 0;
+
+      if (isWithinMonth) {
+        totals.newPrincipal += newPrincipalRow;
+        totals.interestAccrued += interestAccruedRow;
+        totals.interestPaid += interestPaidRow;
+        totals.fxAccrued += fxAccruedRow;
+        totals.principalPaid += principalPaidRow;
+      }
+
+      // Aplica a movimentação desta linha ao ledger corrente (sempre, para
+      // manter o saldo acumulado correto para as parcelas seguintes).
+      principalLedger += newPrincipalRow - principalPaidRow;
+      jurosLedger += interestAccruedRow - interestPaidRow;
+      fxLedger += fxAccruedRow;
+
+      if (rowDate <= monthEnd) {
+        closingSnapshot = { principal: principalLedger, interest: jurosLedger, fx: fxLedger };
+      }
+    });
+
+    // Contrato já quitado antes do mês analisado: abertura = fechamento
+    // (o único snapshot capturado foi o de fechamento, no laço acima).
+    if (!openingSnapshot) openingSnapshot = closingSnapshot || { principal: 0, interest: 0, fx: 0 };
+    // Contrato ainda não iniciado até o fim do mês analisado: fechamento = abertura.
+    if (!closingSnapshot) closingSnapshot = openingSnapshot;
+
+    totals.openingPrincipal += openingSnapshot.principal;
+    totals.openingInterest += openingSnapshot.interest;
+    totals.openingFx += openingSnapshot.fx;
+    totals.closingPrincipal += closingSnapshot.principal;
+    totals.closingInterest += closingSnapshot.interest;
+    totals.closingFx += closingSnapshot.fx;
+  });
+
+  const r2 = (v) => Math.round(v * 100) / 100;
+
+  const opening = {
+    principal: r2(totals.openingPrincipal),
+    interest: r2(totals.openingInterest),
+    fx: r2(totals.openingFx),
+  };
+  opening.total = r2(opening.principal + opening.interest + opening.fx);
+
+  const accruals = {
+    principal: r2(totals.newPrincipal),
+    interest: r2(totals.interestAccrued),
+    fx: r2(totals.fxAccrued),
+  };
+  accruals.total = r2(accruals.principal + accruals.interest + accruals.fx);
+
+  const payments = {
+    principal: r2(totals.principalPaid),
+    interest: r2(totals.interestPaid),
+    fx: 0,
+  };
+  payments.total = r2(payments.principal + payments.interest + payments.fx);
+
+  const closing = {
+    principal: r2(totals.closingPrincipal),
+    interest: r2(totals.closingInterest),
+    fx: r2(totals.closingFx),
+  };
+  closing.total = r2(closing.principal + closing.interest + closing.fx);
+
+  return { year: yearNum, month: monthNum, opening, accruals, payments, closing };
 }
