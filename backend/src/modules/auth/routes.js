@@ -43,8 +43,15 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
       config.jwtSecret,
       { expiresIn: config.jwtExpiresIn }
     );
-    req.user = { sub: user.id, email: user.email, role: user.role };
-    await writeAudit({ req, action: "LOGIN", resourceType: "User", resourceId: user.id });
+    req.user = { sub: user.id, email: user.email, role: user.role, full_name: user.full_name };
+    await writeAudit({
+      req,
+      action: "LOGIN",
+      resourceType: "User",
+      resourceId: user.id,
+      registro: user.email,
+      after: { email: user.email, full_name: user.full_name, role: user.role },
+    });
     res.json({
       token,
       user: {
@@ -82,7 +89,14 @@ authRouter.get("/me", requireAuth, async (req, res, next) => {
 
 authRouter.post("/logout", requireAuth, async (req, res, next) => {
   try {
-    await writeAudit({ req, action: "LOGOUT", resourceType: "User", resourceId: req.user.sub });
+    await writeAudit({
+      req,
+      action: "LOGOUT",
+      resourceType: "User",
+      resourceId: req.user.sub,
+      registro: req.user.email,
+      before: { email: req.user.email, full_name: req.user.full_name, role: req.user.role },
+    });
     res.json({ ok: true });
   } catch (error) {
     next(error);

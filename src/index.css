@@ -103,3 +103,16 @@
   align-items: flex-start;
   padding: 14px 18px 14px 16px;
 }
+
+@keyframes processing-bar {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+.processing-bar {
+  animation: processing-bar 1.15s ease-in-out infinite;
+}

@@ -1,5 +1,7 @@
 import { Router } from "express";
 import * as store from "../entities/store.js";
+import { writeAudit } from "../../middleware/audit.js";
+import { snapshotForAudit } from "../audit/records.js";
 import { calculateAmortizationScheduleOnServer } from "../calculate/service.js";
 import { previewNatures, integrateNatures } from "../natures/integrate.js";
 import { previewBankAccounts, integrateBankAccounts } from "../bankAccounts/integrate.js";
@@ -7,6 +9,7 @@ import { previewChartAccounts, integrateChartAccounts } from "../chartAccounts/i
 import { syncPayableTitlesFromApprovedContracts } from "../payables/generate.js";
 import { classifyPayableTitles } from "../payables/classify.js";
 import { integratePayableTitles, reversePayableTitles, refreshPayableTitlesFromErp } from "../payables/erpIntegrate.js";
+import { convertPayablePrToTx } from "../payables/convertPrToTx.js";
 import { lookupPayableErp } from "../payables/erpLookup.js";
 import { syncReceivableTitlesFromApprovedContracts } from "../receivables/generate.js";
 import { classifyReceivableTitles } from "../receivables/classify.js";
@@ -147,6 +150,23 @@ async function calculateAmortizationSchedule(payload = {}, req) {
   }
 }
 
+const FUNCTION_AUDIT = {
+  integrateNatures: { action: "INTEGRATE", rotina: "Governança", resourceType: "Nature", registro: "Integrar naturezas" },
+  integrateBankAccounts: { action: "INTEGRATE", rotina: "Governança", resourceType: "BankAccount", registro: "Integrar contas bancárias" },
+  integrateChartAccounts: { action: "INTEGRATE", rotina: "Governança", resourceType: "ChartOfAccount", registro: "Integrar plano de contas" },
+  syncPayableTitles: { action: "CREATE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Gerar títulos a pagar" },
+  syncReceivableTitles: { action: "CREATE", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Gerar títulos a receber" },
+  classifyPayableTitles: { action: "CLASSIFY", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Classificar títulos a pagar" },
+  integratePayableTitles: { action: "INTEGRATE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Integrar títulos a pagar" },
+  reversePayableTitles: { action: "REVERSE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Estornar títulos a pagar" },
+  refreshPayableTitlesFromErp: { action: "CONSULT", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Consultar títulos a pagar no ERP" },
+  convertPayablePrToTx: { action: "UPDATE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Converter títulos PR em TX" },
+  classifyReceivableTitles: { action: "CLASSIFY", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Classificar títulos a receber" },
+  integrateReceivableTitles: { action: "INTEGRATE", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Integrar títulos a receber" },
+  reverseReceivableTitles: { action: "REVERSE", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Estornar títulos a receber" },
+  refreshReceivableTitlesFromErp: { action: "CONSULT", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Consultar títulos a receber no ERP" },
+};
+
 const handlers = {
   getPTAXFromBACEN,
   validateAllApprovedContracts,
@@ -163,6 +183,7 @@ const handlers = {
   integratePayableTitles: (payload) => integratePayableTitles(payload || {}),
   reversePayableTitles: (payload) => reversePayableTitles(payload || {}),
   refreshPayableTitlesFromErp: (payload) => refreshPayableTitlesFromErp(payload || {}),
+  convertPayablePrToTx: (payload) => convertPayablePrToTx(payload || {}),
   lookupPayableErp: (payload) => lookupPayableErp(payload || {}),
   classifyReceivableTitles: (payload) => classifyReceivableTitles(payload || {}),
   integrateReceivableTitles: (payload) => integrateReceivableTitles(payload || {}),
@@ -180,7 +201,26 @@ functionsRouter.post("/:name", async (req, res, next) => {
       err.status = 404;
       throw err;
     }
-    res.json(await handler(req.body || {}, req));
+    const result = await handler(req.body || {}, req);
+    const audit = FUNCTION_AUDIT[req.params.name];
+    if (audit) {
+      const snapshot = await snapshotForAudit({
+        resourceType: audit.resourceType,
+        result,
+        payload: req.body || {},
+        fallbackLabel: audit.registro,
+      });
+      await writeAudit({
+        req,
+        action: audit.action,
+        resourceType: audit.resourceType,
+        rotina: audit.rotina,
+        registro: snapshot.registro,
+        processingType: "processamento",
+        after: snapshot.after,
+      });
+    }
+    res.json(result);
   } catch (error) {
     next(error);
   }

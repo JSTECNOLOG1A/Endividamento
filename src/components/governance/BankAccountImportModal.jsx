@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/notify";
+import { useProcessing } from "@/lib/ProcessingContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,6 +79,7 @@ function FilterSelect({ label, value, onValueChange, children }) {
 }
 
 export default function BankAccountImportModal({ open, onOpenChange, entities = [], banks = [], onImported }) {
+  const { withProcessing } = useProcessing();
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -225,22 +227,24 @@ export default function BankAccountImportModal({ open, onOpenChange, entities = 
       return;
     }
     setConfirming(true);
-    try {
-      const result = await base44.functions.invoke("integrateBankAccounts", { items: linked });
-      const data = result.data || result;
-      const skipped = selected.length - linked.length + (data.skipped_unmatched || 0);
-      toast.success(
-        skipped
-          ? `${data.created || 0} criadas, ${data.updated || 0} atualizadas. ${skipped} sem vínculo foram ignoradas.`
-          : `${data.created || 0} criadas, ${data.updated || 0} atualizadas`
-      );
-      onImported?.();
-      onOpenChange(false);
-    } catch (error) {
-      toast.error(error.data?.error || error.message || "Falha ao importar contas bancárias");
-    } finally {
-      setConfirming(false);
-    }
+    await withProcessing("Importando contas bancárias do ERP…", async () => {
+      try {
+        const result = await base44.functions.invoke("integrateBankAccounts", { items: linked });
+        const data = result.data || result;
+        const skipped = selected.length - linked.length + (data.skipped_unmatched || 0);
+        toast.success(
+          skipped
+            ? `${data.created || 0} criadas, ${data.updated || 0} atualizadas. ${skipped} sem vínculo foram ignoradas.`
+            : `${data.created || 0} criadas, ${data.updated || 0} atualizadas`
+        );
+        onImported?.();
+        onOpenChange(false);
+      } catch (error) {
+        toast.error(error.data?.error || error.message || "Falha ao importar contas bancárias");
+      } finally {
+        setConfirming(false);
+      }
+    });
   };
 
   return (

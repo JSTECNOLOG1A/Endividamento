@@ -25,6 +25,7 @@ import { Eye, MoreHorizontal, Receipt, RefreshCw, Tags, Undo2, Upload } from "lu
 import ClassifyTitleDialog from "../components/payables/ClassifyTitleDialog";
 import TitleViewDialog from "../components/payables/TitleViewDialog";
 import { erpStatusOf, ErpStatusBadge, ErpStatusLegend } from "@/lib/erpStatus";
+import { useProcessing } from "@/lib/ProcessingContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -95,7 +96,7 @@ export default function AccountsPayable() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [classifyOpen, setClassifyOpen] = useState(false);
   const [classifyTitles, setClassifyTitles] = useState([]);
-  const [busy, setBusy] = useState(false);
+  const { isProcessing: busy, withProcessing } = useProcessing();
   const [extornoItems, setExtornoItems] = useState([]);
   const [viewTitle, setViewTitle] = useState(null);
   const [viewRefreshing, setViewRefreshing] = useState(false);
@@ -188,17 +189,16 @@ export default function AccountsPayable() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["payable-titles"] });
 
   const handleConsultNow = async () => {
-    setBusy(true);
-    try {
-      const result = await schedulesApi.runTask("consultar_titulos_pagar");
-      if (result.ok) toast.success(result.message || "Títulos consultados no ERP");
-      else toast.warning(result.message || "A consulta terminou com alerta");
-      refresh();
-    } catch (error) {
-      toast.error(error.data?.error || error.message || "Não foi possível consultar os títulos");
-    } finally {
-      setBusy(false);
-    }
+    await withProcessing("Consultando títulos no ERP…", async () => {
+      try {
+        const result = await schedulesApi.runTask("consultar_titulos_pagar");
+        if (result.ok) toast.success(result.message || "Títulos consultados no ERP");
+        else toast.warning(result.message || "A consulta terminou com alerta");
+        refresh();
+      } catch (error) {
+        toast.error(error.data?.error || error.message || "Não foi possível consultar os títulos");
+      }
+    });
   };
 
   useEffect(() => {
@@ -241,33 +241,35 @@ export default function AccountsPayable() {
       toast.warning("Selecione títulos já integrados para consultar no ERP");
       return;
     }
-    setBusy(true);
-    try {
-      const result = await base44.functions.invoke("refreshPayableTitlesFromErp", {
-        ids: list.map((item) => item.id),
-        force: true,
-      });
-      const data = result?.data || result || {};
-      if (data.unavailable) {
-        toast.warning("Consulta do ERP indisponível", { description: data.message });
-      } else if (data.failed) {
-        const detail = data.results?.find((item) => !item.ok && !item.skipped)?.message || "";
-        toast.warning("Alguns títulos não foram atualizados", {
-          description: `${data.consulted || 0} atualizados · ${data.failed} com erro${detail ? ` · ${detail}` : ""}`,
-        });
-      } else {
-        toast.success(`${data.consulted || 0} ${data.consulted === 1 ? "título atualizado" : "títulos atualizados"} do ERP`);
+    await withProcessing(
+      list.length === 1 ? "Atualizando título no ERP…" : `Atualizando ${list.length} títulos no ERP…`,
+      async () => {
+        try {
+          const result = await base44.functions.invoke("refreshPayableTitlesFromErp", {
+            ids: list.map((item) => item.id),
+            force: true,
+          });
+          const data = result?.data || result || {};
+          if (data.unavailable) {
+            toast.warning("Consulta do ERP indisponível", { description: data.message });
+          } else if (data.failed) {
+            const detail = data.results?.find((item) => !item.ok && !item.skipped)?.message || "";
+            toast.warning("Alguns títulos não foram atualizados", {
+              description: `${data.consulted || 0} atualizados · ${data.failed} com erro${detail ? ` · ${detail}` : ""}`,
+            });
+          } else {
+            toast.success(`${data.consulted || 0} ${data.consulted === 1 ? "título atualizado" : "títulos atualizados"} do ERP`);
+          }
+          if (viewTitle && list.some((item) => item.id === viewTitle.id)) {
+            const row = (data.results || []).find((item) => item.id === viewTitle.id);
+            if (row?.patch) setViewTitle((current) => (current ? { ...current, ...row.patch } : current));
+          }
+          refresh();
+        } catch (error) {
+          toast.error(error.data?.error || error.message || "Não foi possível consultar o ERP");
+        }
       }
-      if (viewTitle && list.some((item) => item.id === viewTitle.id)) {
-        const row = (data.results || []).find((item) => item.id === viewTitle.id);
-        if (row?.patch) setViewTitle((current) => (current ? { ...current, ...row.patch } : current));
-      }
-      refresh();
-    } catch (error) {
-      toast.error(error.data?.error || error.message || "Não foi possível consultar o ERP");
-    } finally {
-      setBusy(false);
-    }
+    );
   };
 
   const toggleAll = (checked) => {
@@ -298,19 +300,18 @@ export default function AccountsPayable() {
   };
 
   const handleClassify = async (payload) => {
-    setBusy(true);
-    try {
-      const result = await base44.functions.invoke("classifyPayableTitles", payload);
-      const updated = result?.data?.updated ?? result?.updated ?? 0;
-      toast.success(`${updated} ${updated === 1 ? "título classificado" : "títulos classificados"}`);
-      setClassifyOpen(false);
-      setSelectedIds([]);
-      refresh();
-    } catch (error) {
-      toast.error(error.data?.error || error.message || "Não foi possível classificar");
-    } finally {
-      setBusy(false);
-    }
+    await withProcessing("Classificando títulos…", async () => {
+      try {
+        const result = await base44.functions.invoke("classifyPayableTitles", payload);
+        const updated = result?.data?.updated ?? result?.updated ?? 0;
+        toast.success(`${updated} ${updated === 1 ? "título classificado" : "títulos classificados"}`);
+        setClassifyOpen(false);
+        setSelectedIds([]);
+        refresh();
+      } catch (error) {
+        toast.error(error.data?.error || error.message || "Não foi possível classificar");
+      }
+    });
   };
 
   const handleIntegrate = async (items) => {
@@ -324,28 +325,30 @@ export default function AccountsPayable() {
       toast.warning("Classifique natureza e fornecedor antes de integrar");
       return;
     }
-    setBusy(true);
-    try {
-      const result = await base44.functions.invoke("integratePayableTitles", {
-        ids: list.map((item) => item.id),
-      });
-      const data = result?.data || result || {};
-      if (data.failed) {
-        const detail = data.results?.find((item) => !item.ok && !item.skipped)?.message || "";
-        toast.warning("Alguns títulos não foram para o ERP", {
-          description: `${data.integrated || 0} integrados · ${data.failed} com erro${detail ? ` · ${detail}` : ""}`,
-        });
-      } else {
-        toast.success(`${data.integrated || 0} ${data.integrated === 1 ? "título integrado" : "títulos integrados"} no ERP`);
+    await withProcessing(
+      list.length === 1 ? "Integrando título no ERP…" : `Integrando ${list.length} títulos no ERP…`,
+      async () => {
+        try {
+          const result = await base44.functions.invoke("integratePayableTitles", {
+            ids: list.map((item) => item.id),
+          });
+          const data = result?.data || result || {};
+          if (data.failed) {
+            const detail = data.results?.find((item) => !item.ok && !item.skipped)?.message || "";
+            toast.warning("Alguns títulos não foram para o ERP", {
+              description: `${data.integrated || 0} integrados · ${data.failed} com erro${detail ? ` · ${detail}` : ""}`,
+            });
+          } else {
+            toast.success(`${data.integrated || 0} ${data.integrated === 1 ? "título integrado" : "títulos integrados"} no ERP`);
+          }
+          if ((data.integrated || 0) > 0) setErpFilter("integrado");
+          setSelectedIds([]);
+          refresh();
+        } catch (error) {
+          toast.error(error.data?.error || error.message || "Não foi possível integrar com o ERP");
+        }
       }
-      if ((data.integrated || 0) > 0) setErpFilter("integrado");
-      setSelectedIds([]);
-      refresh();
-    } catch (error) {
-      toast.error(error.data?.error || error.message || "Não foi possível integrar com o ERP");
-    } finally {
-      setBusy(false);
-    }
+    );
   };
 
   const askReverse = (items) => {
@@ -363,29 +366,31 @@ export default function AccountsPayable() {
       setExtornoItems([]);
       return;
     }
-    setBusy(true);
-    try {
-      const result = await base44.functions.invoke("reversePayableTitles", {
-        ids: list.map((item) => item.id),
-      });
-      const data = result?.data || result || {};
-      if (data.failed) {
-        const detail = data.results?.find((item) => !item.ok && !item.skipped)?.message || "";
-        toast.warning("Alguns títulos não foram estornados", {
-          description: `${data.reversed || 0} estornados · ${data.failed} com erro${detail ? ` · ${detail}` : ""}`,
-        });
-      } else {
-        toast.success(`${data.reversed || 0} ${data.reversed === 1 ? "título estornado" : "títulos estornados"} no ERP`);
+    await withProcessing(
+      list.length === 1 ? "Estornando título no ERP…" : `Estornando ${list.length} títulos no ERP…`,
+      async () => {
+        try {
+          const result = await base44.functions.invoke("reversePayableTitles", {
+            ids: list.map((item) => item.id),
+          });
+          const data = result?.data || result || {};
+          if (data.failed) {
+            const detail = data.results?.find((item) => !item.ok && !item.skipped)?.message || "";
+            toast.warning("Alguns títulos não foram estornados", {
+              description: `${data.reversed || 0} estornados · ${data.failed} com erro${detail ? ` · ${detail}` : ""}`,
+            });
+          } else {
+            toast.success(`${data.reversed || 0} ${data.reversed === 1 ? "título estornado" : "títulos estornados"} no ERP`);
+          }
+          if ((data.reversed || 0) > 0) setErpFilter("estornado");
+          setExtornoItems([]);
+          setSelectedIds([]);
+          refresh();
+        } catch (error) {
+          toast.error(error.data?.error || error.message || "Não foi possível estornar no ERP");
+        }
       }
-      if ((data.reversed || 0) > 0) setErpFilter("estornado");
-      setExtornoItems([]);
-      setSelectedIds([]);
-      refresh();
-    } catch (error) {
-      toast.error(error.data?.error || error.message || "Não foi possível estornar no ERP");
-    } finally {
-      setBusy(false);
-    }
+    );
   };
 
   return (

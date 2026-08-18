@@ -33,6 +33,8 @@ entitiesRouter.post("/:name/bulk", async (req, res, next) => {
       req,
       action: "BULK_CREATE",
       resourceType: req.params.name,
+      registro: `${created.length} registros`,
+      after: { count: created.length, ids: created.slice(0, 50).map((row) => row.id) },
       payload: { count: created.length },
     });
     res.status(201).json(created);
@@ -57,6 +59,7 @@ entitiesRouter.post("/:name", async (req, res, next) => {
       action: "CREATE",
       resourceType: req.params.name,
       resourceId: created.id,
+      after: created,
     });
     res.status(201).json(created);
   } catch (error) {
@@ -66,12 +69,15 @@ entitiesRouter.post("/:name", async (req, res, next) => {
 
 entitiesRouter.patch("/:name/:id", async (req, res, next) => {
   try {
+    const before = await store.getById(req.params.name, req.params.id);
     const updated = await store.update(req.params.name, req.params.id, req.body || {});
     await writeAudit({
       req,
       action: "UPDATE",
       resourceType: req.params.name,
       resourceId: req.params.id,
+      before,
+      after: updated,
     });
     res.json(updated);
   } catch (error) {
@@ -81,12 +87,15 @@ entitiesRouter.patch("/:name/:id", async (req, res, next) => {
 
 entitiesRouter.put("/:name/:id", async (req, res, next) => {
   try {
+    const before = await store.getById(req.params.name, req.params.id);
     const updated = await store.update(req.params.name, req.params.id, req.body || {});
     await writeAudit({
       req,
       action: "UPDATE",
       resourceType: req.params.name,
       resourceId: req.params.id,
+      before,
+      after: updated,
     });
     res.json(updated);
   } catch (error) {
@@ -102,6 +111,7 @@ entitiesRouter.delete("/:name/:id", async (req, res, next) => {
       action: "DELETE",
       resourceType: req.params.name,
       resourceId: req.params.id,
+      before: removed,
     });
     res.json(removed);
   } catch (error) {

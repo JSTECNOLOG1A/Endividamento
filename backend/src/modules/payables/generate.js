@@ -43,7 +43,7 @@ function todayIsoDate() {
 export function interestTipo(vencimento) {
   const due = dateOnly(vencimento);
   if (!due) return "PR";
-  return due <= todayIsoDate() ? "TX" : "PR";
+  return due.slice(0, 7) <= todayIsoDate().slice(0, 7) ? "TX" : "PR";
 }
 
 function dateOnly(value) {
@@ -184,6 +184,7 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const createdRows = [];
     for (const title of titles) {
       const fornecedor = title.fornecedor || template?.fornecedor || "";
       const fornecedorLoja = title.fornecedor_loja || template?.fornecedor_loja || "01";
@@ -191,13 +192,14 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
       const natureza = title.natureza || "";
       const filial = title.filial || template?.filial || "";
       const filialOrigem = title.filial_origem || template?.filial_origem || "";
-      await client.query(
+      const inserted = await client.query(
         `INSERT INTO payable_titles (
            id, entity_id, contract_id, parcela, titulo_numero, tipo, prefixo,
            emissao, vencimento, valor, saldo, natureza, historico, status, origem,
            fornecedor, fornecedor_loja, fornecedor_nome, filial, filial_origem, created_by
          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-         ON CONFLICT (contract_id, prefixo, parcela) DO NOTHING`,
+         ON CONFLICT (contract_id, prefixo, parcela) DO NOTHING
+         RETURNING id, prefixo, titulo_numero, parcela, tipo, contract_id`,
         [
           randomUUID(),
           title.entity_id,
@@ -222,13 +224,14 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
           createdBy,
         ]
       );
+      if (inserted.rows[0]) createdRows.push(inserted.rows[0]);
     }
     await client.query(
       `UPDATE loan_contracts SET exported_to_payables = true, updated_date = now() WHERE id = $1`,
       [contract.id]
     );
     await client.query("COMMIT");
-    return { created: titles.length, skipped: false };
+    return { created: createdRows.length, skipped: false, titulos: createdRows };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -290,12 +293,14 @@ export async function syncPayableTitlesFromApprovedContracts() {
   );
   let created = 0;
   let contracts = 0;
+  const titulos = [];
   for (const row of result.rows) {
     const generated = await generatePayableTitlesForContract(row, row.created_by || "system");
     if (generated.created > 0) {
       created += generated.created;
       contracts += 1;
+      if (Array.isArray(generated.titulos)) titulos.push(...generated.titulos);
     }
   }
-  return { created, contracts, scanned: result.rows.length };
+  return { created, contracts, scanned: result.rows.length, titulos };
 }

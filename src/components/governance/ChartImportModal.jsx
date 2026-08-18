@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/notify";
+import { useProcessing } from "@/lib/ProcessingContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,6 +56,7 @@ function FilterSelect({ label, value, onValueChange, children }) {
 }
 
 export default function ChartImportModal({ open, onOpenChange, onImported }) {
+  const { withProcessing } = useProcessing();
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -151,17 +153,19 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
       return;
     }
     setConfirming(true);
-    try {
-      const result = await base44.functions.invoke("integrateChartAccounts", { items: selected });
-      const data = result.data || result;
-      toast.success(`${data.created || 0} criadas, ${data.updated || 0} atualizadas`);
-      onImported?.();
-      onOpenChange(false);
-    } catch (error) {
-      toast.error(error.data?.error || error.message || "Falha ao importar o plano de contas");
-    } finally {
-      setConfirming(false);
-    }
+    await withProcessing("Importando plano de contas do ERP…", async () => {
+      try {
+        const result = await base44.functions.invoke("integrateChartAccounts", { items: selected });
+        const data = result.data || result;
+        toast.success(`${data.created || 0} criadas, ${data.updated || 0} atualizadas`);
+        onImported?.();
+        onOpenChange(false);
+      } catch (error) {
+        toast.error(error.data?.error || error.message || "Falha ao importar o plano de contas");
+      } finally {
+        setConfirming(false);
+      }
+    });
   };
 
   return (

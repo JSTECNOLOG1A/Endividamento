@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { generateCode } from "../integrations/crypto.js";
+import { writeAudit } from "../../middleware/audit.js";
+import { snapshotForAudit } from "../audit/records.js";
 import { TASKS, taskCatalog, taskMeta } from "./tasks.js";
 import * as store from "./store.js";
+import { initialRunAt, nextRunAt, formatHoraExecucao } from "./nextRun.js";
 
 function httpError(status, message, details) {
   const err = new Error(message);
@@ -10,19 +13,52 @@ function httpError(status, message, details) {
   return err;
 }
 
-const TAREFA_ENUM = ["consultar_titulos_pagar", "consultar_titulos_receber"];
+const TAREFA_ENUM = ["consultar_titulos_pagar", "consultar_titulos_receber", "converter_titulos_pr_tx"];
+const MODO_ENUM = ["intervalo", "mensal"];
+
+function normalizeSchedule(data = {}) {
+  const modo = data.modo || (data.diaMes ? "mensal" : "intervalo");
+  if (modo === "mensal") {
+    return {
+      modo,
+      intervaloMinutos: 1440,
+      diaMes: Number(data.diaMes) || 1,
+      horaExecucao: formatHoraExecucao(data.horaExecucao || "00:10"),
+    };
+  }
+  return {
+    modo: "intervalo",
+    intervaloMinutos: Number(data.intervaloMinutos) || 5,
+    diaMes: null,
+    horaExecucao: null,
+  };
+}
 
 export const createSchema = z.object({
   nome: z.string().trim().min(3).max(255),
   tarefa: z.enum(TAREFA_ENUM),
-  intervaloMinutos: z.coerce.number().int().min(1).max(1440),
+  modo: z.enum(MODO_ENUM).optional(),
+  intervaloMinutos: z.coerce.number().int().min(1).max(1440).optional(),
+  diaMes: z.union([z.coerce.number().int().min(1).max(31), z.null()]).optional(),
+  horaExecucao: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).optional().nullable(),
   ativo: z.boolean().optional().default(true),
+}).superRefine((data, ctx) => {
+  const modo = data.modo || (data.diaMes ? "mensal" : "intervalo");
+  if (modo === "intervalo" && data.intervaloMinutos == null) {
+    ctx.addIssue({ code: "custom", path: ["intervaloMinutos"], message: "Informe o intervalo" });
+  }
+  if (modo === "mensal" && data.diaMes == null) {
+    ctx.addIssue({ code: "custom", path: ["diaMes"], message: "Informe o dia do mês" });
+  }
 });
 
 export const updateSchema = z.object({
   nome: z.string().trim().min(3).max(255).optional(),
   tarefa: z.enum(TAREFA_ENUM).optional(),
+  modo: z.enum(MODO_ENUM).optional(),
   intervaloMinutos: z.coerce.number().int().min(1).max(1440).optional(),
+  diaMes: z.union([z.coerce.number().int().min(1).max(31), z.null()]).optional(),
+  horaExecucao: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).optional().nullable(),
   ativo: z.boolean().optional(),
 });
 
@@ -52,13 +88,14 @@ export async function getById(id) {
 export async function create(data, createdBy) {
   const existing = await store.findByTarefa(data.tarefa);
   if (existing) throw httpError(409, "Já existe um agendamento para esta tarefa");
+  const schedule = normalizeSchedule(data);
   const row = await store.create({
     id: generateCode("AGD"),
     nome: data.nome,
     tarefa: data.tarefa,
-    intervaloMinutos: data.intervaloMinutos,
+    ...schedule,
     ativo: data.ativo !== false,
-    proximaExecucaoEm: data.ativo === false ? null : new Date(),
+    proximaExecucaoEm: initialRunAt({ ...schedule, ativo: data.ativo !== false }),
     createdBy,
   });
   return store.toPublic(row);
@@ -67,17 +104,22 @@ export async function create(data, createdBy) {
 export async function updateById(id, data) {
   const current = await store.findById(id);
   if (!current) throw httpError(404, "Agendamento não encontrado");
+  const merged = {
+    modo: data.modo ?? current.modo,
+    intervaloMinutos: data.intervaloMinutos ?? current.intervalo_minutos,
+    diaMes: data.diaMes === undefined ? current.dia_mes : data.diaMes,
+    horaExecucao: data.horaExecucao === undefined ? current.hora_execucao : data.horaExecucao,
+    ativo: data.ativo ?? current.ativo,
+  };
+  const schedule = normalizeSchedule(merged);
+  const ativo = data.ativo ?? current.ativo;
   const patch = {
     nome: data.nome,
     tarefa: data.tarefa,
-    intervaloMinutos: data.intervaloMinutos,
-    ativo: data.ativo,
+    ...schedule,
+    ativo,
+    proximaExecucaoEm: ativo === false ? null : initialRunAt({ ...schedule, ativo: true }),
   };
-  if (data.ativo === false) {
-    patch.proximaExecucaoEm = null;
-  } else if (data.ativo === true || data.intervaloMinutos) {
-    patch.proximaExecucaoEm = new Date();
-  }
   const row = await store.update(id, patch);
   return store.toPublic(row);
 }
@@ -89,6 +131,11 @@ export async function updateStatusById(id, ativo) {
 export async function removeById(id) {
   const row = await store.remove(id);
   return store.toPublic(row);
+}
+
+function nextAfterRun(job) {
+  if (!job?.ativo) return null;
+  return nextRunAt(job, new Date());
 }
 
 export async function executeTask(tarefa, origem = "manual") {
@@ -107,7 +154,7 @@ export async function executeTask(tarefa, origem = "manual") {
     await store.finishRun(job.id, {
       ok: Boolean(result.ok),
       message: result.message,
-      intervaloMinutos: job.intervalo_minutos,
+      nextAt: nextAfterRun(job),
     });
   }
   await store.insertRun({
@@ -120,12 +167,31 @@ export async function executeTask(tarefa, origem = "manual") {
     startedAt,
     finishedAt,
   });
+  const snapshot = await snapshotForAudit({
+    resourceType: meta.rotina === "Contas a receber" ? "ReceivableTitle" : "PayableTitle",
+    result,
+    fallbackLabel: meta.label || tarefa,
+  });
+  if (origem === "automatico") {
+    await writeAudit({
+      action: "RUN",
+      resourceType: "ScheduledJob",
+      resourceId: job?.id,
+      rotina: meta.rotina || "Agendamento",
+      registro: snapshot.registro,
+      origem: "automatico",
+      processingType: "automatico",
+      after: snapshot.after,
+    });
+  }
   return {
     ok: Boolean(result.ok),
     message: result.message,
     tarefa,
     origem,
     detalhes: result.detalhes || null,
+    resumo: snapshot.registro,
+    titulos: snapshot.after.titulos,
   };
 }
 
@@ -145,10 +211,19 @@ export async function runDueJobs() {
       await store.finishRun(job.id, {
         ok: false,
         message: error.message || "Falha no agendamento",
-        intervaloMinutos: job.intervalo_minutos,
+        nextAt: nextAfterRun(job),
       });
       results.push({ ok: false, tarefa: job.tarefa, message: error.message });
     }
   }
   return results;
+}
+
+export async function refreshUpcomingRuns() {
+  const jobs = await store.listRaw();
+  for (const job of jobs) {
+    if (!job.ativo || job.modo !== "mensal") continue;
+    const nextAt = nextRunAt(job, new Date());
+    await store.update(job.id, { proximaExecucaoEm: nextAt });
+  }
 }

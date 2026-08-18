@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/AuthContext";
 import IntegrationsPanel from "@/components/settings/IntegrationsPanel";
 import SchedulesPanel from "@/components/settings/SchedulesPanel";
+import AuditLogPanel from "@/components/settings/AuditLogPanel";
 
 const ROLE_LABELS = {
   admin: "Administrador",
@@ -18,16 +19,17 @@ export default function Settings() {
   const { user, logout } = useAuth();
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Configurações</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Conta, sessão, integrações e agendamentos</p>
+        <p className="text-sm text-slate-500 mt-0.5">Conta, sessão, integrações, agendamentos e log de atividades</p>
       </div>
 
       <Tabs defaultValue="integracoes">
-        <TabsList className="bg-slate-100">
+        <TabsList className="bg-slate-100 h-auto flex-wrap">
           <TabsTrigger value="integracoes">Integrações</TabsTrigger>
           <TabsTrigger value="agendamento">Agendamento</TabsTrigger>
+          {user?.role === "admin" ? <TabsTrigger value="log">Log</TabsTrigger> : null}
           <TabsTrigger value="conta">Conta</TabsTrigger>
         </TabsList>
 
@@ -50,7 +52,7 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-base text-slate-900">Agendamento</CardTitle>
               <CardDescription>
-                Cadastre tarefas automáticas com intervalo de repetição. Nas rotinas de contas a pagar e a receber também há execução manual.
+                Cadastre cada tarefa (consultar pagar, consultar receber ou converter PR→TX) e escolha o dia ou o intervalo. Nas rotinas também há execução manual.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -58,6 +60,22 @@ export default function Settings() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {user?.role === "admin" ? (
+          <TabsContent value="log" className="mt-4">
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base text-slate-900">Log de atividades</CardTitle>
+                <CardDescription>
+                  Identifica o usuário responsável por cada inclusão, alteração, exclusão ou processamento, com data/hora, rotina, registro e de/para.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AuditLogPanel />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="conta" className="mt-4">
           <div className="max-w-3xl space-y-4">
