@@ -1,0 +1,2 @@
+ALTER TABLE payable_titles
+  ADD COLUMN IF NOT EXISTS filial_origem TEXT NOT NULL DEFAULT '';

@@ -45,6 +45,8 @@ async function request(path, options = {}) {
   return payload;
 }
 
+export { request as apiRequest };
+
 function entityApi(name) {
   return {
     list(sort = "", limit = 100) {
@@ -86,6 +88,11 @@ export const base44 = {
     Group: entityApi("Group"),
     CompanyEntity: entityApi("CompanyEntity"),
     Bank: entityApi("Bank"),
+    Nature: entityApi("Nature"),
+    BankAccount: entityApi("BankAccount"),
+    ChartOfAccount: entityApi("ChartOfAccount"),
+    PayableTitle: entityApi("PayableTitle"),
+    ReceivableTitle: entityApi("ReceivableTitle"),
     LoanContract: entityApi("LoanContract"),
     CalculationSnapshot: entityApi("CalculationSnapshot"),
     CDIRate: entityApi("CDIRate"),

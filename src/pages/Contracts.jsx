@@ -206,7 +206,7 @@ export default function Contracts() {
                   contract={selected.contract}
                   user={user}
                   onStatusChange={() => {
-                    queryClient.invalidateQueries(["contracts"]);
+                    queryClient.invalidateQueries({ queryKey: ["contracts"] });
                     setSelected(null);
                   }}
                   onDuplicate={() => handleDuplicate(selected.contract)}

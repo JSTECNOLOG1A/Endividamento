@@ -29,8 +29,8 @@ export async function seed() {
       [now, createdBy]
     );
     await pool.query(
-      `INSERT INTO company_entities (id, group_id, entity_name, document_number, document_type, entity_type, status, created_date, updated_date, created_by)
-       VALUES ('ent_demo', 'grp_demo', 'Empresa Demo Ltda', '00.000.000/0001-00', 'CNPJ', 'empresa', 'ativa', $1, $1, $2)`,
+      `INSERT INTO company_entities (id, group_id, entity_name, document_number, document_type, entity_type, codigo_empresa, codigo_filial, status, created_date, updated_date, created_by)
+       VALUES ('ent_demo', 'grp_demo', 'Empresa Demo Ltda', '00.000.000/0001-00', 'CNPJ', 'empresa', '01', '01', 'ativa', $1, $1, $2)`,
       [now, createdBy]
     );
     await pool.query(

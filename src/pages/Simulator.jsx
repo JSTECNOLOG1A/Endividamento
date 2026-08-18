@@ -421,6 +421,7 @@ export default function Simulator() {
       }
     } catch (error) {
       console.error("Erro ao validar duplicidade:", error);
+      alert("Erro ao validar duplicidade: " + (error.message || "tente novamente"));
       setSaving(false);
       return;
     }
@@ -434,9 +435,9 @@ export default function Simulator() {
     }
 
     const contractData = {
-      group_id: formParams.group_id,
-      entity_id: formParams.entity_id,
-      bank_id: formParams.bank_id,
+      group_id: formParams.group_id || null,
+      entity_id: formParams.entity_id || null,
+      bank_id: formParams.bank_id || null,
       currency_id: formParams.currency_id || null,
       exchange_lag: formParams.exchangeLag !== undefined ? formParams.exchangeLag : 1,
       exchange_rates: formParams.exchangeRates ? JSON.stringify(formParams.exchangeRates) : null,
@@ -459,7 +460,7 @@ export default function Simulator() {
       indexer: formParams.indexer,
       indexer_spread: formParams.indexer_spread,
       operation_date: formParams.operation_date,
-      first_payment_date: formParams.first_payment_date || "",
+      first_payment_date: formParams.first_payment_date || null,
       principal_grace_months: formParams.principal_grace_months,
       interest_grace_months: formParams.interest_grace_months,
       grace_action: formParams.grace_action,
@@ -471,7 +472,7 @@ export default function Simulator() {
       interest_frequency: formParams.interest_frequency,
       calculation_system: formParams.calculation_system,
       total_term_months: formParams.total_term_months || 0,
-      final_maturity_date: formParams.final_maturity_date || "",
+      final_maturity_date: formParams.final_maturity_date || null,
       amortization_percentages: formParams.amortization_percentages || "",
       percentage_base: formParams.percentage_base || "saldo_devedor",
       schedule_data: JSON.stringify({
@@ -599,9 +600,9 @@ export default function Simulator() {
     setSaving(true);
     try {
       const closeContractData = {
-        group_id: dataToSave.group_id,
-        entity_id: dataToSave.entity_id,
-        bank_id: dataToSave.bank_id,
+        group_id: dataToSave.group_id || null,
+        entity_id: dataToSave.entity_id || null,
+        bank_id: dataToSave.bank_id || null,
         currency_id: dataToSave.currency_id || null,
         exchange_lag: dataToSave.exchangeLag !== undefined ? dataToSave.exchangeLag : 1,
         exchange_rates: dataToSave.exchangeRates ? JSON.stringify(dataToSave.exchangeRates) : null,
@@ -622,7 +623,7 @@ export default function Simulator() {
         indexer: dataToSave.indexer,
         indexer_spread: dataToSave.indexer_spread,
         operation_date: dataToSave.operation_date,
-        first_payment_date: dataToSave.first_payment_date || "",
+        first_payment_date: dataToSave.first_payment_date || null,
         principal_grace_months: dataToSave.principal_grace_months,
         interest_grace_months: dataToSave.interest_grace_months,
         grace_action: dataToSave.grace_action,
@@ -634,7 +635,7 @@ export default function Simulator() {
         interest_frequency: dataToSave.interest_frequency,
         calculation_system: dataToSave.calculation_system,
         total_term_months: dataToSave.total_term_months || 0,
-        final_maturity_date: dataToSave.final_maturity_date || "",
+        final_maturity_date: dataToSave.final_maturity_date || null,
         amortization_percentages: dataToSave.amortization_percentages || "",
         percentage_base: dataToSave.percentage_base || "saldo_devedor",
         schedule_data: result ? JSON.stringify({

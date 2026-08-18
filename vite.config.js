@@ -22,6 +22,8 @@ export default defineConfig({
       '/api': {
         target: process.env.API_PROXY_TARGET || 'http://127.0.0.1:3001',
         changeOrigin: true,
+        timeout: 180000,
+        proxyTimeout: 180000,
       },
       '/uploads': {
         target: process.env.API_PROXY_TARGET || 'http://127.0.0.1:3001',

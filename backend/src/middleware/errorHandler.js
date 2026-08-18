@@ -9,5 +9,6 @@ export function errorHandler(error, req, res, _next) {
     error: status >= 500 ? "Erro interno" : error.message,
     code: error.code || (status >= 500 ? "INTERNAL" : "REQUEST"),
     request_id: req.requestId,
+    ...(error.details ? { details: error.details } : {}),
   });
 }

@@ -7,7 +7,7 @@ export const ENTITIES = {
   },
   CompanyEntity: {
     table: "company_entities",
-    columns: ["group_id", "entity_name", "document_number", "document_type", "entity_type", "status"],
+    columns: ["group_id", "entity_name", "document_number", "document_type", "entity_type", "codigo_empresa", "codigo_filial", "status"],
     booleans: [],
     numbers: [],
   },
@@ -16,6 +16,49 @@ export const ENTITIES = {
     columns: ["bank_code", "bank_name", "bank_type", "status"],
     booleans: [],
     numbers: [],
+  },
+  BankAccount: {
+    table: "bank_accounts",
+    columns: [
+      "entity_id", "bank_id", "empresa", "filial", "bank_code", "agencia", "conta",
+      "digito", "nome", "tipo", "moeda", "conta_contabil", "natureza", "origem", "status",
+    ],
+    booleans: [],
+    numbers: [],
+  },
+  Nature: {
+    table: "natures",
+    columns: ["entity_id", "empresa", "filial", "codigo", "descricao", "tipo_conta", "c_custo", "c_des_fat", "tipo_natureza", "gera_lcdpr", "origem", "status"],
+    booleans: ["gera_lcdpr"],
+    numbers: [],
+  },
+  ChartOfAccount: {
+    table: "chart_of_accounts",
+    columns: ["account_code", "account_name", "account_class", "account_type", "account_nature", "origem", "status"],
+    booleans: [],
+    numbers: [],
+  },
+  PayableTitle: {
+    table: "payable_titles",
+    columns: [
+      "entity_id", "contract_id", "parcela", "titulo_numero", "tipo", "prefixo",
+      "emissao", "vencimento", "valor", "saldo", "natureza", "historico", "status", "origem",
+      "fornecedor", "fornecedor_loja", "fornecedor_nome", "filial", "filial_origem",
+      "integrado_erp", "integrado_erp_em", "erp_mensagem", "erp_status", "erp_consultado_em",
+    ],
+    booleans: ["integrado_erp"],
+    numbers: ["valor", "saldo"],
+  },
+  ReceivableTitle: {
+    table: "receivable_titles",
+    columns: [
+      "entity_id", "contract_id", "parcela", "titulo_numero", "tipo", "prefixo",
+      "emissao", "vencimento", "valor", "saldo", "natureza", "historico", "status", "origem",
+      "cliente", "cliente_loja", "cliente_nome", "filial", "filial_origem",
+      "integrado_erp", "integrado_erp_em", "erp_mensagem", "erp_status", "erp_consultado_em",
+    ],
+    booleans: ["integrado_erp"],
+    numbers: ["valor", "saldo"],
   },
   LoanContract: {
     table: "loan_contracts",
@@ -31,12 +74,12 @@ export const ENTITIES = {
       "principal_installments", "interest_installments", "principal_frequency", "interest_frequency",
       "calculation_system", "amortization_percentages", "percentage_base", "schedule_data",
       "contract_pdf_url", "status", "status_history", "approved_by", "approved_date",
-      "rejection_comments", "exported_to_payables", "current_snapshot_id", "approved_snapshot_id",
+      "rejection_comments", "exported_to_payables", "exported_to_receivables", "current_snapshot_id", "approved_snapshot_id",
       "last_recalculated_at", "guarantee_real_type", "guarantee_personal_type",
     ],
     booleans: [
       "iof_financed", "encargo_garantia_financed", "other_fees_financed", "mip_embedded", "dfi_embedded",
-      "other_insurance_embedded", "exported_to_payables",
+      "other_insurance_embedded", "exported_to_payables", "exported_to_receivables",
     ],
     numbers: [
       "operation_value", "amount_foreign", "exchange_rate_closing", "signal_value", "iof_value",

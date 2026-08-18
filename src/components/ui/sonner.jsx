@@ -1,29 +1,34 @@
-"use client";
-import { useTheme } from "next-themes"
-import { Toaster as Sonner } from "sonner"
+import { CheckCircle2, CircleAlert, Info, TriangleAlert, X } from "lucide-react";
+import { Toaster as Sonner } from "sonner";
 
-const Toaster = ({
-  ...props
-}) => {
-  const { theme = "system" } = useTheme()
-
+export function Toaster(props) {
   return (
-    (<Sonner
-      theme={theme}
-      className="toaster group"
+    <Sonner
+      theme="light"
+      position="bottom-right"
+      richColors
+      closeButton
+      duration={4500}
+      visibleToasts={4}
+      gap={12}
+      offset={20}
+      mobileOffset={16}
       toastOptions={{
+        closeButtonAriaLabel: "Fechar notificação",
         classNames: {
-          toast:
-            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
-          description: "group-[.toast]:text-muted-foreground",
-          actionButton:
-            "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
-          cancelButton:
-            "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+          toast: "font-sans",
+          title: "text-[13.5px] font-semibold leading-snug",
+          description: "text-[12.5px] leading-relaxed opacity-90",
         },
       }}
-      {...props} />)
+      icons={{
+        success: <CheckCircle2 className="size-5" strokeWidth={2.2} />,
+        error: <CircleAlert className="size-5" strokeWidth={2.2} />,
+        warning: <TriangleAlert className="size-5" strokeWidth={2.2} />,
+        info: <Info className="size-5" strokeWidth={2.2} />,
+        close: <X className="size-3.5" strokeWidth={2.4} />,
+      }}
+      {...props}
+    />
   );
 }
-
-export { Toaster }

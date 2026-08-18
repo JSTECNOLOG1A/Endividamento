@@ -17,7 +17,7 @@ import {
   TrendingUp,
   RefreshCw
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 export default function ApprovedContractManager({ contract, onContractUpdate }) {
   const [freezing, setFreezing] = useState(false);
@@ -79,7 +79,7 @@ export default function ApprovedContractManager({ contract, onContractUpdate }) 
 
       if (onContractUpdate) onContractUpdate(updatedContract);
     } catch (error) {
-      toast.error("Erro ao congelar contrato", {
+      toast.error("Não foi possível congelar o contrato", {
         description: error.message,
       });
     } finally {
@@ -104,7 +104,7 @@ export default function ApprovedContractManager({ contract, onContractUpdate }) 
   // 3️⃣ EXPORTAR MEMÓRIA DE CÁLCULO
   const handleExportMemory = () => {
     if (!scheduleData?.calculation_metadata) {
-      toast.error("Nenhuma memória de cálculo disponível");
+      toast.warning("Nenhuma memória de cálculo disponível");
       return;
     }
 
@@ -257,21 +257,21 @@ export default function ApprovedContractManager({ contract, onContractUpdate }) 
 
       // Toast
       if (result.status === 'CONCORDANT') {
-        toast.success('✅ Taxas concordam', {
-          description: `Diferença: R$ ${divergence.toFixed(4)}`
+        toast.success("As taxas estão de acordo", {
+          description: `Diferença: R$ ${divergence.toFixed(4)}`,
         });
-      } else if (result.status === 'DIVERGENT') {
-        toast.warning('⚠️ Divergência de PTAX detectada', {
-          description: `Salva: ${savedRate.ptax_rate}, Oficial: ${officialRate.ptax_rate}`
+      } else if (result.status === "DIVERGENT") {
+        toast.warning("Há uma divergência de PTAX", {
+          description: `Salva: ${savedRate.ptax_rate} · Oficial: ${officialRate.ptax_rate}`,
         });
       } else {
-        toast.info('ℹ️ Nenhuma taxa salva nesta data', {
-          description: `Taxa oficial BACEN: ${officialRate.ptax_rate}`
+        toast.info("Nenhuma taxa salva nesta data", {
+          description: `Taxa oficial BACEN: ${officialRate.ptax_rate}`,
         });
       }
     } catch (error) {
-      toast.error('Erro ao conciliar PTAX', {
-        description: error.message
+      toast.error("Não foi possível conciliar a PTAX", {
+        description: error.message,
       });
       setConciliationResult(null);
     } finally {

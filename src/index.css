@@ -86,3 +86,20 @@
     @apply bg-background text-foreground;
   }
 }
+
+[data-sonner-toaster] {
+  --width: 380px;
+  --border-radius: 12px;
+  font-family: inherit;
+}
+
+[data-sonner-toaster][dir="ltr"] {
+  --toast-close-button-start: unset;
+  --toast-close-button-end: 0;
+  --toast-close-button-transform: translate(35%, -35%);
+}
+
+[data-sonner-toast][data-styled="true"] {
+  align-items: flex-start;
+  padding: 14px 18px 14px 16px;
+}

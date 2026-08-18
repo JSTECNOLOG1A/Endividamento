@@ -4,43 +4,85 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { CheckCircle, XCircle, Copy, Edit } from "lucide-react";
-import { EDITABLE_STATUSES } from "@/lib/contractStatus";
+import { Send, CheckCircle, XCircle, Copy, Edit, Paperclip } from "lucide-react";
+
+function parseStatusHistory(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw !== "string") return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 export default function ContractWorkflow({ contract, user, onStatusChange, onDuplicate }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [action, setAction] = useState(null);
   const [comments, setComments] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [pdfUrl, setPdfUrl] = useState(contract.contract_pdf_url || "");
+  const [uploadingPdf, setUploadingPdf] = useState(false);
 
-  const canEdit = EDITABLE_STATUSES.includes(contract.status);
+  const canSendApproval = contract.status === "rascunho";
   const canApprove = contract.status === "pendente_aprovacao" && user?.role === "admin";
   const canReject = contract.status === "pendente_aprovacao" && user?.role === "admin";
   const canReopen = contract.status === "aprovado" && user?.role === "admin";
+  const canCancel = ["rascunho", "pendente_aprovacao"].includes(contract.status);
 
-  const addToHistory = (newStatus, comments = "") => {
-    const history = contract.status_history ? JSON.parse(contract.status_history) : [];
+  const addToHistory = (newStatus, historyComments = "") => {
+    const history = parseStatusHistory(contract.status_history);
     history.push({
       from: contract.status,
       to: newStatus,
       by: user?.email,
       at: new Date().toISOString(),
-      comments,
+      comments: historyComments,
     });
     return JSON.stringify(history);
   };
 
+  const handlePdfUpload = async (file) => {
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      setError("Apenas arquivos PDF são permitidos");
+      return;
+    }
+    setUploadingPdf(true);
+    setError("");
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      await base44.entities.LoanContract.update(contract.id, { contract_pdf_url: file_url });
+      setPdfUrl(file_url);
+    } catch (err) {
+      setError("Erro ao anexar PDF: " + (err.message || "tente novamente"));
+    } finally {
+      setUploadingPdf(false);
+    }
+  };
+
   const handleAction = async () => {
     if (action === "reject" && !comments.trim()) {
-      alert("Comentários são obrigatórios ao recusar");
+      setError("Comentários são obrigatórios ao recusar");
       return;
     }
 
+    setError("");
     setLoading(true);
     try {
       let updateData = {};
 
       switch (action) {
+        case "send_approval":
+          updateData = {
+            status: "pendente_aprovacao",
+            status_history: addToHistory("pendente_aprovacao"),
+            ...(pdfUrl ? { contract_pdf_url: pdfUrl } : {}),
+          };
+          break;
         case "approve":
           updateData = {
             status: "aprovado",
@@ -51,15 +93,21 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
           break;
         case "reject":
           updateData = {
-            status: "cancelado", // Devolvido para Correção
+            status: "rascunho",
             rejection_comments: comments,
+            status_history: addToHistory("rascunho", comments),
+          };
+          break;
+        case "cancel":
+          updateData = {
+            status: "cancelado",
             status_history: addToHistory("cancelado", comments),
           };
           break;
         case "reopen":
           updateData = {
-            status: "cancelado", // Devolvido para Correção
-            status_history: addToHistory("cancelado", comments),
+            status: "rascunho",
+            status_history: addToHistory("rascunho", comments),
           };
           break;
       }
@@ -99,10 +147,11 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
       } else {
         setDialogOpen(false);
         setComments("");
+        setError("");
         if (onStatusChange) onStatusChange();
       }
-    } catch (error) {
-      alert("Erro ao atualizar status: " + error.message);
+    } catch (err) {
+      setError("Erro ao atualizar status: " + (err.message || "tente novamente"));
     } finally {
       setLoading(false);
     }
@@ -110,12 +159,25 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
 
   const openDialog = (actionType) => {
     setAction(actionType);
+    setError("");
+    setPdfUrl(contract.contract_pdf_url || "");
     setDialogOpen(true);
   };
 
   return (
     <>
       <div className="flex gap-2 flex-wrap">
+        {canSendApproval && (
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => openDialog("send_approval")}
+            className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700"
+          >
+            <Send className="w-3.5 h-3.5" />
+            Enviar para Aprovação
+          </Button>
+        )}
         {canApprove && (
           <Button
             size="sm"
@@ -135,7 +197,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             className="gap-1.5 text-xs"
           >
             <XCircle className="w-3.5 h-3.5" />
-            Devolver para Correção
+            Recusar
           </Button>
         )}
         {canReopen && (
@@ -146,9 +208,19 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             className="gap-1.5 text-xs"
           >
             <Edit className="w-3.5 h-3.5" />
-            Devolver para Correção
+            Reabrir para Edição
           </Button>
         )}
+         {canCancel && (
+           <Button
+             size="sm"
+             variant="outline"
+             onClick={() => openDialog("cancel")}
+             className="gap-1.5 text-xs"
+           >
+             Cancelar Contrato
+           </Button>
+         )}
         <Button
           size="sm"
           variant="outline"
@@ -164,19 +236,53 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
+              {action === "send_approval" && "Enviar para Aprovação"}
               {action === "approve" && "Aprovar Contrato"}
-              {action === "reject" && "Devolver para Correção"}
-              {action === "reopen" && "Devolver Contrato para Correção"}
+              {action === "reject" && "Recusar Contrato"}
+              {action === "cancel" && "Cancelar Contrato"}
+              {action === "reopen" && "Reabrir Contrato para Edição"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {action === "send_approval" && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600">
+                  O contrato será enviado para análise e aprovação. Deseja continuar?
+                </p>
+                {pdfUrl ? (
+                  <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+                    PDF anexado.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                      Nenhum PDF anexado. Você pode enviar mesmo assim ou anexar agora.
+                    </p>
+                    <label className="inline-flex">
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        disabled={uploadingPdf || loading}
+                        onChange={(e) => handlePdfUpload(e.target.files?.[0])}
+                      />
+                      <Button type="button" size="sm" variant="outline" className="gap-1.5 text-xs" disabled={uploadingPdf || loading} asChild>
+                        <span>
+                          <Paperclip className="w-3.5 h-3.5" />
+                          {uploadingPdf ? "Enviando PDF..." : "Anexar PDF"}
+                        </span>
+                      </Button>
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
             {action === "reopen" && (
               <p className="text-sm text-slate-600">
-                O contrato voltará para edição (Devolvido para Correção) e, ao ser salvo
-                novamente, retorna para a fila de aprovação.
+                O contrato voltará ao status de rascunho e poderá ser editado novamente.
               </p>
             )}
-            {(action === "approve" || action === "reject") && (
+            {(action === "approve" || action === "reject" || action === "cancel") && (
               <div className="space-y-2">
                 <Label className="text-sm">
                   Comentários {action === "reject" && <span className="text-red-600">*</span>}
@@ -184,17 +290,22 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
                 <Textarea
                   value={comments}
                   onChange={(e) => setComments(e.target.value)}
-                  placeholder={action === "reject" ? "Explique o que precisa ser corrigido" : "Opcional"}
+                  placeholder={action === "reject" ? "Obrigatório" : "Opcional"}
                   className="min-h-24"
                 />
               </div>
             )}
+            {error && (
+              <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                {error}
+              </p>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)} disabled={loading}>
+            <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)} disabled={loading}>
               Cancelar
             </Button>
-            <Button onClick={handleAction} disabled={loading}>
+            <Button type="button" onClick={handleAction} disabled={loading || uploadingPdf}>
               {loading ? "Processando..." : "Confirmar"}
             </Button>
           </DialogFooter>
