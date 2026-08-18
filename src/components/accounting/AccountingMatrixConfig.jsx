@@ -11,8 +11,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Settings2, Save } from "lucide-react";
 import { SETTLEMENT_EVENT_TYPES, EVENT_TYPE_LABELS } from "@/lib/accountingClosing";
+import { OPERATION_CATEGORIES } from "@/lib/contractOptions";
 
 const EVENT_TYPES_ORDERED = Object.values(SETTLEMENT_EVENT_TYPES);
 
@@ -23,6 +25,7 @@ const RECLASSIFICATION_TYPES = new Set([
 
 export default function AccountingMatrixConfig({ entityId, open, onOpenChange }) {
   const queryClient = useQueryClient();
+  const [category, setCategory] = useState(OPERATION_CATEGORIES[0].value);
 
   const { data: chartOfAccounts = [] } = useQuery({
     queryKey: ["chart-of-accounts"],
@@ -31,6 +34,9 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
     initialData: [],
   });
 
+  // Traz todas as categorias de uma vez (14 eventos x até 3 categorias — bem
+  // pouca coisa) e filtra por aba no cliente, pra trocar de categoria sem
+  // precisar de nova requisição.
   const { data: mappings = [], refetch } = useQuery({
     queryKey: ["accounting-event-mappings", entityId],
     queryFn: () => base44.entities.AccountingEventMapping.filter({ entity_id: entityId }, "", 200),
@@ -40,21 +46,27 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
 
   const mappingByType = useMemo(() => {
     const map = new Map();
-    mappings.forEach((m) => map.set(m.event_type, m));
+    mappings
+      .filter((m) => (m.operation_category || "emprestimos") === category)
+      .forEach((m) => map.set(m.event_type, m));
     return map;
-  }, [mappings]);
+  }, [mappings, category]);
 
   const [drafts, setDrafts] = useState({});
   const [savingType, setSavingType] = useState(null);
 
+  const draftKey = (type) => `${category}:${type}`;
+
   const draftFor = (type) => {
-    if (drafts[type]) return drafts[type];
+    const key = draftKey(type);
+    if (drafts[key]) return drafts[key];
     const existing = mappingByType.get(type);
     return { debit_account_id: existing?.debit_account_id || "", credit_account_id: existing?.credit_account_id || "" };
   };
 
   const setDraft = (type, patch) => {
-    setDrafts((prev) => ({ ...prev, [type]: { ...draftFor(type), ...patch } }));
+    const key = draftKey(type);
+    setDrafts((prev) => ({ ...prev, [key]: { ...draftFor(type), ...patch } }));
   };
 
   const handleSave = async (type) => {
@@ -76,6 +88,7 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
         await base44.entities.AccountingEventMapping.create({
           entity_id: entityId,
           event_type: type,
+          operation_category: category,
           debit_account_id: draft.debit_account_id,
           credit_account_id: draft.credit_account_id,
           status: "ativo",
@@ -97,6 +110,17 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Settings2 className="w-4 h-4" /> Matriz contábil desta empresa</DialogTitle>
         </DialogHeader>
+        <p className="text-xs text-slate-500 -mt-2">
+          Cada categoria de operação tem seu próprio conjunto de contas — obrigatório separar operações com
+          terceiros/partes relacionadas das demais para o balancete.
+        </p>
+        <Tabs value={category} onValueChange={setCategory}>
+          <TabsList className="bg-slate-100">
+            {OPERATION_CATEGORIES.map((c) => (
+              <TabsTrigger key={c.value} value={c.value} className="text-xs">{c.label}</TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <div className="max-h-[70vh] overflow-y-auto pr-1">
           <table className="w-full text-sm">
             <thead>

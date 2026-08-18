@@ -21,6 +21,17 @@
 // resolver pelo fluxo já existente de reabertura do contrato no Simulador
 // — o mesmo caminho que já gera snapshots "RECALCULATED" hoje.
 
+import { OPERATION_CATEGORIES } from "./contractOptions.js";
+
+// Rótulos de categoria de operação (empréstimos/financiamentos/terceiros) —
+// reaproveitados aqui só pra montar mensagens legíveis; a matriz contábil do
+// Fechamento é configurada por evento + categoria (ver AccountingEventMapping),
+// não só por evento, porque contas de terceiros/partes relacionadas
+// precisam ficar separadas no balancete.
+export const OPERATION_CATEGORY_LABELS = Object.fromEntries(
+  OPERATION_CATEGORIES.map((c) => [c.value, c.label])
+);
+
 export const SETTLEMENT_EVENT_TYPES = {
   LIBERACAO: "liberacao",
   JUROS_APROPRIADOS: "juros_apropriados",
@@ -201,6 +212,7 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
   const result = {
     contractId: contract.id,
     contractNumber: contract.contract_number,
+    operationCategory: contract.operation_category || "emprestimos",
     events: [], // { type, amount, date, extraordinary }
     opening: { principal: 0, interest: 0, fx: 0 },
     closing: { principal: 0, interest: 0, fx: 0 },
@@ -385,7 +397,7 @@ export function calculateClosingReconciliation(contracts, settlementsByContract,
   const eventTotals = {};
   perContract.forEach((c) => {
     c.events.forEach((evt) => {
-      aggregatedEvents.push({ ...evt, contractId: c.contractId });
+      aggregatedEvents.push({ ...evt, contractId: c.contractId, operationCategory: c.operationCategory });
       eventTotals[evt.type] = r2((eventTotals[evt.type] || 0) + evt.amount);
     });
   });
@@ -402,6 +414,7 @@ export function calculateClosingReconciliation(contracts, settlementsByContract,
     const principalDelta = r2(curr.principalShort - prev.principalShort);
     const jurosDelta = r2(curr.jurosShort - prev.jurosShort);
 
+    const operationCategory = contract.operation_category || "emprestimos";
     if (Math.abs(principalDelta) > EPS) {
       const evt = {
         type: SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_PRINCIPAL,
@@ -409,6 +422,7 @@ export function calculateClosingReconciliation(contracts, settlementsByContract,
         date: cutoff,
         direction: principalDelta > 0 ? "to_circulante" : "to_nao_circulante",
         contractId: contract.id,
+        operationCategory,
       };
       aggregatedEvents.push(evt);
       eventTotals[evt.type] = r2((eventTotals[evt.type] || 0) + evt.amount);
@@ -420,6 +434,7 @@ export function calculateClosingReconciliation(contracts, settlementsByContract,
         date: cutoff,
         direction: jurosDelta > 0 ? "to_circulante" : "to_nao_circulante",
         contractId: contract.id,
+        operationCategory,
       };
       aggregatedEvents.push(evt);
       eventTotals[evt.type] = r2((eventTotals[evt.type] || 0) + evt.amount);
@@ -463,16 +478,25 @@ const RECLASSIFICATION_EVENT_TYPES = new Set([
   SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_JUROS,
 ]);
 
+function mappingKey(eventType, operationCategory) {
+  return `${eventType}::${operationCategory || "emprestimos"}`;
+}
+
 export function buildJournalEntries(reconciliation, eventMappings, entryDate) {
-  const mappingByType = new Map(eventMappings.filter((m) => m.status !== "inativo").map((m) => [m.event_type, m]));
+  const mappingByType = new Map(
+    eventMappings
+      .filter((m) => m.status !== "inativo")
+      .map((m) => [mappingKey(m.event_type, m.operation_category), m])
+  );
   const entries = [];
-  const missingMappings = new Set();
+  const missingMappingsMap = new Map();
 
   reconciliation.aggregatedEvents.forEach((evt) => {
     if (evt.amount === 0) return;
-    const mapping = mappingByType.get(evt.type);
+    const mapping = mappingByType.get(mappingKey(evt.type, evt.operationCategory));
     if (!mapping) {
-      missingMappings.add(evt.type);
+      const key = mappingKey(evt.type, evt.operationCategory);
+      missingMappingsMap.set(key, { type: evt.type, operationCategory: evt.operationCategory || "emprestimos" });
       return;
     }
     const historico = `${EVENT_TYPE_LABELS[evt.type] || evt.type} — ${evt.date || entryDate}`;
@@ -516,7 +540,7 @@ export function buildJournalEntries(reconciliation, eventMappings, entryDate) {
     totalDebito,
     totalCredito,
     balanced: Math.abs(totalDebito - totalCredito) < EPS,
-    missingMappings: Array.from(missingMappings),
+    missingMappings: Array.from(missingMappingsMap.values()),
   };
 }
 
@@ -528,7 +552,10 @@ export function canApproveClosing({ journalResult, reconciliation, previousClosi
   const reasons = [];
   if (!journalResult.balanced) reasons.push("Total de débitos e créditos não coincide.");
   if (journalResult.missingMappings.length > 0) {
-    reasons.push(`Matriz contábil incompleta para: ${journalResult.missingMappings.map((t) => EVENT_TYPE_LABELS[t] || t).join(", ")}.`);
+    const labels = journalResult.missingMappings.map(
+      (m) => `${EVENT_TYPE_LABELS[m.type] || m.type} (${OPERATION_CATEGORY_LABELS[m.operationCategory] || m.operationCategory})`
+    );
+    reasons.push(`Matriz contábil incompleta para: ${labels.join(", ")}.`);
   }
   if (reconciliation.hasBlockingDivergence) {
     reasons.push("Existem baixas que exigem recálculo do contrato antes de aprovar (reabra o contrato no Simulador).");

@@ -152,7 +152,7 @@ export const ENTITIES = {
   },
   AccountingEventMapping: {
     table: "accounting_event_mappings",
-    columns: ["entity_id", "event_type", "debit_account_id", "credit_account_id", "status"],
+    columns: ["entity_id", "event_type", "operation_category", "debit_account_id", "credit_account_id", "status"],
     booleans: [],
     numbers: [],
   },
