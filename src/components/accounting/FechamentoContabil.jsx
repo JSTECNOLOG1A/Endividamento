@@ -156,7 +156,7 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Baixa de parcela — {contract.contract_number}</DialogTitle>
+          <DialogTitle>Baixa de parcela — {contract?.contract_number}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2 max-h-[70vh] overflow-y-auto pr-1">
           <div className="grid grid-cols-2 gap-3">
