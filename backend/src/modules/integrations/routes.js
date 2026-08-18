@@ -66,6 +66,7 @@ integrationsRouter.post("/", async (req, res, next) => {
       action: "CREATE",
       resourceType: "Integration",
       resourceId: created.id,
+      after: created,
       payload: { code: created.code, nome: created.nome },
     });
     res.status(201).json(created);
@@ -77,12 +78,15 @@ integrationsRouter.post("/", async (req, res, next) => {
 integrationsRouter.put("/:code", async (req, res, next) => {
   try {
     const body = parseOrThrow(service.updateSchema, req.body);
+    const before = await service.getByCode(req.params.code);
     const updated = await service.updateByCode(req.params.code, body);
     await writeAudit({
       req,
       action: "UPDATE",
       resourceType: "Integration",
       resourceId: updated.id,
+      before,
+      after: updated,
       payload: { code: updated.code },
     });
     res.json(updated);
@@ -94,12 +98,15 @@ integrationsRouter.put("/:code", async (req, res, next) => {
 integrationsRouter.patch("/:code/status", async (req, res, next) => {
   try {
     const body = parseOrThrow(service.statusSchema, req.body);
+    const before = await service.getByCode(req.params.code);
     const updated = await service.updateStatusByCode(req.params.code, body.status);
     await writeAudit({
       req,
       action: "STATUS",
       resourceType: "Integration",
       resourceId: updated.id,
+      before,
+      after: updated,
       payload: { status: body.status },
     });
     res.json(updated);
@@ -116,6 +123,7 @@ integrationsRouter.delete("/:code", async (req, res, next) => {
       action: "DELETE",
       resourceType: "Integration",
       resourceId: removed.id,
+      before: removed,
       payload: { code: removed.code },
     });
     res.json(removed);

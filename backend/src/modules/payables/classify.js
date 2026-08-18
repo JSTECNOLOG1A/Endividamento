@@ -91,7 +91,7 @@ export async function classifyPayableTitles(payload = {}) {
   }
 
   const result = await pool.query(
-    `UPDATE payable_titles SET ${sets.join(", ")} WHERE ${where} RETURNING id`,
+    `UPDATE payable_titles SET ${sets.join(", ")} WHERE ${where} RETURNING id, prefixo, titulo_numero, parcela, tipo`,
     params
   );
 
@@ -101,5 +101,6 @@ export async function classifyPayableTitles(payload = {}) {
     natureza: nature.codigo,
     applyByType,
     entity_id: entityId,
+    titulos: result.rows,
   };
 }

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Plug, KeyRound, Link2, Plus, Trash2, Unplug, Building2 } from "lucide-react";
 import { toast } from "@/lib/notify";
+import { useProcessing } from "@/lib/ProcessingContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -60,6 +61,7 @@ export default function IntegrationForm({
   onSubmit,
   onCancel,
 }) {
+  const { withProcessing } = useProcessing();
   const [testingKey, setTestingKey] = useState(null);
   const needsCredential = formData.authType !== "none";
   const isBasic = formData.authType === "basic";
@@ -114,35 +116,37 @@ export default function IntegrationForm({
     }
 
     setTestingKey(key);
-    try {
-      const result = await integrationsApi.testConnection({
-        code: integrationCode,
-        baseUrl: formData.baseUrl.trim(),
-        authType: formData.authType,
-        authHeader: formData.authHeader.trim() || undefined,
-        username: formData.username.trim() || undefined,
-        credential: formData.credential.trim() || undefined,
-        timeoutSeconds: Number(formData.timeoutSeconds) || 30,
-        path,
-        metodo,
-        erpNome: formData.erpNome.trim() || undefined,
-        grupoEmpresas: formData.grupoEmpresas.trim() || undefined,
-        empresa: formData.empresa.trim() || undefined,
-        filial: formData.filial.trim() || undefined,
-      });
-      if (result?.ok) toast.success(result.message);
-      else if (result?.reached) toast.warning(result.message);
-      else toast.error(result?.message || "Não foi possível testar a conexão");
-    } catch (error) {
-      toast.error(
-        error.data?.details?.baseUrl ||
-        error.data?.error ||
-        error.message ||
-        "Falha ao testar a conexão"
-      );
-    } finally {
-      setTestingKey(null);
-    }
+    await withProcessing("Testando conexão com o ERP…", async () => {
+      try {
+        const result = await integrationsApi.testConnection({
+          code: integrationCode,
+          baseUrl: formData.baseUrl.trim(),
+          authType: formData.authType,
+          authHeader: formData.authHeader.trim() || undefined,
+          username: formData.username.trim() || undefined,
+          credential: formData.credential.trim() || undefined,
+          timeoutSeconds: Number(formData.timeoutSeconds) || 30,
+          path,
+          metodo,
+          erpNome: formData.erpNome.trim() || undefined,
+          grupoEmpresas: formData.grupoEmpresas.trim() || undefined,
+          empresa: formData.empresa.trim() || undefined,
+          filial: formData.filial.trim() || undefined,
+        });
+        if (result?.ok) toast.success(result.message);
+        else if (result?.reached) toast.warning(result.message);
+        else toast.error(result?.message || "Não foi possível testar a conexão");
+      } catch (error) {
+        toast.error(
+          error.data?.details?.baseUrl ||
+          error.data?.error ||
+          error.message ||
+          "Falha ao testar a conexão"
+        );
+      } finally {
+        setTestingKey(null);
+      }
+    });
   }
 
   return (

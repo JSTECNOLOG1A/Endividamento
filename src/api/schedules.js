@@ -14,9 +14,54 @@ export const INTERVAL_OPTIONS = [
   { value: 1440, label: "A cada 24 horas" },
 ];
 
+export const DAY_OPTIONS = Array.from({ length: 31 }, (_, index) => {
+  const day = index + 1;
+  return {
+    value: day,
+    label: day === 31 ? "Dia 31 (ou último dia do mês)" : `Dia ${day}`,
+  };
+});
+
 export function intervalLabel(minutes) {
   const option = INTERVAL_OPTIONS.find((item) => item.value === Number(minutes));
   return option?.label || `A cada ${minutes} min`;
+}
+
+export function scheduleLabel(item) {
+  if (item?.modo === "mensal" && item.diaMes) {
+    const hora = String(item.horaExecucao || "00:10").slice(0, 5);
+    return `Todo mês, dia ${item.diaMes}, às ${hora}`;
+  }
+  return intervalLabel(item?.intervaloMinutos);
+}
+
+export function payloadFromCatalogTask(task) {
+  const mensal = task?.defaultModo === "mensal";
+  return {
+    nome: task.defaultNome || task.label,
+    tarefa: task.key,
+    modo: mensal ? "mensal" : "intervalo",
+    intervaloMinutos: Number(task.defaultIntervaloMinutos) || (mensal ? 1440 : 60),
+    diaMes: mensal ? Number(task.defaultDiaMes) || 1 : null,
+    horaExecucao: mensal ? (task.defaultHoraExecucao || "00:10") : null,
+    ativo: true,
+  };
+}
+
+export function formFromCatalogTask(task, current = {}, previousTask = null) {
+  const payload = payloadFromCatalogTask(task);
+  const autoNome = !current.nome?.trim()
+    || current.nome === previousTask?.defaultNome
+    || current.nome === previousTask?.label;
+  return {
+    nome: autoNome ? payload.nome : current.nome,
+    tarefa: payload.tarefa,
+    modo: payload.modo,
+    intervaloMinutos: payload.intervaloMinutos,
+    diaMes: payload.diaMes || 1,
+    horaExecucao: payload.horaExecucao || "00:10",
+    ativo: current.ativo !== false,
+  };
 }
 
 export const schedulesApi = {

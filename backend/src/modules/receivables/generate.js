@@ -122,7 +122,9 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
     if (existing.rows.length > 1) {
       await client.query(`DELETE FROM receivable_titles WHERE contract_id = $1`, [contract.id]);
     }
+    const createdRows = [];
     for (const title of titles) {
+      const id = randomUUID();
       await client.query(
         `INSERT INTO receivable_titles (
            id, entity_id, contract_id, parcela, titulo_numero, tipo, prefixo,
@@ -130,7 +132,7 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
            cliente, cliente_loja, cliente_nome, filial, filial_origem, created_by
          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
         [
-          randomUUID(),
+          id,
           title.entity_id,
           title.contract_id,
           title.parcela,
@@ -153,13 +155,21 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
           createdBy,
         ]
       );
+      createdRows.push({
+        id,
+        prefixo: title.prefixo,
+        titulo_numero: title.titulo_numero,
+        parcela: title.parcela,
+        tipo: title.tipo,
+        contract_id: title.contract_id,
+      });
     }
     await client.query(
       `UPDATE loan_contracts SET exported_to_receivables = true, updated_date = now() WHERE id = $1`,
       [contract.id]
     );
     await client.query("COMMIT");
-    return { created: titles.length, skipped: false };
+    return { created: createdRows.length, skipped: false, titulos: createdRows };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -182,12 +192,14 @@ export async function syncReceivableTitlesFromApprovedContracts() {
   );
   let created = 0;
   let contracts = 0;
+  const titulos = [];
   for (const row of result.rows) {
     const generated = await generateReceivableTitlesForContract(row, row.created_by || "system");
     if (generated.created > 0) {
       created += generated.created;
       contracts += 1;
+      if (Array.isArray(generated.titulos)) titulos.push(...generated.titulos);
     }
   }
-  return { created, contracts, scanned: result.rows.length };
+  return { created, contracts, scanned: result.rows.length, titulos };
 }

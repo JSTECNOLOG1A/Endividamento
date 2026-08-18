@@ -868,12 +868,19 @@ export async function refreshPayableTitlesFromErp(payload = {}) {
     throw error;
   }
 
+  const regardlessOfStatus = Boolean(payload.regardlessOfStatus);
   const params = [];
-  let sql = `SELECT * FROM payable_titles
-     WHERE (integrado_erp IS TRUE OR erp_status IN ('integrado', 'baixado'))`;
-  if (ids.length) {
+  let sql;
+  if (ids.length && regardlessOfStatus) {
     params.push(ids);
-    sql += ` AND id = ANY($1::text[])`;
+    sql = `SELECT * FROM payable_titles WHERE id = ANY($1::text[])`;
+  } else {
+    sql = `SELECT * FROM payable_titles
+     WHERE (integrado_erp IS TRUE OR erp_status IN ('integrado', 'baixado'))`;
+    if (ids.length) {
+      params.push(ids);
+      sql += ` AND id = ANY($1::text[])`;
+    }
   }
   sql += ` ORDER BY vencimento ASC, parcela ASC`;
 

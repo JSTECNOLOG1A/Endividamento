@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { writeAudit } from "../../middleware/audit.js";
 import * as service from "./service.js";
+import { taskMeta } from "./tasks.js";
 
 export const schedulesRouter = Router();
 
@@ -39,10 +40,14 @@ schedulesRouter.post("/run-task", async (req, res, next) => {
   try {
     const body = parseOrThrow(service.runTaskSchema, req.body);
     const result = await service.executeTask(body.tarefa, "manual");
+    const meta = taskMeta(body.tarefa);
     await writeAudit({
       req,
       action: "RUN",
       resourceType: "ScheduledJob",
+      rotina: meta?.rotina || "Agendamento",
+      registro: result.resumo || meta?.label || body.tarefa,
+      after: result,
       payload: { tarefa: body.tarefa, origem: "manual" },
     });
     res.json(result);
@@ -68,6 +73,7 @@ schedulesRouter.post("/", async (req, res, next) => {
       action: "CREATE",
       resourceType: "ScheduledJob",
       resourceId: created.id,
+      after: created,
       payload: { tarefa: created.tarefa },
     });
     res.status(201).json(created);
@@ -79,12 +85,16 @@ schedulesRouter.post("/", async (req, res, next) => {
 schedulesRouter.put("/:id", async (req, res, next) => {
   try {
     const body = parseOrThrow(service.updateSchema, req.body);
+    const current = await service.getById(req.params.id);
+    const { runs: _runs, ...before } = current;
     const updated = await service.updateById(req.params.id, body);
     await writeAudit({
       req,
       action: "UPDATE",
       resourceType: "ScheduledJob",
       resourceId: updated.id,
+      before,
+      after: updated,
     });
     res.json(updated);
   } catch (error) {
@@ -95,12 +105,16 @@ schedulesRouter.put("/:id", async (req, res, next) => {
 schedulesRouter.patch("/:id/status", async (req, res, next) => {
   try {
     const body = parseOrThrow(service.statusSchema, req.body);
+    const current = await service.getById(req.params.id);
+    const { runs: _statusRuns, ...before } = current;
     const updated = await service.updateStatusById(req.params.id, body.ativo);
     await writeAudit({
       req,
       action: "STATUS",
       resourceType: "ScheduledJob",
       resourceId: updated.id,
+      before,
+      after: updated,
       payload: { ativo: body.ativo },
     });
     res.json(updated);
@@ -111,12 +125,16 @@ schedulesRouter.patch("/:id/status", async (req, res, next) => {
 
 schedulesRouter.post("/:id/run", async (req, res, next) => {
   try {
+    const current = await service.getById(req.params.id);
     const result = await service.runJob(req.params.id, "manual");
     await writeAudit({
       req,
       action: "RUN",
       resourceType: "ScheduledJob",
       resourceId: req.params.id,
+      rotina: current.rotina || "Agendamento",
+      registro: result.resumo || current.nome || current.tarefaLabel || current.tarefa,
+      after: result,
       payload: { origem: "manual" },
     });
     res.json(result);
@@ -133,6 +151,7 @@ schedulesRouter.delete("/:id", async (req, res, next) => {
       action: "DELETE",
       resourceType: "ScheduledJob",
       resourceId: removed.id,
+      before: removed,
     });
     res.json(removed);
   } catch (error) {

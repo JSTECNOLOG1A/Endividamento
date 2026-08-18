@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool.js";
 import { taskMeta } from "./tasks.js";
+import { formatHoraExecucao } from "./nextRun.js";
 
 function httpError(status, message, details) {
   const err = new Error(message);
@@ -17,7 +18,10 @@ export function toPublic(row) {
     tarefa: row.tarefa,
     tarefaLabel: meta?.label || row.tarefa,
     rotina: meta?.rotina || "",
+    modo: row.modo || "intervalo",
     intervaloMinutos: row.intervalo_minutos,
+    diaMes: row.dia_mes ?? null,
+    horaExecucao: formatHoraExecucao(row.hora_execucao),
     ativo: Boolean(row.ativo),
     executando: Boolean(row.executando),
     ultimaExecucaoEm: row.ultima_execucao_em,
@@ -37,6 +41,11 @@ export async function list() {
   return result.rows.map(toPublic);
 }
 
+export async function listRaw() {
+  const result = await pool.query(`SELECT * FROM scheduled_jobs`);
+  return result.rows;
+}
+
 export async function findById(id) {
   const result = await pool.query(`SELECT * FROM scheduled_jobs WHERE id = $1`, [id]);
   return result.rows[0] || null;
@@ -51,14 +60,18 @@ export async function create(row) {
   try {
     const result = await pool.query(
       `INSERT INTO scheduled_jobs (
-         id, nome, tarefa, intervalo_minutos, ativo, proxima_execucao_em, created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+         id, nome, tarefa, intervalo_minutos, modo, dia_mes, hora_execucao,
+         ativo, proxima_execucao_em, created_by
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         row.id,
         row.nome,
         row.tarefa,
         row.intervaloMinutos,
+        row.modo || "intervalo",
+        row.diaMes ?? null,
+        row.horaExecucao || null,
         row.ativo,
         row.proximaExecucaoEm,
         row.createdBy,
@@ -76,24 +89,40 @@ export async function create(row) {
 export async function update(id, patch) {
   const current = await findById(id);
   if (!current) throw httpError(404, "Agendamento não encontrado");
+  const next = {
+    nome: patch.nome ?? current.nome,
+    tarefa: patch.tarefa ?? current.tarefa,
+    intervaloMinutos: patch.intervaloMinutos ?? current.intervalo_minutos,
+    modo: patch.modo ?? current.modo ?? "intervalo",
+    diaMes: patch.diaMes === undefined ? current.dia_mes : patch.diaMes,
+    horaExecucao: patch.horaExecucao === undefined ? current.hora_execucao : patch.horaExecucao,
+    ativo: patch.ativo ?? current.ativo,
+    proximaExecucaoEm: patch.proximaExecucaoEm === undefined ? current.proxima_execucao_em : patch.proximaExecucaoEm,
+  };
   try {
     const result = await pool.query(
       `UPDATE scheduled_jobs SET
-         nome = COALESCE($2, nome),
-         tarefa = COALESCE($3, tarefa),
-         intervalo_minutos = COALESCE($4, intervalo_minutos),
-         ativo = COALESCE($5, ativo),
-         proxima_execucao_em = COALESCE($6, proxima_execucao_em),
+         nome = $2,
+         tarefa = $3,
+         intervalo_minutos = $4,
+         modo = $5,
+         dia_mes = $6,
+         hora_execucao = $7,
+         ativo = $8,
+         proxima_execucao_em = $9,
          updated_date = now()
        WHERE id = $1
        RETURNING *`,
       [
         id,
-        patch.nome ?? null,
-        patch.tarefa ?? null,
-        patch.intervaloMinutos ?? null,
-        patch.ativo ?? null,
-        patch.proximaExecucaoEm ?? null,
+        next.nome,
+        next.tarefa,
+        next.intervaloMinutos,
+        next.modo,
+        next.diaMes,
+        next.horaExecucao,
+        next.ativo,
+        next.proximaExecucaoEm,
       ]
     );
     return result.rows[0];
@@ -141,19 +170,18 @@ export async function releaseStuckJobs() {
   );
 }
 
-export async function finishRun(id, { ok, message, intervaloMinutos }) {
-  const minutes = Math.max(Number(intervaloMinutos) || 1, 1);
+export async function finishRun(id, { ok, message, nextAt }) {
   const result = await pool.query(
     `UPDATE scheduled_jobs SET
        executando = FALSE,
        ultima_execucao_em = now(),
        ultima_execucao_ok = $2,
        ultima_mensagem = $3,
-       proxima_execucao_em = now() + ($4::int * interval '1 minute'),
+       proxima_execucao_em = $4,
        updated_date = now()
      WHERE id = $1
      RETURNING *`,
-    [id, ok, message ?? null, minutes]
+    [id, ok, message ?? null, nextAt ?? null]
   );
   return result.rows[0];
 }

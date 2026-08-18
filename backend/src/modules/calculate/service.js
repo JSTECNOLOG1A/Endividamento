@@ -48,6 +48,12 @@ export async function calculateAmortizationScheduleOnServer(payload = {}, req) {
       action: "CALCULATE",
       resourceType: "LoanContract",
       resourceId: payload.contractId || null,
+      registro: payload.contractId || "cálculo",
+      after: {
+        calculationSystem: params.calculationSystem,
+        indexer: params.indexer,
+        engine_build_id: ENGINE_BUILD_ID,
+      },
       payload: {
         calculationSystem: params.calculationSystem,
         indexer: params.indexer,

@@ -1,5 +1,5 @@
 import { logger } from "../../logger.js";
-import { runDueJobs } from "./service.js";
+import { refreshUpcomingRuns, runDueJobs } from "./service.js";
 import { releaseStuckJobs } from "./store.js";
 
 const TICK_MS = 20_000;
@@ -23,13 +23,19 @@ async function tick() {
 
 export function startScheduler() {
   if (timer) return stopScheduler;
-  releaseStuckJobs().catch((error) => {
-    logger.warn({ err: error }, "não foi possível liberar agendamentos travados");
-  });
-  timer = setInterval(tick, TICK_MS);
-  timer.unref?.();
-  tick();
-  logger.info({ everyMs: TICK_MS }, "worker de agendamentos iniciado");
+  (async () => {
+    try {
+      await releaseStuckJobs();
+      await refreshUpcomingRuns();
+    } catch (error) {
+      logger.warn({ err: error }, "não foi possível preparar os agendamentos");
+    }
+    if (timer) return;
+    timer = setInterval(tick, TICK_MS);
+    timer.unref?.();
+    tick();
+    logger.info({ everyMs: TICK_MS }, "worker de agendamentos iniciado");
+  })();
   return stopScheduler;
 }
 
