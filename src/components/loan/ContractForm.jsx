@@ -18,63 +18,14 @@ import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCi
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 
-const OPERATION_CATEGORIES = [
-  { value: "emprestimos", label: "Empréstimos (Capital de Giro)" },
-  { value: "financiamentos", label: "Financiamentos (Investimento/CAPEX)" },
-];
-
-const OPERATION_TYPES = {
-  emprestimos: [
-    { value: "giro_prefixado", label: "Giro Prefixado" },
-    { value: "giro_cdi", label: "Giro CDI" },
-    { value: "conta_garantida", label: "Conta Garantida" },
-    { value: "emprestimo_moeda_estrangeira_4131", label: "Empréstimo em Moeda Estrangeira (4131)" },
-  ],
-  financiamentos: [
-    { value: "bndes_finame", label: "BNDES/FINAME" },
-    { value: "credito_rural_custeio", label: "Crédito Rural (Custeio)" },
-    { value: "credito_rural_investimento_solos", label: "Crédito rural (Investimento em solos)" },
-    { value: "leasing", label: "Leasing Imobiliário/Equipamentos" },
-    { value: "cri_cra", label: "CRI/CRA" },
-  ],
-};
-
-const PERIODICITIES = [
-  { value: "1", label: "Mensal" },
-  { value: "2", label: "Bimestral" },
-  { value: "3", label: "Trimestral" },
-  { value: "6", label: "Semestral" },
-  { value: "12", label: "Anual" },
-  { value: "bullet", label: "No Vencimento" },
-];
-
-const SYSTEMS = [
-  { 
-    value: "SAC", 
-    label: "SAC — Amortização Constante",
-    description: "Sistema de Amortização Constante: Parcelas decrescentes ao longo do tempo. A amortização do principal é fixa, enquanto os juros diminuem a cada período, resultando em prestações menores progressivamente. Ideal para planejamento com redução de compromisso financeiro."
-  },
-  { 
-    value: "PRICE", 
-    label: "PRICE — Prestação Constante",
-    description: "Sistema Francês de Amortização: Prestações fixas durante todo o contrato. Nos primeiros períodos, a maior parte da prestação é composta por juros; gradualmente, a amortização do principal aumenta. Facilita o orçamento mensal por ter parcelas constantes."
-  },
-  { 
-    value: "AMERICANO", 
-    label: "Americano — Juros Periódicos",
-    description: "Sistema Americano: Pagamento de juros em cada período, com amortização total do principal apenas no vencimento final. Mantém prestações baixas durante o período, mas requer planejamento para pagamento do valor principal no final. Comum em operações estruturadas."
-  },
-  { 
-    value: "BULLET", 
-    label: "Bullet — Pagamento Único",
-    description: "Pagamento Bullet: Todo o valor (principal + juros acumulados) é pago em uma única parcela no vencimento. Não há pagamentos intermediários. Utilizado em operações de curto prazo ou quando há previsão de entrada de recursos específica na data de vencimento."
-  },
-  { 
-    value: "PERCENTAGE_RESIDUAL", 
-    label: "% Residual — Percentual sobre SD",
-    description: "Amortização por Percentual sobre Saldo Devedor: Cada parcela amortiza um percentual configurável do saldo devedor inicial do período (antes de capitalizar juros). Usado por Banco da Amazônia e outras instituições em operações estruturadas."
-  },
-];
+import {
+  OPERATION_CATEGORIES,
+  OPERATION_TYPES,
+  PERIODICITIES,
+  SYSTEMS,
+  GUARANTEE_REAL_TYPES,
+  GUARANTEE_PERSONAL_TYPES,
+} from "@/lib/contractOptions";
 
 const defaultForm = {
   group_id: "",
@@ -85,6 +36,8 @@ const defaultForm = {
   contract_number: "",
   operation_category: "",
   operation_type: "",
+  guarantee_real_type: "",
+  guarantee_personal_type: "",
   operation_value: "",
   amount_foreign: "",
   exchange_rate_closing: "",
@@ -141,6 +94,8 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
         contract_number: initialData.contract_number || "",
         operation_category: initialData.operation_category || "",
         operation_type: initialData.operation_type || "",
+        guarantee_real_type: initialData.guarantee_real_type || "",
+        guarantee_personal_type: initialData.guarantee_personal_type || "",
         operation_value: initialData.operation_value || "",
         amount_foreign: initialData.amount_foreign || "",
         exchange_rate_closing: initialData.exchange_rate_closing || "",
@@ -195,6 +150,8 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       contract_number: form.contract_number,
       operation_category: form.operation_category,
       operation_type: form.operation_type,
+      guarantee_real_type: form.guarantee_real_type,
+      guarantee_personal_type: form.guarantee_personal_type,
     });
   }, [
     isLoaded,
@@ -204,19 +161,45 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     form.contract_number,
     form.operation_category,
     form.operation_type,
+    form.guarantee_real_type,
+    form.guarantee_personal_type,
   ]);
 
   // Ao carregar (novo formulário ou contrato aberto para edição), verificar se existe
   // um rascunho salvo automaticamente que difere do estado atual, e oferecer restauração.
+  //
+  // Dois filtros evitam que o aviso apareça sem necessidade (era o caso
+  // antes: qualquer tentativa de "novo contrato" abandonada — mesmo sem
+  // nada de relevante preenchido — ficava presa para sempre na chave
+  // compartilhada "endividamento_draft_new" e voltava a aparecer em TODA
+  // tentativa seguinte de criar um contrato novo, mesmo meses depois):
+  //  1. Só mostra se o rascunho tem conteúdo substantivo (Grupo/Entidade/
+  //     Banco/Nº Contrato/Valor) — não só os valores padrão do formulário.
+  //  2. Rascunhos com mais de 24h são descartados silenciosamente (o
+  //     usuário provavelmente nem lembra mais deles).
+  const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
   React.useEffect(() => {
     if (!isLoaded) return;
     try {
       const raw = localStorage.getItem(draftStorageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed?.form && JSON.stringify(parsed.form) !== JSON.stringify(form)) {
-          setDraftBanner(parsed);
-        }
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+
+      const ageMs = parsed?.savedAt ? Date.now() - new Date(parsed.savedAt).getTime() : Infinity;
+      const isStale = !Number.isFinite(ageMs) || ageMs > DRAFT_MAX_AGE_MS;
+      const f = parsed?.form;
+      const hasSubstantiveContent = !!(
+        f && (f.group_id || f.entity_id || f.bank_id || f.contract_number ||
+          (f.operation_value && f.operation_value !== "0"))
+      );
+
+      if (isStale || !hasSubstantiveContent) {
+        localStorage.removeItem(draftStorageKey);
+        return;
+      }
+
+      if (JSON.stringify(f) !== JSON.stringify(form)) {
+        setDraftBanner(parsed);
       }
     } catch (err) {
       console.error("Erro ao ler rascunho salvo:", err);
@@ -567,6 +550,52 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                   {form.operation_category && OPERATION_TYPES[form.operation_category]?.map((o) => (
                     <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Garantia Real (Opcional)
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">Garantias focadas em bens e direitos (Alienação Fiduciária, Hipoteca, Penhor, Cessão de Recebíveis)</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Select value={form.guarantee_real_type || ""} onValueChange={(v) => update("guarantee_real_type", v === "none" ? "" : v)}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Sem garantia real" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem garantia real</SelectItem>
+                  {GUARANTEE_REAL_TYPES.map((g) => (<SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Garantia Pessoal / Fidejussória (Opcional)
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">Garantias focadas em pessoas (Aval, Fiança)</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Select value={form.guarantee_personal_type || ""} onValueChange={(v) => update("guarantee_personal_type", v === "none" ? "" : v)}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Sem garantia pessoal" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem garantia pessoal</SelectItem>
+                  {GUARANTEE_PERSONAL_TYPES.map((g) => (<SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>

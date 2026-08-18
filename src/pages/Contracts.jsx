@@ -11,15 +11,25 @@ import ContractsList from "../components/loan/ContractsList";
 import AmortizationTable from "../components/loan/AmortizationTable";
 import ScheduleChart from "../components/loan/ScheduleChart";
 import ContractWorkflow from "../components/loan/ContractWorkflow";
+import ContractSummary from "../components/loan/ContractSummary";
 import { createPageUrl } from "../utils";
 import { statusLabel } from "../lib/contractStatus";
 import { toBRDecimalString } from "../lib/brNumber";
+import { computeContractCET } from "../lib/cetFromSchedule";
 
 export default function Contracts() {
   const [selected, setSelected] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [bankFilter, setBankFilter] = useState("all");
+  // Controla o painel lateral com o PDF do contrato (conferência lado a
+  // lado no modo de revisão). Começa aberto automaticamente sempre que um
+  // contrato com PDF anexado é selecionado.
+  const [showPdf, setShowPdf] = useState(false);
   const queryClient = useQueryClient();
+
+  React.useEffect(() => {
+    setShowPdf(!!selected?.contract?.contract_pdf_url);
+  }, [selected?.contract?.id]);
 
   const { data: contracts, isLoading } = useQuery({
     queryKey: ["contracts"],
@@ -36,6 +46,26 @@ export default function Contracts() {
   const { data: banks } = useQuery({
     queryKey: ["banks"],
     queryFn: () => base44.entities.Bank.list("", 100),
+    initialData: [],
+  });
+
+  // Grupo/Entidade/Moeda — necessários para resolver nomes na aba "Dados do
+  // Contrato" (visão somente-leitura completa usada na revisão/aprovação).
+  const { data: groups } = useQuery({
+    queryKey: ["groups"],
+    queryFn: () => base44.entities.Group.list("", 100),
+    initialData: [],
+  });
+
+  const { data: entities } = useQuery({
+    queryKey: ["entities"],
+    queryFn: () => base44.entities.CompanyEntity.list("", 100),
+    initialData: [],
+  });
+
+  const { data: currencies } = useQuery({
+    queryKey: ["currencies"],
+    queryFn: () => base44.entities.Currency.list("", 100),
     initialData: [],
   });
 
@@ -64,6 +94,11 @@ export default function Contracts() {
   const handleView = (contract) => {
     const scheduleData = contract.schedule_data ? JSON.parse(contract.schedule_data) : {};
     const schedule = scheduleData.schedule || scheduleData || [];
+    // O CET e a Taxa Nominal não ficam salvos em schedule_data (só o
+    // cronograma é persistido) — por isso são recalculados aqui a partir do
+    // próprio contrato + cronograma já salvos, sem precisar rodar o motor
+    // de cálculo completo. Ver src/lib/cetFromSchedule.js.
+    const { cet, fixedRateNominal } = computeContractCET(contract, schedule);
     setSelected({
       contract,
       result: {
@@ -74,6 +109,8 @@ export default function Contracts() {
         schedule,
         totalJuros: schedule.reduce((s, r) => s + (r.jurosFixosMes || 0) + (r.jurosVariaveisMes || 0), 0),
         totalPrestacao: schedule.reduce((s, r) => s + (r.prestacao || 0), 0),
+        cet,
+        fixedRateNominal,
       },
     });
   };
@@ -95,6 +132,8 @@ export default function Contracts() {
       currency_id: contract.currency_id,
       contract_number: "",
       operation_type: contract.operation_type,
+      guarantee_real_type: contract.guarantee_real_type || "",
+      guarantee_personal_type: contract.guarantee_personal_type || "",
       operation_value: contract.operation_value,
       signal_value: toBRDecimalString(contract.signal_value ?? 0),
       iof_value: toBRDecimalString(contract.iof_value ?? 0),
@@ -122,59 +161,122 @@ export default function Contracts() {
 
   if (selected) {
     const bankName = banks.find(b => b.id === selected.contract.bank_id)?.bank_name || "N/A";
-    
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        <Button variant="ghost" size="sm" onClick={() => setSelected(null)} className="mb-4 gap-1.5 text-xs">
-          <ArrowLeft className="w-3.5 h-3.5" /> Voltar
-        </Button>
-        <div className="space-y-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-3">
-                  {bankName} — {selected.contract.contract_number}
-                  <Badge variant={selected.contract.status === "aprovado" ? "default" : "secondary"}>
-                    {statusLabel(selected.contract.status)}
-                  </Badge>
-                </CardTitle>
-                <p className="text-sm text-slate-500 mt-1">
-                  {selected.contract.calculation_system} • {selected.contract.fixed_rate}% a.a.
-                  {selected.contract.indexer !== "NA" ? ` + ${selected.contract.indexer}` : ""}
-                </p>
-              </div>
-              <ContractWorkflow
-                contract={selected.contract}
-                user={user}
-                onStatusChange={() => {
-                  queryClient.invalidateQueries(["contracts"]);
-                  setSelected(null);
-                }}
-                onDuplicate={() => handleDuplicate(selected.contract)}
-              />
-            </CardHeader>
-            {selected.contract.status === "cancelado" && selected.contract.rejection_comments && (
-              <CardContent className="pt-0">
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                  <span className="font-semibold">Motivo da devolução: </span>
-                  {selected.contract.rejection_comments}
-                </div>
-              </CardContent>
-            )}
-          </Card>
+    const hasPdf = !!selected.contract.contract_pdf_url;
+    const pdfVisible = showPdf && hasPdf;
 
-          <Tabs defaultValue="tabela">
-            <TabsList className="bg-slate-100">
-              <TabsTrigger value="tabela" className="text-xs">Memória de Cálculo</TabsTrigger>
-              <TabsTrigger value="graficos" className="text-xs">Gráficos</TabsTrigger>
-            </TabsList>
-            <TabsContent value="tabela" className="mt-4">
-              <AmortizationTable result={selected.result} params={selected.contract} />
-            </TabsContent>
-            <TabsContent value="graficos" className="mt-4">
-              <ScheduleChart schedule={selected.result.schedule} />
-            </TabsContent>
-          </Tabs>
+    return (
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-8">
+        <div className="flex items-center justify-between mb-4">
+          <Button variant="ghost" size="sm" onClick={() => setSelected(null)} className="gap-1.5 text-xs">
+            <ArrowLeft className="w-3.5 h-3.5" /> Voltar
+          </Button>
+          {hasPdf && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowPdf((v) => !v)}
+              className="gap-1.5 text-xs"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              {pdfVisible ? "Ocultar PDF" : "Ver PDF do Contrato"}
+            </Button>
+          )}
+        </div>
+
+        {/* Com o PDF visível, divide a tela em duas colunas — PDF de um
+            lado, dados calculados do outro — para facilitar a conferência
+            lado a lado durante a revisão/aprovação. */}
+        <div className={pdfVisible ? "grid grid-cols-1 xl:grid-cols-2 gap-6 items-start" : ""}>
+          <div className="space-y-6 min-w-0">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-3">
+                    {bankName} — {selected.contract.contract_number}
+                    <Badge variant={selected.contract.status === "aprovado" ? "default" : "secondary"}>
+                      {statusLabel(selected.contract.status)}
+                    </Badge>
+                  </CardTitle>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {selected.contract.calculation_system} • {selected.contract.fixed_rate}% a.a.
+                    {selected.contract.indexer !== "NA" ? ` + ${selected.contract.indexer}` : ""}
+                  </p>
+                </div>
+                <ContractWorkflow
+                  contract={selected.contract}
+                  user={user}
+                  onStatusChange={() => {
+                    queryClient.invalidateQueries(["contracts"]);
+                    setSelected(null);
+                  }}
+                  onDuplicate={() => handleDuplicate(selected.contract)}
+                />
+              </CardHeader>
+              {selected.contract.status === "cancelado" && selected.contract.rejection_comments && (
+                <CardContent className="pt-0">
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    <span className="font-semibold">Motivo da devolução: </span>
+                    {selected.contract.rejection_comments}
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+
+            {/* "Dados do Contrato" vem como aba padrão: no modo de revisão,
+                o aprovador precisa ver tudo que foi cadastrado
+                (Identificação, valores, taxas, prazos) antes de checar a
+                memória de cálculo — sem precisar clicar em "Editar" só para
+                conferir. É somente leitura; a edição continua isolada no
+                botão "Editar" (Simulador). */}
+            <Tabs defaultValue="dados">
+              <TabsList className="bg-slate-100">
+                <TabsTrigger value="dados" className="text-xs">Dados do Contrato</TabsTrigger>
+                <TabsTrigger value="tabela" className="text-xs">Memória de Cálculo</TabsTrigger>
+                <TabsTrigger value="graficos" className="text-xs">Gráficos</TabsTrigger>
+              </TabsList>
+              <TabsContent value="dados" className="mt-4">
+                <ContractSummary
+                  contract={selected.contract}
+                  groups={groups}
+                  entities={entities}
+                  banks={banks}
+                  currencies={currencies}
+                />
+              </TabsContent>
+              <TabsContent value="tabela" className="mt-4">
+                <AmortizationTable result={selected.result} params={selected.contract} />
+              </TabsContent>
+              <TabsContent value="graficos" className="mt-4">
+                <ScheduleChart schedule={selected.result.schedule} />
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          {pdfVisible && (
+            <div className="xl:sticky xl:top-4">
+              <Card className="overflow-hidden">
+                <CardHeader className="flex flex-row items-center justify-between py-3">
+                  <CardTitle className="text-sm font-semibold text-slate-800">PDF do Contrato</CardTitle>
+                  <a
+                    href={selected.contract.contract_pdf_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Abrir em nova aba
+                  </a>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <iframe
+                    src={selected.contract.contract_pdf_url}
+                    title="PDF do Contrato"
+                    className="w-full border-0"
+                    style={{ height: "calc(100vh - 220px)" }}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
       </div>
     );

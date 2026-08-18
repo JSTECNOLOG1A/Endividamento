@@ -80,7 +80,6 @@ function getUpcomingPayments(contract, referenceDate, months = 12) {
 export default function ConsolidationDashboard({ contracts, groups, entities, banks }) {
   const today = format(new Date(), "yyyy-MM-dd");
   const [referenceDate, setReferenceDate] = useState(today);
-  const [statusFilter, setStatusFilter] = useState("aprovado");
   const [bankFilter, setBankFilter] = useState("all");
   const [operationFilter, setOperationFilter] = useState("all");
   const [drilldownGroup, setDrilldownGroup] = useState(null);
@@ -94,15 +93,19 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
     { value: "FINAME", label: "FINAME" },
   ];
 
-  // Filtrar contratos
+  // Filtrar contratos. A Consolidação é um efeito contábil (posição de
+  // dívida), então só pode refletir contratos Aprovados — isso NÃO é um
+  // filtro que o usuário pode desligar (diferente de Banco/Tipo abaixo,
+  // que são apenas recortes de visualização). Reforçado aqui mesmo que o
+  // componente pai já filtre, como segunda camada de proteção.
   const filteredContracts = useMemo(() => {
     return contracts.filter(c => {
-      if (statusFilter !== "all" && c.status !== statusFilter) return false;
+      if (c.status !== "aprovado") return false;
       if (bankFilter !== "all" && c.bank_id !== bankFilter) return false;
       if (operationFilter !== "all" && c.operation_type !== operationFilter) return false;
       return true;
     });
-  }, [contracts, statusFilter, bankFilter, operationFilter]);
+  }, [contracts, bankFilter, operationFilter]);
 
   const consolidation = useMemo(() => {
     const byGroup = {};
@@ -359,17 +362,12 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
             </div>
             <div>
               <label className="text-xs text-slate-500 mb-1 block">Status</label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="aprovado">Aprovado</SelectItem>
-                  <SelectItem value="rascunho">Rascunho</SelectItem>
-                  <SelectItem value="pendente_aprovacao">Pendente</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center">
+                <Badge variant="default" className="text-xs">Aprovado</Badge>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Consolidação é um efeito contábil: sempre restrita a contratos aprovados.
+              </p>
             </div>
             <div>
               <label className="text-xs text-slate-500 mb-1 block">Banco</label>

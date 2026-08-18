@@ -105,6 +105,8 @@ export default function Simulator() {
         contract_number: contract.contract_number || "",
         operation_category: contract.operation_category || "",
         operation_type: contract.operation_type || "",
+        guarantee_real_type: contract.guarantee_real_type || "",
+        guarantee_personal_type: contract.guarantee_personal_type || "",
         operation_value: contract.operation_value?.toString() || "",
         amount_foreign: contract.amount_foreign || null,
         exchange_rate_closing: contract.exchange_rate_closing || null,
@@ -441,6 +443,8 @@ export default function Simulator() {
       contract_number: formParams.contract_number || `SIM-${Date.now()}`,
       operation_category: formParams.operation_category,
       operation_type: formParams.operation_type,
+      guarantee_real_type: formParams.guarantee_real_type || null,
+      guarantee_personal_type: formParams.guarantee_personal_type || null,
       operation_value: formParams.operation_value,
       amount_foreign: formParams.amount_foreign || null,
       exchange_rate_closing: formParams.exchange_rate_closing || null,
@@ -482,9 +486,8 @@ export default function Simulator() {
       ? "Rascunho salvo com sucesso!"
       : (editingContractId ? "Contrato atualizado e enviado para revisão!" : "Contrato enviado para revisão!");
 
-    // Chave do rascunho local (autosave) ANTES de salvar — usada para
-    // limpar o rascunho certo depois que os dados forem persistidos no
-    // banco (ver comentário abaixo sobre por que não usamos handleReset()).
+    // Chave do rascunho local (autosave) — limpa depois que os dados forem
+    // persistidos no banco, já que a partir daqui saímos da tela.
     const previousDraftKey = editingContractId || "new";
 
     try {
@@ -496,28 +499,14 @@ export default function Simulator() {
       }
       alert(successMessage);
 
-      // IMPORTANTE: não usar handleReset() aqui. handleReset() limpa a tela
-      // inteira de volta para "novo contrato" (Grupo/Entidade/Banco/Tipo em
-      // branco) imediatamente após salvar — como o usuário permanece na
-      // mesma página, isso parecia (e foi reportado) como se os dados de
-      // Identificação tivessem "sumido" ao salvar/reabrir, mesmo o registro
-      // no banco estando correto (confirmado via log). Em vez de resetar,
-      // mantemos o contrato aberto na tela com os dados recém-salvos e, no
-      // caso de uma criação nova, passamos a editar o registro que acabou
-      // de ser criado (para que o próximo "Salvar" atualize esse mesmo
-      // contrato em vez de criar um duplicado).
+      // Depois de salvar, sai da tela e volta para a lista de Contratos
+      // (mesmo comportamento do "Fechar Contrato") — evita qualquer dúvida
+      // sobre se os dados "sumiram": a tela do Simulador nem fica visível
+      // depois do salvamento, então não há confusão possível.
       const savedId = saved?.id || editingContractId;
-      if (savedId) {
-        setEditingContractId(savedId);
-        setEditingContractMeta({
-          status: targetStatus,
-          rejectionComments: "",
-        });
-        clearDraft(previousDraftKey);
-        if (savedId !== previousDraftKey) clearDraft(savedId);
-      }
-      setLastCalculatedParams(formParams);
-      setHasUnsavedChanges(false);
+      clearDraft(previousDraftKey);
+      if (savedId && savedId !== previousDraftKey) clearDraft(savedId);
+      navigate(createPageUrl("Contracts"));
     } catch (error) {
       alert("Erro ao salvar: " + error.message);
     }
@@ -619,6 +608,8 @@ export default function Simulator() {
         contract_number: dataToSave.contract_number || `SIM-${Date.now()}`,
         operation_category: dataToSave.operation_category,
         operation_type: dataToSave.operation_type,
+        guarantee_real_type: dataToSave.guarantee_real_type || null,
+        guarantee_personal_type: dataToSave.guarantee_personal_type || null,
         operation_value: dataToSave.operation_value,
         signal_value: dataToSave.signal_value,
         iof_value: dataToSave.iof_value,

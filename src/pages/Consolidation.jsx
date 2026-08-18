@@ -4,9 +4,16 @@ import { useQuery } from "@tanstack/react-query";
 import ConsolidationDashboard from "../components/consolidation/ConsolidationDashboard";
 
 export default function Consolidation() {
+  // Consolidação é um efeito contábil (posição de dívida consolidada por
+  // Grupo/Banco) — só pode refletir contratos Aprovados. Filtrado aqui, na
+  // origem dos dados, para nenhum componente abaixo (mesmo um futuro) poder
+  // acidentalmente incluir rascunho/pendente/devolvido nos números.
   const { data: contracts } = useQuery({
     queryKey: ["contracts"],
-    queryFn: () => base44.entities.LoanContract.list("-created_date", 1000),
+    queryFn: async () => {
+      const all = await base44.entities.LoanContract.list("-created_date", 1000);
+      return all.filter((c) => c.status === "aprovado");
+    },
     initialData: [],
   });
 

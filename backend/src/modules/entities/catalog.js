@@ -32,7 +32,7 @@ export const ENTITIES = {
       "calculation_system", "amortization_percentages", "percentage_base", "schedule_data",
       "contract_pdf_url", "status", "status_history", "approved_by", "approved_date",
       "rejection_comments", "exported_to_payables", "current_snapshot_id", "approved_snapshot_id",
-      "last_recalculated_at",
+      "last_recalculated_at", "guarantee_real_type", "guarantee_personal_type",
     ],
     booleans: [
       "iof_financed", "encargo_garantia_financed", "other_fees_financed", "mip_embedded", "dfi_embedded",
