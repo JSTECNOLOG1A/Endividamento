@@ -406,6 +406,9 @@ export async function update(name, id, data) {
   const entity = getEntity(name);
   if (entity.immutable) throw httpError(409, `${name} é imutável`);
   const previous = await getById(name, id);
+  if (name === "AccountingClosing" && previous.status === "aprovado" && data?.status !== "reaberto") {
+    throw httpError(409, "Fechamento aprovado — reabra o período (admin, com justificativa) antes de alterar.");
+  }
   const row = splitPayload(entity, data);
   if (name === "CompanyEntity") normalizeCompanyEntityRow(row);
   if (name === "Bank" && row.bank_code !== undefined) {

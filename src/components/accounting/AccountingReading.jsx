@@ -22,7 +22,9 @@ import {
   Table as TableIcon,
   Landmark,
   Clock,
+  ClipboardCheck,
 } from "lucide-react";
+import FechamentoContabil from "./FechamentoContabil";
 import {
   getDebtPositionByDate,
   getDebtMaturityBreakdown,
@@ -289,7 +291,7 @@ export default function AccountingReading() {
           </p>
         )}
 
-        {!analysis ? (
+        {!analysis && entityFilter === "all" ? (
           <div className="flex items-center justify-center min-h-64">
             <p className="text-slate-500">Nenhum contrato aprovado encontrado para os filtros selecionados.</p>
           </div>
@@ -305,10 +307,16 @@ export default function AccountingReading() {
               <TabsTrigger value="fluxo" className="text-xs sm:text-sm gap-1.5">
                 <TableIcon className="w-3.5 h-3.5" /> Fluxo e Nota Explicativa
               </TabsTrigger>
+              <TabsTrigger value="fechamento" className="text-xs sm:text-sm gap-1.5">
+                <ClipboardCheck className="w-3.5 h-3.5" /> Fechamento Contábil
+              </TabsTrigger>
             </TabsList>
 
             {/* SUB-ABA 1: POSIÇÃO CONTÁBIL */}
             <TabsContent value="posicao" className="mt-4 space-y-6">
+              {!analysis ? (
+                <p className="text-sm text-slate-500 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
+              ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <KPICard
                   icon={DollarSign}
@@ -332,10 +340,15 @@ export default function AccountingReading() {
                   color="green"
                 />
               </div>
+              )}
             </TabsContent>
 
             {/* SUB-ABA 2: COMPETÊNCIA */}
             <TabsContent value="competencia" className="mt-4 space-y-6">
+              {!analysis ? (
+                <p className="text-sm text-slate-500 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
+              ) : (
+              <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <KPICard
                   icon={Percent}
@@ -403,10 +416,15 @@ export default function AccountingReading() {
                   </p>
                 </CardContent>
               </Card>
+              </>
+              )}
             </TabsContent>
 
             {/* SUB-ABA 3: FLUXO E NOTA EXPLICATIVA */}
             <TabsContent value="fluxo" className="mt-4">
+              {!analysis ? (
+                <p className="text-sm text-slate-500 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
+              ) : (
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="pb-3">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -499,6 +517,15 @@ export default function AccountingReading() {
                   </p>
                 </CardContent>
               </Card>
+              )}
+            </TabsContent>
+
+            {/* SUB-ABA 4: FECHAMENTO CONTÁBIL */}
+            <TabsContent value="fechamento" className="mt-4">
+              <FechamentoContabil
+                entityId={entityFilter !== "all" ? entityFilter : null}
+                entityName={entities.find((e) => e.id === entityFilter)?.entity_name || ""}
+              />
             </TabsContent>
           </Tabs>
         )}

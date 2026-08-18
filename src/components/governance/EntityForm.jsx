@@ -27,6 +27,9 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
     codigo_empresa: initialData?.codigo_empresa || "",
     codigo_filial: initialData?.codigo_filial || "",
     status: initialData?.status || "ativa",
+    accounting_mode: initialData?.accounting_mode || "manual",
+    payment_source: initialData?.payment_source || "manual",
+    posting_approval: initialData?.posting_approval || "required",
   }));
 
   useEffect(() => {
@@ -160,6 +163,53 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
               </SelectContent>
             </Select>
           </div>
+
+          <div className="pt-2 border-t border-slate-100">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
+              Fechamento contábil desta empresa
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Modo de contabilização</Label>
+                <Select value={form.accounting_mode} onValueChange={(v) => setForm({ ...form, accounting_mode: v })}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="api">Integração por API</SelectItem>
+                    <SelectItem value="file_export">Exportação de arquivo</SelectItem>
+                    <SelectItem value="manual">Lançamento manual</SelectItem>
+                    <SelectItem value="control_only">Somente controle (sem contabilização)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Origem dos pagamentos</Label>
+                <Select value={form.payment_source} onValueChange={(v) => setForm({ ...form, payment_source: v })}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="api">API</SelectItem>
+                    <SelectItem value="bank_import">Importação bancária</SelectItem>
+                    <SelectItem value="file_import">Importação de arquivo</SelectItem>
+                    <SelectItem value="manual">Manual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Aprovação do lote</Label>
+                <Select value={form.posting_approval} onValueChange={(v) => setForm({ ...form, posting_approval: v })}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="required">Obrigatória</SelectItem>
+                    <SelectItem value="automatic">Automática</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-slate-400">
+              Define como o Fechamento Contábil se comporta para esta empresa — a tela nunca é suprimida, só os
+              componentes mudam (transmissão ao ERP, exportação de arquivo ou digitação manual dos lançamentos).
+            </p>
+          </div>
+
           <div className="flex gap-2 justify-end pt-2">
             <Button type="button" variant="outline" onClick={onCancel} className="gap-1.5" disabled={submitting}>
               <X className="w-3.5 h-3.5" /> Cancelar

@@ -7,7 +7,10 @@ export const ENTITIES = {
   },
   CompanyEntity: {
     table: "company_entities",
-    columns: ["group_id", "entity_name", "document_number", "document_type", "entity_type", "codigo_empresa", "codigo_filial", "status"],
+    columns: [
+      "group_id", "entity_name", "document_number", "document_type", "entity_type", "codigo_empresa", "codigo_filial", "status",
+      "accounting_mode", "payment_source", "posting_approval",
+    ],
     booleans: [],
     numbers: [],
   },
@@ -119,6 +122,47 @@ export const ENTITIES = {
     columns: ["currency_code", "currency_name", "exchange_rate", "rate_date", "status"],
     booleans: [],
     numbers: ["exchange_rate"],
+  },
+  AccountingClosing: {
+    table: "accounting_closings",
+    columns: [
+      "entity_id", "competencia", "data_base", "previous_closing_id", "status",
+      "opening_snapshot", "events_snapshot", "journal_snapshot", "engine_version",
+      "total_debito", "total_credito", "calculated_by", "calculated_at",
+      "approved_by", "approved_at", "reopened_by", "reopened_at", "reopened_reason",
+    ],
+    booleans: [],
+    numbers: ["total_debito", "total_credito"],
+  },
+  ContractSettlement: {
+    table: "contract_settlements",
+    columns: [
+      "contract_id", "closing_id", "parcela", "scheduled_date", "actual_payment_date", "scheduled_amount",
+      "principal_paid", "interest_paid", "penalty_paid", "fee_paid", "discount_amount",
+      "rounding_adjustment", "other_amount", "total_paid", "bank_account_id",
+      "extraordinary_amortization", "triggers_recalculation", "recalculation_snapshot_id",
+      "proof_url", "observacao", "status",
+    ],
+    booleans: ["extraordinary_amortization", "triggers_recalculation"],
+    numbers: [
+      "scheduled_amount", "principal_paid", "interest_paid", "penalty_paid", "fee_paid",
+      "discount_amount", "rounding_adjustment", "other_amount", "total_paid",
+    ],
+  },
+  AccountingEventMapping: {
+    table: "accounting_event_mappings",
+    columns: ["entity_id", "event_type", "debit_account_id", "credit_account_id", "status"],
+    booleans: [],
+    numbers: [],
+  },
+  AccountingJournalEntry: {
+    table: "accounting_journal_entries",
+    columns: [
+      "closing_id", "contract_id", "event_type", "entry_date",
+      "account_id", "side", "amount", "historico",
+    ],
+    booleans: [],
+    numbers: ["amount"],
   },
   Tenant: {
     table: "tenants",
