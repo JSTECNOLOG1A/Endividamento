@@ -261,8 +261,17 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     if (form.operation_date && dateStr) {
       const operationDate = new Date(form.operation_date);
       const finalDate = new Date(dateStr);
-      const monthsDiff = (finalDate.getFullYear() - operationDate.getFullYear()) * 12 + 
+      let monthsDiff = (finalDate.getFullYear() - operationDate.getFullYear()) * 12 +
                          (finalDate.getMonth() - operationDate.getMonth());
+      // Se o dia do vencimento final for anterior ao dia da data da operação,
+      // o último mês ainda não se completou (ex.: operação em 20/05 e
+      // vencimento em 15/06 → passaram só 26 dias, não um mês cheio).
+      // Sem esse ajuste, o cálculo "ano/mês" ingênuo conta um mês a mais
+      // (ex.: 20/05/2022 → 15/06/2027 dava 61 em vez de 60), gerando uma
+      // parcela extra na tabela de amortização.
+      if (finalDate.getDate() < operationDate.getDate()) {
+        monthsDiff -= 1;
+      }
       if (monthsDiff > 0) {
         setUpdatingFromDate(true);
         update("total_term_months", monthsDiff.toString());

@@ -686,6 +686,14 @@ export async function calculateAmortizationSchedule(params) {
       const yearDiff = finalDate.getFullYear() - startDate.getFullYear();
       const monthDiff = finalDate.getMonth() - startDate.getMonth();
       totalMonths = yearDiff * 12 + monthDiff;
+      // Mesmo ajuste de "mês incompleto" do ContractForm (ver comentário lá):
+      // se o dia do vencimento final for anterior ao dia da data da operação,
+      // o último mês ainda não fechou — sem isso o cálculo ingênuo de
+      // ano/mês conta uma parcela a mais (ex.: 20/05/2022 → 15/06/2027 dava
+      // 61 meses em vez de 60).
+      if (finalDate.getDate() < startDate.getDate()) {
+        totalMonths -= 1;
+      }
     }
   }
   
