@@ -108,7 +108,7 @@ export default function UserManual() {
 
     const sections = [
       "1. Visão Geral da Plataforma",
-      "2. Simulador de Operações",
+      "2. Calculadora de Operações",
       "3. Gestão de Contratos",
       "4. Governança (Grupos, Entidades e Bancos)",
       "5. Contabilidade (CPC 26)",
@@ -130,7 +130,7 @@ export default function UserManual() {
       "O Endividamento é uma plataforma de cálculo financeiro para operações de empréstimos e financiamentos, aderente às normas do Banco Central do Brasil (BACEN) e às práticas contábeis brasileiras (CPC 26)."
     );
     addParagraph("A plataforma oferece seis módulos principais, acessíveis pela barra de navegação superior:");
-    addBullet("Simulador — Cálculo de tabelas de amortização com gráficos e validações");
+    addBullet("Calculadora — Cálculo de tabelas de amortização com gráficos e validações");
     addBullet("Contratos — Cadastro, aprovação e gestão de contratos");
     addBullet("Governança — Grupos econômicos, entidades e bancos credores");
     addBullet("Contabilidade — Análise contábil de dívidas com visão CPC 26");
@@ -143,18 +143,18 @@ export default function UserManual() {
     addBullet("Acesso à internet");
     addBullet("Conta de usuário cadastrada e autenticada");
 
-    // ========== 2. SIMULADOR ==========
+    // ========== 2. CALCULADORA ==========
     doc.addPage();
     y = margin;
-    addTitle("2. Simulador de Operações", 18);
+    addTitle("2. Calculadora de Operações", 18);
     addDivider();
     addParagraph(
-      "O Simulador é o módulo principal do Endividamento. Permite configurar todos os parâmetros de uma operação de crédito e visualizar a tabela de amortização completa, gráficos e indicadores financeiros."
+      "A Calculadora é o módulo principal do Endividamento. Permite configurar todos os parâmetros de uma operação de crédito e visualizar a tabela de amortização completa, gráficos e indicadores financeiros."
     );
 
-    addSubtitle("Como simular uma operação");
+    addSubtitle("Como calcular uma operação");
     addBullet("Preencha o formulário com os dados da operação: grupo econômico, entidade, banco, número do contrato");
-    addBullet("Selecione a categoria (Empréstimos ou Financiamentos) e o tipo de operação");
+    addBullet("Selecione a categoria (Empréstimos, Financiamentos, Mútuos com Partes Relacionadas ou Mútuos com Terceiros) e o tipo de operação");
     addBullet("Informe o valor da operação, taxa de juros e data de operação");
     addBullet("Configure o sistema de cálculo (SAC, PRICE, AMERICANO, BULLET ou PERCENTAGE_RESIDUAL)");
     addBullet("Defina prazos, carências e frequências de pagamento");
@@ -419,7 +419,7 @@ export default function UserManual() {
             <h3 className="text-sm font-semibold text-slate-700 mb-2">Conteúdo do manual:</h3>
             <ul className="text-xs text-slate-600 space-y-1.5">
               <li>• Visão geral da plataforma e módulos</li>
-              <li>• Simulador de operações (passo a passo)</li>
+              <li>• Calculadora de operações (passo a passo)</li>
               <li>• Gestão de contratos e workflow de aprovação</li>
               <li>• Governança (grupos, entidades e bancos)</li>
               <li>• Contabilidade — visão CPC 26</li>

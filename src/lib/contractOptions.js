@@ -6,7 +6,8 @@
 export const OPERATION_CATEGORIES = [
   { value: "emprestimos", label: "Empréstimos (Capital de Giro)" },
   { value: "financiamentos", label: "Financiamentos (Investimento/CAPEX)" },
-  { value: "terceiros", label: "Terceiros (Partes Relacionadas)" },
+  { value: "mutuos_partes_relacionadas", label: "Mútuos com Partes Relacionadas" },
+  { value: "mutuos_terceiros", label: "Mútuos com Terceiros" },
 ];
 
 export const OPERATION_TYPES = {
@@ -23,13 +24,16 @@ export const OPERATION_TYPES = {
     { value: "leasing", label: "Leasing Imobiliário/Equipamentos" },
     { value: "cri_cra", label: "CRI/CRA" },
   ],
-  // Operações com partes relacionadas — contabilmente precisam de contas
-  // próprias, separadas de empréstimos/financiamentos com terceiros de
-  // mercado (bancos), por isso são uma categoria à parte na matriz contábil
-  // do Fechamento (ver AccountingMatrixConfig.jsx).
-  terceiros: [
-    { value: "emprestimos_terceiros", label: "Empréstimos com Terceiros" },
+  // Mútuos com partes relacionadas (sócios, controladora, coligadas) e
+  // mútuos com terceiros (fora do grupo econômico, sem ser banco) são duas
+  // categorias de primeiro nível — contabilmente precisam de contas
+  // próprias, separadas entre si e do restante, por isso cada uma tem sua
+  // própria aba na matriz contábil do Fechamento (ver AccountingMatrixConfig.jsx).
+  mutuos_partes_relacionadas: [
     { value: "mutuo_partes_relacionadas", label: "Mútuo com Partes Relacionadas" },
+  ],
+  mutuos_terceiros: [
+    { value: "mutuo_terceiros", label: "Mútuo com Terceiros" },
   ],
 };
 

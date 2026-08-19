@@ -277,7 +277,7 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex gap-2">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               Principal ou juros pago diverge do previsto — esta baixa vai exigir recálculo do contrato
-              (reabra o contrato no Simulador) antes do fechamento poder ser aprovado.
+              (reabra o contrato na Calculadora) antes do fechamento poder ser aprovado.
             </div>
           )}
           {validation.warnings.map((w, i) => (
@@ -708,7 +708,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 flex gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 {calcResult.pendingRecalculation.length} baixa(s) exigem recálculo do contrato antes de seguir
-                para aprovação — reabra {calcResult.pendingRecalculation.map((p) => p.contractNumber).join(", ")} no Simulador.
+                para aprovação — reabra {calcResult.pendingRecalculation.map((p) => p.contractNumber).join(", ")} na Calculadora.
               </div>
             )}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">

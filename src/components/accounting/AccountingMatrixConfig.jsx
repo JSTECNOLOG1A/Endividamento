@@ -111,8 +111,8 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
           <DialogTitle className="flex items-center gap-2"><Settings2 className="w-4 h-4" /> Matriz contábil desta empresa</DialogTitle>
         </DialogHeader>
         <p className="text-xs text-slate-500 -mt-2">
-          Cada categoria de operação tem seu próprio conjunto de contas — obrigatório separar operações com
-          terceiros/partes relacionadas das demais para o balancete.
+          Cada categoria de operação tem seu próprio conjunto de contas — obrigatório separar mútuos com
+          partes relacionadas e com terceiros entre si e das demais operações para o balancete.
         </p>
         <Tabs value={category} onValueChange={setCategory}>
           <TabsList className="bg-slate-100">

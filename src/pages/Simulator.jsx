@@ -502,7 +502,7 @@ export default function Simulator() {
 
       // Depois de salvar, sai da tela e volta para a lista de Contratos
       // (mesmo comportamento do "Fechar Contrato") — evita qualquer dúvida
-      // sobre se os dados "sumiram": a tela do Simulador nem fica visível
+      // sobre se os dados "sumiram": a tela da Calculadora nem fica visível
       // depois do salvamento, então não há confusão possível.
       const savedId = saved?.id || editingContractId;
       clearDraft(previousDraftKey);
@@ -723,7 +723,7 @@ export default function Simulator() {
           <div className="sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Simulador</h1>
+                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Calculadora</h1>
                 <p className="text-sm text-slate-500 mt-0.5">Configure os parâmetros do empréstimo</p>
               </div>
               {result && (

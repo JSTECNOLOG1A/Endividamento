@@ -154,7 +154,7 @@ export default function AccountingReading() {
 
   const bankName = (bankId) => banks.find((b) => b.id === bankId)?.bank_name || "Sem Banco";
 
-  // Moedas únicas por código (mesma dedupe usada no Simulador) — usadas só
+  // Moedas únicas por código (mesma dedupe usada na Calculadora) — usadas só
   // para popular as opções do filtro; BRL é sempre a opção implícita para
   // contratos sem currency_id.
   const currencyOptions = useMemo(() => {

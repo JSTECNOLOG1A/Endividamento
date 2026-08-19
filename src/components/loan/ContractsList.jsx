@@ -53,7 +53,7 @@ export default function ContractsList({ contracts, banks, onView, onEdit, onDele
         const bankName = banks?.find(b => b.id === c.bank_id)?.bank_name || "N/A";
         const isEditable = EDITABLE_STATUSES.includes(c.status || "rascunho");
         // Clicar no card sempre "dá andamento" no contrato: rascunho/devolvido
-        // abrem no Simulador para continuar editando; pendente/aprovado abrem
+        // abrem na Calculadora para continuar editando; pendente/aprovado abrem
         // a tela de revisão (com os botões de Aprovar/Devolver, se aplicável).
         const openContract = () => (isEditable ? onEdit(c) : onView(c));
         return (

@@ -18,16 +18,17 @@
 // alterar current_snapshot_id/approved_snapshot_id de um contrato. Quando
 // uma baixa diverge do previsto o suficiente para exigir um novo
 // cronograma, isso é sinalizado (triggers_recalculation) para o usuário
-// resolver pelo fluxo já existente de reabertura do contrato no Simulador
+// resolver pelo fluxo já existente de reabertura do contrato na Calculadora
 // — o mesmo caminho que já gera snapshots "RECALCULATED" hoje.
 
 import { OPERATION_CATEGORIES } from "./contractOptions.js";
 
-// Rótulos de categoria de operação (empréstimos/financiamentos/terceiros) —
-// reaproveitados aqui só pra montar mensagens legíveis; a matriz contábil do
-// Fechamento é configurada por evento + categoria (ver AccountingEventMapping),
-// não só por evento, porque contas de terceiros/partes relacionadas
-// precisam ficar separadas no balancete.
+// Rótulos de categoria de operação (empréstimos/financiamentos/mútuos com
+// partes relacionadas/mútuos com terceiros) — reaproveitados aqui só pra
+// montar mensagens legíveis; a matriz contábil do Fechamento é configurada
+// por evento + categoria (ver AccountingEventMapping), não só por evento,
+// porque contas de mútuos com partes relacionadas e com terceiros precisam
+// ficar separadas entre si e do restante no balancete.
 export const OPERATION_CATEGORY_LABELS = Object.fromEntries(
   OPERATION_CATEGORIES.map((c) => [c.value, c.label])
 );
@@ -207,7 +208,7 @@ export function validateSettlement(settlement, scheduleRow, dataBase) {
 
 /**
  * Decide se uma baixa exige recálculo do cronograma do contrato (evento
- * RECALCULATED, via o fluxo já existente de reabertura no Simulador).
+ * RECALCULATED, via o fluxo já existente de reabertura na Calculadora).
  *
  * Regra: só principal e juros pagos em caixa afetam a trajetória futura do
  * saldo — por isso só eles disparam recálculo. Multa, tarifa, desconto e
@@ -595,7 +596,7 @@ export function canApproveClosing({ journalResult, reconciliation, previousClosi
     reasons.push(`Matriz contábil incompleta para: ${labels.join(", ")}.`);
   }
   if (reconciliation.hasBlockingDivergence) {
-    reasons.push("Existem baixas que exigem recálculo do contrato antes de aprovar (reabra o contrato no Simulador).");
+    reasons.push("Existem baixas que exigem recálculo do contrato antes de aprovar (reabra o contrato na Calculadora).");
   }
   if (hasUnresolvedSettlementBlockers) reasons.push("Existem baixas pendentes de validação.");
   if (previousClosingApproved === false) reasons.push("A competência anterior ainda não está aprovada.");

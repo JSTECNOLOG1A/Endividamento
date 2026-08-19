@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const NAV_ITEMS = [
-  { name: "Simulador", page: "Simulator", icon: Calculator },
+  { name: "Calculadora", page: "Simulator", icon: Calculator },
   { name: "Contratos", page: "Contracts", icon: FolderOpen },
   { name: "Documentos", page: "Documents", icon: FileText },
   { name: "Governança", page: "Governance", icon: Building },

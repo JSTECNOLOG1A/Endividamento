@@ -242,7 +242,7 @@ export default function Contracts() {
                 (Identificação, valores, taxas, prazos) antes de checar a
                 memória de cálculo — sem precisar clicar em "Editar" só para
                 conferir. É somente leitura; a edição continua isolada no
-                botão "Editar" (Simulador). */}
+                botão "Editar" (Calculadora). */}
             <Tabs defaultValue="dados">
               <TabsList className="bg-slate-100">
                 <TabsTrigger value="dados" className="text-xs">Dados do Contrato</TabsTrigger>
