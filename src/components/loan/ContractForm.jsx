@@ -324,6 +324,19 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     }
   };
 
+  // Texto de apoio abaixo do "Prazo Total (Meses)": só aparece quando a
+  // Referência dos Vencimentos está preenchida, caso em que esse número é
+  // a quantidade de parcelas/linhas da tabela (inclui a própria Referência
+  // como 1ª linha) — 1 a mais que a duração "redonda" do contrato entre a
+  // Referência e a Data Vencimento Final. Puramente informativo: não altera
+  // nenhum valor calculado ou salvo, só ajuda a entender o número exibido.
+  const totalTermDurationHint = React.useMemo(() => {
+    if (!form.first_payment_date) return null;
+    const n = parseInt(form.total_term_months) || 0;
+    if (n <= 1) return null;
+    return `≈ ${n - 1} meses de duração (Referência dos Vencimentos → Data Vencimento Final). O total de ${n} parcelas inclui a própria Referência como 1ª linha da tabela.`;
+  }, [form.total_term_months, form.first_payment_date]);
+
   // Desabilitar campos conforme sistema selecionado
   const getFieldsStatus = () => {
     const system = form.calculation_system;
@@ -957,20 +970,41 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Prazo Total (meses) *</Label>
-              <Input 
-                type="number" 
-                min="1" 
-                value={form.total_term_months} 
-                onChange={(e) => update("total_term_months", e.target.value)} 
-                className="h-9 font-mono" 
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Prazo Total (meses) *
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        É a quantidade de parcelas/linhas geradas na tabela — não necessariamente a duração
+                        "redonda" do contrato. Quando a Referência dos Vencimentos está preenchida, a 1ª
+                        parcela já nasce na própria data de Referência (não um mês depois), então esse total
+                        fica 1 a mais que os meses entre a Referência e a Data Vencimento Final (ex.: um
+                        contrato de 5 anos = 60 meses de duração gera 61 parcelas).
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input
+                type="number"
+                min="1"
+                value={form.total_term_months}
+                onChange={(e) => update("total_term_months", e.target.value)}
+                className="h-9 font-mono"
                 disabled={!fieldsStatus.totalTerm}
-                required 
+                required
               />
               {(form.calculation_system === "BULLET" || form.calculation_system === "AMERICANO") && (
                 <p className="text-xs text-slate-500 mt-1">
                   {form.calculation_system === "BULLET" ? "Define quando ocorre o pagamento único" : "Define quando cai a amortização completa"}
                 </p>
+              )}
+              {totalTermDurationHint && (
+                <p className="text-xs text-slate-500 mt-1">{totalTermDurationHint}</p>
               )}
             </div>
             <div className="space-y-1.5">
