@@ -4,6 +4,24 @@ module.exports = {
     content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
   theme: {
   	extend: {
+  		fontFamily: {
+  			// Fonte única de toda a ferramenta — substitui a pilha padrão do
+  			// Tailwind (que varia por sistema operacional: Segoe UI no Windows,
+  			// San Francisco no Mac, etc.) por uma só, igual pra todo mundo.
+  			// Carregada via @fontsource em index.css.
+  			sans: [
+  				"Inter",
+  				"ui-sans-serif",
+  				"system-ui",
+  				"-apple-system",
+  				"Segoe UI",
+  				"Roboto",
+  				"Helvetica Neue",
+  				"Arial",
+  				"Noto Sans",
+  				"sans-serif",
+  			],
+  		},
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
