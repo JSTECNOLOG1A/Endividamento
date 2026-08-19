@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "@/lib/notify";
 import { useAuth } from "@/lib/AuthContext";
+import { createPageUrl } from "../../utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -301,15 +302,29 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
 export default function FechamentoContabil({ entityId, entityName }) {
   const { user } = useAuth();
   const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1);
-  const [dataBase, setDataBase] = useState(lastDayOfMonth(today.getFullYear(), today.getMonth() + 1));
+  // Se a tela foi aberta com ?month=&year= na URL (ex.: ao voltar de um
+  // recálculo reaberto pelo botão "Requer recálculo", ver
+  // handleReopenForRecalc), inicia na mesma competência de onde saiu — caso
+  // contrário mantém o padrão de sempre (mês/ano atuais).
+  const initialParams = React.useMemo(() => new URLSearchParams(window.location.search), []);
+  const [year, setYear] = useState(() => {
+    const y = Number(initialParams.get("year"));
+    return Number.isFinite(y) && y > 0 ? y : today.getFullYear();
+  });
+  const [month, setMonth] = useState(() => {
+    const m = Number(initialParams.get("month"));
+    return Number.isFinite(m) && m >= 1 && m <= 12 ? m : today.getMonth() + 1;
+  });
+  const [dataBase, setDataBase] = useState(() => lastDayOfMonth(year, month));
   const [dialogTarget, setDialogTarget] = useState(null); // { contract, scheduleRow, existing }
   const [reopenReason, setReopenReason] = useState("");
   const [reopenOpen, setReopenOpen] = useState(false);
   const [matrixOpen, setMatrixOpen] = useState(false);
   const [calcResult, setCalcResult] = useState(null);
   const [journalResult, setJournalResult] = useState(null);
+  const [recalcTarget, setRecalcTarget] = useState(null); // { contract, row, settlement }
+  const [recalcJustification, setRecalcJustification] = useState("");
+  const [recalcSubmitting, setRecalcSubmitting] = useState(false);
 
   const competencia = competenciaDate(year, month);
 
@@ -544,6 +559,76 @@ export default function FechamentoContabil({ entityId, entityName }) {
     }
   };
 
+  // Atalho do badge "Requer recálculo" (Step 1): abre o diálogo de
+  // confirmação para reabrir DIRETO o contrato em modo recálculo na
+  // Calculadora — sem precisar o usuário navegar manualmente até o
+  // contrato e achar o botão "Reabrir para Edição" lá.
+  const handleOpenRecalcDialog = (contract, row, settlement) => {
+    if (!isAdmin) {
+      toast.error("Apenas administradores podem reabrir um contrato aprovado para recálculo.");
+      return;
+    }
+    setRecalcTarget({ contract, row, settlement });
+    setRecalcJustification(
+      `Divergência na baixa da parcela ${row.parcela} (venc. ${row.dataVencimento?.split("-").reverse().join("/")}) identificada no Fechamento Contábil de ${MONTHS[month - 1]}/${year}.`
+    );
+  };
+
+  const handleConfirmReopenForRecalc = async () => {
+    if (!recalcTarget) return;
+    if (!recalcJustification.trim()) {
+      toast.warning("Informe a justificativa da reabertura.");
+      return;
+    }
+    const { contract, row, settlement } = recalcTarget;
+    setRecalcSubmitting(true);
+    try {
+      let history = [];
+      try {
+        const parsed = contract.status_history ? JSON.parse(contract.status_history) : [];
+        history = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        history = [];
+      }
+      history.push({
+        from: contract.status,
+        to: "rascunho",
+        by: user?.email,
+        at: new Date().toISOString(),
+        comments: recalcJustification.trim(),
+      });
+
+      // Volta para esta mesma tela (mesma empresa/competência) depois do
+      // recálculo ser salvo — ver Simulator.jsx (recalcFlag.returnTo).
+      const returnTo = `${createPageUrl("Accounting")}?tab=fechamento&entity=${encodeURIComponent(entityId || "")}&month=${month}&year=${year}`;
+
+      await base44.entities.LoanContract.update(contract.id, {
+        status: "rascunho",
+        status_history: JSON.stringify(history),
+        // Campo dinâmico (extra_json) — não exige migração. Lido de volta
+        // em Simulator.jsx → loadContractForEdit para o "modo recálculo".
+        recalculation_flag: {
+          parcela: row.parcela,
+          dataVencimento: row.dataVencimento,
+          contractNumber: contract.contract_number,
+          settlementId: settlement?.id || null,
+          note: recalcJustification.trim(),
+          flaggedBy: user?.email,
+          flaggedAt: new Date().toISOString(),
+          returnTo,
+        },
+      });
+
+      setRecalcTarget(null);
+      setRecalcJustification("");
+      window.location.href = `${createPageUrl("Simulator")}?edit=${contract.id}`;
+    } catch (err) {
+      toast.error("Erro ao reabrir contrato: " + (err.message || "tente novamente"));
+    } finally {
+      setRecalcSubmitting(false);
+    }
+  };
+
   if (!entityId) {
     return (
       <Card className="border-slate-200 shadow-sm">
@@ -655,7 +740,15 @@ export default function FechamentoContabil({ entityId, entityName }) {
                           {!settlement || isEstornado ? (
                             <Badge variant="secondary">Pendente</Badge>
                           ) : settlement.triggers_recalculation ? (
-                            <Badge variant="destructive">Requer recálculo</Badge>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-6 text-xs gap-1 px-2"
+                              onClick={() => handleOpenRecalcDialog(contract, row, settlement)}
+                              disabled={isApproved}
+                            >
+                              <RotateCcw className="w-3 h-3" /> Requer recálculo
+                            </Button>
                           ) : (
                             <Badge variant="default">Liquidada</Badge>
                           )}
@@ -850,6 +943,31 @@ export default function FechamentoContabil({ entityId, entityName }) {
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setReopenOpen(false)}>Cancelar</Button>
             <Button type="button" variant="destructive" onClick={handleReopen}>Confirmar reabertura</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!recalcTarget} onOpenChange={(open) => { if (!open) { setRecalcTarget(null); setRecalcJustification(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><RotateCcw className="w-4 h-4" /> Reabrir contrato para recálculo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-slate-600">
+              O contrato {recalcTarget?.contract?.contract_number} volta para rascunho e abre direto na Calculadora,
+              em modo recálculo, com a parcela {recalcTarget?.row?.parcela} destacada. Ao salvar o novo cálculo lá,
+              você volta automaticamente para esta mesma tela.
+            </p>
+            <div className="space-y-1">
+              <Label className="text-xs">Justificativa *</Label>
+              <Textarea className="min-h-20" value={recalcJustification} onChange={(e) => setRecalcJustification(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => { setRecalcTarget(null); setRecalcJustification(""); }}>Cancelar</Button>
+            <Button type="button" variant="destructive" onClick={handleConfirmReopenForRecalc} disabled={recalcSubmitting}>
+              {recalcSubmitting ? "Reabrindo..." : "Reabrir e ir para a Calculadora"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

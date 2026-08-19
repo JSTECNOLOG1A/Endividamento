@@ -59,7 +59,7 @@ function getDaysUntil(dateStr) {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
-export default function AmortizationTable({ result, params, onRecalculate }) {
+export default function AmortizationTable({ result, params, onRecalculate, highlightParcela }) {
   const [page, setPage] = useState(0);
   const [editMode, setEditMode] = useState(false);
   const [editedSchedule, setEditedSchedule] = useState(null);
@@ -179,6 +179,18 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
       };
     });
   }, [schedule, isUSD, viewMode, params, result, row0]);
+
+  // Modo recálculo (reabertura por divergência no Fechamento Contábil): ao
+  // carregar, pula direto para a página que contém a parcela sinalizada, pra
+  // o usuário não precisar caçá-la manualmente entre várias páginas de 100
+  // linhas. Só reposiciona quando a parcela sinalizada muda (ex.: ao entrar
+  // na tela) — não força a página de volta se o usuário já navegou por
+  // conta própria depois disso.
+  React.useEffect(() => {
+    if (!highlightParcela || !schedule?.length) return;
+    const idx = schedule.findIndex((r) => r.parcela === highlightParcela);
+    if (idx >= 0) setPage(Math.floor(idx / PAGE_SIZE));
+  }, [highlightParcela, schedule]);
 
   // Early return AFTER all hooks
   if (!result || !result.schedule) return null;
@@ -973,20 +985,29 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                    const daysUntil = getDaysUntil(row.dataVencimento);
                    const isShortTerm = daysUntil <= 365; // até 12 meses
 
+                   // Modo recálculo: parcela sinalizada como divergente no
+                   // Fechamento Contábil — destaque até o novo cálculo ser salvo.
+                   const isHighlighted = highlightParcela && row.parcela === highlightParcela;
+
                    return (
                     <TableRow
                       key={row.parcela}
                       className={`${
-                        isNegativeAmortization 
-                          ? "bg-red-50 hover:bg-red-100/60" 
-                          : idx % 2 === 0 
-                            ? "bg-white" 
+                        isHighlighted
+                          ? "bg-amber-100 hover:bg-amber-100"
+                          : isNegativeAmortization
+                          ? "bg-red-50 hover:bg-red-100/60"
+                          : idx % 2 === 0
+                            ? "bg-white"
                             : "bg-slate-50/50"
-                      } hover:bg-blue-50/40 transition-colors ${isNegativeAmortization ? "border-l-4 border-red-500" : ""}`}
+                      } hover:bg-blue-50/40 transition-colors ${isNegativeAmortization ? "border-l-4 border-red-500" : ""} ${isHighlighted ? "border-l-4 border-amber-500" : ""}`}
                     >
                     <TableCell className="font-mono text-center font-medium text-slate-600 px-1 py-0.5">
                       <div className="flex items-center justify-center gap-1">
                         <span>{row.parcela}</span>
+                        {isHighlighted && (
+                          <Badge variant="outline" className="text-[8px] px-1.5 py-0 border-amber-500 text-amber-700 bg-amber-100">Divergência</Badge>
+                        )}
                         {isShortTerm && (
                           <Badge variant="default" className="text-[8px] px-1.5 py-0 bg-blue-600">CP</Badge>
                         )}

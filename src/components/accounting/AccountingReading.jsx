@@ -117,9 +117,16 @@ function RollForwardRow({ label, bucket, strong = false, sign = null }) {
 
 export default function AccountingReading() {
   const today = new Date().toISOString().split("T")[0];
+  // ?tab=&entity= na URL (ex.: ao voltar de um recálculo reaberto pelo
+  // botão "Requer recálculo" do Fechamento Contábil, ver
+  // FechamentoContabil.jsx → handleReopenForRecalc / Simulator.jsx) reabrem
+  // direto na mesma aba/empresa de onde o usuário saiu. Sem esses
+  // parâmetros, mantém o padrão de sempre.
+  const initialParams = React.useMemo(() => new URLSearchParams(window.location.search), []);
+  const [activeTab, setActiveTab] = useState(() => initialParams.get("tab") || "posicao");
   const [baseDate, setBaseDate] = useState(today);
   const [exercicioStartMonth, setExercicioStartMonth] = useState("1");
-  const [entityFilter, setEntityFilter] = useState("all");
+  const [entityFilter, setEntityFilter] = useState(() => initialParams.get("entity") || "all");
   const [currencyFilter, setCurrencyFilter] = useState("all");
   const [flowView, setFlowView] = useState("principal_juros"); // "principal" | "principal_juros"
 
@@ -296,7 +303,7 @@ export default function AccountingReading() {
             <p className="text-slate-500">Nenhum contrato aprovado encontrado para os filtros selecionados.</p>
           </div>
         ) : (
-          <Tabs defaultValue="posicao" className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="bg-slate-100">
               <TabsTrigger value="posicao" className="text-xs sm:text-sm gap-1.5">
                 <Landmark className="w-3.5 h-3.5" /> Posição Contábil

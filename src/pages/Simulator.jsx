@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Save, Send, RotateCcw, X, FileText, Trash2 } from "lucide-react";
+import { Save, Send, RotateCcw, X, FileText, Trash2, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "../utils";
 import ContractForm from "../components/loan/ContractForm";
@@ -30,6 +30,7 @@ export default function Simulator() {
   const [reopenData, setReopenData] = useState(null);
   const [editingContractId, setEditingContractId] = useState(null);
   const [editingContractMeta, setEditingContractMeta] = useState(null);
+  const [recalcFlag, setRecalcFlag] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [uploadedPdfUrl, setUploadedPdfUrl] = useState(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
@@ -184,6 +185,12 @@ export default function Simulator() {
         status: contract.status || "rascunho",
         rejectionComments: contract.rejection_comments || "",
       });
+      // "Modo recálculo": presente quando o contrato foi reaberto a partir
+      // do botão "Requer recálculo" no Fechamento Contábil (ver
+      // FechamentoContabil.jsx → handleReopenForRecalc). Guardado em
+      // extra_json (campo dinâmico, sem precisar de migração) — some quando
+      // o contrato é salvo de novo daqui (ver persistContract/handleCloseContract).
+      setRecalcFlag(contract.recalculation_flag || null);
       setReopenData(reopenFormData);
       // Preenche formParams/lastCalculatedParams com os mesmos dados já
       // salvos — assim os botões de Salvar/Enviar funcionam imediatamente,
@@ -481,6 +488,10 @@ export default function Simulator() {
       }),
       status: targetStatus,
       contract_pdf_url: uploadedPdfUrl || null,
+      // Modo recálculo: este salvamento É o "recálculo reprocessado" — some
+      // com a sinalização (ver setRecalcFlag em loadContractForEdit) para
+      // não ficar destacando a parcela para sempre depois de resolvida.
+      ...(recalcFlag ? { recalculation_flag: null } : {}),
     };
 
     const successMessage = targetStatus === "rascunho"
@@ -500,14 +511,18 @@ export default function Simulator() {
       }
       alert(successMessage);
 
-      // Depois de salvar, sai da tela e volta para a lista de Contratos
-      // (mesmo comportamento do "Fechar Contrato") — evita qualquer dúvida
-      // sobre se os dados "sumiram": a tela da Calculadora nem fica visível
-      // depois do salvamento, então não há confusão possível.
+      // Depois de salvar, sai da tela. Em modo recálculo, volta para a
+      // mesma tela de Fechamento Contábil de onde veio (returnTo, montado
+      // por FechamentoContabil.jsx ao reabrir); caso contrário, mantém o
+      // comportamento padrão de ir para a lista de Contratos.
       const savedId = saved?.id || editingContractId;
       clearDraft(previousDraftKey);
       if (savedId && savedId !== previousDraftKey) clearDraft(savedId);
-      navigate(createPageUrl("Contracts"));
+      if (recalcFlag?.returnTo) {
+        navigate(recalcFlag.returnTo);
+      } else {
+        navigate(createPageUrl("Contracts"));
+      }
     } catch (error) {
       alert("Erro ao salvar: " + error.message);
     }
@@ -571,6 +586,7 @@ export default function Simulator() {
     setHasUnsavedChanges(false);
     setEditingContractId(null);
     setEditingContractMeta(null);
+    setRecalcFlag(null);
     setReopenData(null);
     setUploadedPdfUrl(null);
   };
@@ -645,11 +661,18 @@ export default function Simulator() {
         // "Fechar Contrato" apenas guarda o estado atual como rascunho e
         // sai da tela — não exige PDF nem envia para revisão.
         status: "rascunho",
+        // Modo recálculo: "Fechar Contrato" também conta como "encerrar" o
+        // recálculo (mesmo tratamento de persistContract, ver comentário lá).
+        ...(recalcFlag ? { recalculation_flag: null } : {}),
       };
 
       await base44.entities.LoanContract.update(editingContractId, closeContractData);
       clearDraft(editingContractId);
-      navigate(createPageUrl("Contracts"));
+      if (recalcFlag?.returnTo) {
+        navigate(recalcFlag.returnTo);
+      } else {
+        navigate(createPageUrl("Contracts"));
+      }
     } catch (error) {
       alert("Erro ao fechar contrato: " + error.message);
     } finally {
@@ -717,6 +740,18 @@ export default function Simulator() {
 
   return (
     <div className="w-full px-4 sm:px-6 py-8">
+      {recalcFlag && (
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-semibold">Modo recálculo — </span>
+            contrato reaberto por divergência na baixa da parcela {recalcFlag.parcela}
+            {recalcFlag.dataVencimento ? ` (venc. ${String(recalcFlag.dataVencimento).split("-").reverse().join("/")})` : ""}.
+            {" "}Ela está destacada na tabela de amortização. Este aviso some quando você salvar o novo cálculo, e você
+            volta automaticamente para o Fechamento Contábil de onde saiu.
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
         {/* Left — Form */}
         <div className="xl:col-span-4">
@@ -795,7 +830,7 @@ export default function Simulator() {
                   <TabsTrigger value="scenarios" className="text-xs">🧪 Cenários</TabsTrigger>
                 </TabsList>
                 <TabsContent value="tabela" className="mt-4">
-                 <AmortizationTable result={result} params={formParams} onRecalculate={handleRecalculate} />
+                 <AmortizationTable result={result} params={formParams} onRecalculate={handleRecalculate} highlightParcela={recalcFlag?.parcela} />
                 </TabsContent>
                 <TabsContent value="graficos" className="mt-4">
                  <ScheduleChart schedule={result.schedule} />
