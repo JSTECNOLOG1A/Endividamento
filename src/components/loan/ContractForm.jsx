@@ -243,6 +243,27 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
   // Calcular data final do bullet (data operação + prazo total)
   const [updatingFromDate, setUpdatingFromDate] = React.useState(false);
 
+  // Lê uma data "YYYY-MM-DD" (como vem dos inputs type="date" / do form)
+  // como data LOCAL. `new Date("YYYY-MM-DD")` é interpretado pelo JS como
+  // meia-noite em UTC — em fusos atrás de UTC (ex.: Brasil, UTC-3), ao ler
+  // de volta com getDate()/getMonth() isso "volta" um dia (15 vira 14).
+  // Evita esse problema clássico.
+  const parseDateOnly = (dateStr) => {
+    if (!dateStr) return null;
+    const [y, m, d] = String(dateStr).slice(0, 10).split("-").map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d);
+  };
+
+  // Formata uma data local de volta para "YYYY-MM-DD" sem passar por UTC
+  // (evita o mesmo problema de fuso na direção contrária).
+  const toDateOnlyString = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
   // Soma meses a uma data travando o fim de mês (evita overflow: 31/01 + 1
   // mês = 28/02, não 03/03) — espelha addMonths() do CalculationEngine.js,
   // para o rascunho de "Data Vencimento Final" aqui no formulário já bater
@@ -272,12 +293,13 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     if (!isLoaded || updatingFromDate) return;
     if (form.operation_date && form.total_term_months) {
       const hasReference = !!form.first_payment_date;
-      const anchorDate = new Date(hasReference ? form.first_payment_date : form.operation_date);
+      const anchorDate = parseDateOnly(hasReference ? form.first_payment_date : form.operation_date);
+      if (!anchorDate) return;
       const n = parseInt(form.total_term_months) || 0;
       const monthsToAdd = hasReference ? n - 1 : n;
       const finalDate = addMonthsClamped(anchorDate, monthsToAdd);
       setUpdatingFromDate(true);
-      update("final_maturity_date", finalDate.toISOString().split("T")[0]);
+      update("final_maturity_date", toDateOnlyString(finalDate));
       setTimeout(() => setUpdatingFromDate(false), 50);
     }
   }, [form.operation_date, form.first_payment_date, form.total_term_months, isLoaded]);
@@ -289,8 +311,9 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     const hasReference = !!form.first_payment_date;
     const anchorStr = hasReference ? form.first_payment_date : form.operation_date;
     if (!anchorStr) return;
-    const anchorDate = new Date(anchorStr);
-    const finalDate = new Date(dateStr);
+    const anchorDate = parseDateOnly(anchorStr);
+    const finalDate = parseDateOnly(dateStr);
+    if (!anchorDate || !finalDate) return;
     const monthsDiff = (finalDate.getFullYear() - anchorDate.getFullYear()) * 12 +
                        (finalDate.getMonth() - anchorDate.getMonth());
     const totalInstallments = hasReference ? monthsDiff + 1 : monthsDiff;
