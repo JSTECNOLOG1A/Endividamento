@@ -178,7 +178,7 @@ export default function ContractSummary({ contract, groups, entities, banks, cur
         <Field label="Prazo Total (meses)" value={contract.total_term_months} mono span={2} />
         <Field label="Data Vencimento Final" value={formatDate(contract.final_maturity_date)} mono span={2} />
         <Field
-          label="Dia de Referência dos Vencimentos"
+          label="Referência dos Vencimentos"
           value={contract.first_payment_date ? formatDate(contract.first_payment_date) : "Usa a Data da Operação"}
           mono
           span={2}

@@ -934,15 +934,31 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               <p className="text-xs text-slate-500">Calculado automaticamente, editável</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Dia de Referência dos Vencimentos</Label>
-              <Input 
-                type="date" 
-                value={form.first_payment_date} 
-                onChange={(e) => update("first_payment_date", e.target.value)} 
-                className="h-9 font-mono" 
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Referência dos Vencimentos
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        Data informada para fixar as datas de vencimento mensais — o cálculo da tabela usará
+                        sempre o mesmo dia informado (ex.: 10/04, 10/05…), a menos que caia em final de semana
+                        ou feriado, quando só adia aquele mês. Se deixado vazio, usa a Data da Operação como
+                        referência.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input
+                type="date"
+                value={form.first_payment_date}
+                onChange={(e) => update("first_payment_date", e.target.value)}
+                className="h-9 font-mono"
                 placeholder="Se vazio, usa a Data da Operação"
               />
-              <p className="text-xs text-slate-500">Se preenchido, ancora neste dia (ex.: 10/04, 10/05…). Se vazio, usa a Data da Operação. Fim de semana/feriado só adia aquele mês.</p>
             </div>
           </div>
           <Separator />
