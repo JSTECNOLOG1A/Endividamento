@@ -72,12 +72,57 @@ const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const EPS = 0.01;
 
 /**
- * Limite padrão (R$) acima do qual um "ajuste de arredondamento" deixa de
- * ser tratado como ruído esperado e passa a gerar alerta — sinal de que
- * pode ser parâmetro de contrato errado (taxa, indexador, base de dias),
- * não arredondamento de fato. Configurável por chamada.
+ * ---- Parâmetros de materialidade da baixa (painel de configuração) ----
+ *
+ * Na prática, o valor efetivamente pago (extrato do banco) quase nunca bate
+ * cravado com o principal/juros calculados pelo motor de cálculo — base de
+ * dias, arredondamentos e pequenas diferenças de metodologia entre os dois
+ * motores são normais. A regra de negócio (decidida com o cliente em
+ * ago/2026) é: aceitar automaticamente como "ajuste de arredondamento"
+ * qualquer diferença dentro da margem abaixo, sem exigir que ninguém —
+ * usuário na baixa manual, ou uma futura integração automática de títulos
+ * pagos — discrimine isso manualmente. Acima da margem, a diferença é
+ * grande demais pra ser "só arredondamento": bloqueia até alguém
+ * reclassificar conscientemente (evita mascarar amortização extraordinária,
+ * juro a maior/menor ou encargo bancário real como se fosse ruído).
+ *
+ * Ajuste os dois valores abaixo pra mudar a política — usada tanto pela
+ * baixa manual (SettlementDialog, em FechamentoContabil.jsx) quanto por
+ * qualquer integração automática de títulos que vier a existir, pra sempre
+ * aplicar exatamente a mesma régua nas duas vias.
  */
-export const DEFAULT_ROUNDING_MATERIALITY_THRESHOLD = 50;
+export const SETTLEMENT_MATERIALITY_CONFIG = {
+  // Percentual da parcela (principal + juros previstos) aceito automaticamente.
+  percentThreshold: 0.01, // 1%
+  // Piso mínimo em R$ — evita que parcelas pequenas travem por diferenças
+  // irrisórias de poucos centavos (1% de uma parcela pequena pode dar menos
+  // que isso).
+  floorAmount: 10,
+};
+
+/**
+ * Avalia se a diferença entre o valor efetivamente pago e o valor calculado
+ * (principal + juros previstos pelo cronograma) está dentro da margem de
+ * arredondamento aceitável — ver SETTLEMENT_MATERIALITY_CONFIG acima.
+ *
+ * @param {number} paidTotal - valor total efetivamente pago (extrato)
+ * @param {number} scheduledPrincipal - principal previsto pelo cronograma
+ * @param {number} scheduledInterest - juros previstos pelo cronograma
+ * @param {{percentThreshold:number, floorAmount:number}} [config]
+ */
+export function evaluateSettlementMateriality(
+  paidTotal,
+  scheduledPrincipal,
+  scheduledInterest,
+  config = SETTLEMENT_MATERIALITY_CONFIG
+) {
+  const parcelaTotal = r2((scheduledPrincipal || 0) + (scheduledInterest || 0));
+  const diferenca = r2((paidTotal || 0) - parcelaTotal);
+  const thresholdAmount = r2(Math.max((config.percentThreshold || 0) * parcelaTotal, config.floorAmount || 0));
+  const percentual = parcelaTotal > EPS ? Math.abs(diferenca) / parcelaTotal : (Math.abs(diferenca) > EPS ? 1 : 0);
+  const withinMargin = Math.abs(diferenca) <= thresholdAmount + EPS;
+  return { parcelaTotal, diferenca, thresholdAmount, percentual, withinMargin };
+}
 
 /**
  * Soma os componentes em CAIXA de uma baixa (o que de fato saiu do banco).
@@ -133,20 +178,28 @@ export function validateSettlement(settlement, scheduleRow, dataBase) {
     );
   }
 
-  if (scheduleRow) {
-    const scheduledPrincipal = r2(scheduleRow.amortizacao || 0);
-    const scheduledInterest = r2(scheduleRow.jurosPagos ?? ((scheduleRow.jurosFixosMes || 0) + (scheduleRow.jurosVariaveisMes || 0)));
-    if ((settlement.principal_paid || 0) > scheduledPrincipal + EPS) {
-      warnings.push("Principal pago é maior que o previsto — será tratado como amortização extraordinária.");
-    }
-    if (totalPaid > scheduledPrincipal + scheduledInterest + EPS &&
-        Math.abs((settlement.rounding_adjustment || 0)) < EPS &&
-        (settlement.penalty_paid || 0) < EPS && (settlement.fee_paid || 0) < EPS) {
-      warnings.push(
-        "O valor pago é maior que o previsto e nenhum componente (multa, tarifa, ajuste) explica a diferença. " +
-        "Categorize a diferença antes de salvar."
-      );
-    }
+  const scheduledPrincipal = r2(scheduleRow?.amortizacao || 0);
+  const scheduledInterest = r2(scheduleRow?.jurosPagos ?? ((scheduleRow?.jurosFixosMes || 0) + (scheduleRow?.jurosVariaveisMes || 0)));
+
+  if (scheduleRow && (settlement.principal_paid || 0) > scheduledPrincipal + EPS) {
+    warnings.push("Principal pago é maior que o previsto — será tratado como amortização extraordinária.");
+  }
+
+  // Regra de materialidade (ver SETTLEMENT_MATERIALITY_CONFIG): diferenças
+  // pequenas entre o pago e o calculado são normais (base de dias,
+  // arredondamento) e cabem em "ajuste de arredondamento" sem
+  // questionamento. Diferenças grandes demais pra isso são bloqueadas —
+  // precisam ser reclassificadas manualmente em multa/tarifa/outros, ou em
+  // principal/juros se o pagamento realmente destoou do programado.
+  const materiality = evaluateSettlementMateriality(totalPaid, scheduledPrincipal, scheduledInterest);
+  if (Math.abs(settlement.rounding_adjustment || 0) > materiality.thresholdAmount + EPS) {
+    blockers.push(
+      `O "ajuste de arredondamento" informado (R$ ${Math.abs(settlement.rounding_adjustment || 0).toFixed(2)}) está acima da ` +
+      `margem aceitável pra essa parcela (R$ ${materiality.thresholdAmount.toFixed(2)} — ` +
+      `${(SETTLEMENT_MATERIALITY_CONFIG.percentThreshold * 100).toFixed(0)}% da parcela ou o piso mínimo, o que for maior). ` +
+      "Diferenças desse tamanho não podem ser tratadas como arredondamento — mova o valor pra Multa/Tarifa/Outros, " +
+      "ou ajuste Principal/Juros pago se o pagamento realmente foi diferente do previsto."
+    );
   }
 
   return { valid: blockers.length === 0, blockers, warnings };
@@ -172,22 +225,6 @@ export function settlementTriggersRecalculation(settlement, scheduleRow) {
   const interestDiff = Math.abs(r2(settlement.interest_paid || 0) - scheduledInterest);
 
   return principalDiff > EPS || interestDiff > EPS;
-}
-
-/**
- * Verifica se o "ajuste de arredondamento" de uma baixa está dentro do
- * esperado ou se deveria virar alerta de revisão de parâmetros do contrato.
- */
-export function checkRoundingMateriality(settlement, threshold = DEFAULT_ROUNDING_MATERIALITY_THRESHOLD) {
-  const adjustment = Math.abs(settlement.rounding_adjustment || 0);
-  if (adjustment <= threshold) return { material: false };
-  return {
-    material: true,
-    message:
-      `Ajuste de arredondamento de R$ ${adjustment.toFixed(2)} está acima do limite configurado ` +
-      `(R$ ${threshold.toFixed(2)}). Revise taxa, indexador ou base de dias do contrato — ` +
-      "isso normalmente não é só arredondamento.",
-  };
 }
 
 /**

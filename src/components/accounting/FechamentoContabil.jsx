@@ -30,7 +30,7 @@ import {
   sumSettlementCashBuckets,
   validateSettlement,
   settlementTriggersRecalculation,
-  checkRoundingMateriality,
+  evaluateSettlementMateriality,
   calculateClosingReconciliation,
   buildJournalEntries,
   canApproveClosing,
@@ -69,6 +69,10 @@ function formatCurrency(value) {
   return `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function round2(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
 function lastDayOfMonth(year, month) {
   return new Date(year, month, 0).toISOString().split("T")[0];
 }
@@ -89,6 +93,7 @@ function extractScheduleRows(contract) {
 
 const EMPTY_SETTLEMENT_FORM = {
   actual_payment_date: "",
+  valor_pago: "",
   principal_paid: "",
   interest_paid: "",
   penalty_paid: "0",
@@ -101,11 +106,20 @@ const EMPTY_SETTLEMENT_FORM = {
 };
 
 function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing, bankAccounts, dataBase, onSave, saving }) {
+  // Principal e juros previstos pelo cronograma — a referência que a régua
+  // de materialidade usa pra dizer se o valor pago bate "dentro do
+  // esperado" ou não (ver SETTLEMENT_MATERIALITY_CONFIG).
+  const scheduledPrincipal = round2(scheduleRow?.amortizacao || 0);
+  const scheduledInterest = round2(
+    scheduleRow?.jurosPagos ?? ((scheduleRow?.jurosFixosMes || 0) + (scheduleRow?.jurosVariaveisMes || 0))
+  );
+
   const [form, setForm] = useState(() => ({
     ...EMPTY_SETTLEMENT_FORM,
     actual_payment_date: existing?.actual_payment_date || scheduleRow?.dataVencimento || "",
-    principal_paid: String(existing?.principal_paid ?? scheduleRow?.amortizacao ?? 0),
-    interest_paid: String(existing?.interest_paid ?? scheduleRow?.jurosPagos ?? 0),
+    valor_pago: existing ? String(existing.total_paid ?? "") : "",
+    principal_paid: String(existing?.principal_paid ?? scheduledPrincipal ?? 0),
+    interest_paid: String(existing?.interest_paid ?? scheduledInterest ?? 0),
     penalty_paid: String(existing?.penalty_paid ?? 0),
     fee_paid: String(existing?.fee_paid ?? 0),
     discount_amount: String(existing?.discount_amount ?? 0),
@@ -114,6 +128,28 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
     bank_account_id: existing?.bank_account_id || "",
     observacao: existing?.observacao || "",
   }));
+
+  // O usuário só precisa informar o valor total pago (extrato do banco) —
+  // o sistema assume que principal e juros previstos estão certos e joga a
+  // diferença automaticamente em "ajuste de arredondamento". Se a
+  // diferença for grande demais (fora da margem de materialidade), o botão
+  // de salvar fica bloqueado até o usuário reclassificar manualmente nos
+  // campos abaixo (multa/tarifa/outros, ou principal/juros se o pagamento
+  // realmente foi diferente do programado).
+  const handleValorPagoChange = (value) => {
+    const valorPagoNum = Number(String(value).replace(",", ".")) || 0;
+    const diferenca = round2(valorPagoNum - scheduledPrincipal - scheduledInterest);
+    setForm((prev) => ({
+      ...prev,
+      valor_pago: value,
+      principal_paid: String(scheduledPrincipal),
+      interest_paid: String(scheduledInterest),
+      penalty_paid: "0",
+      fee_paid: "0",
+      other_amount: "0",
+      rounding_adjustment: String(diferenca),
+    }));
+  };
 
   const num = (key) => Number(String(form[key]).replace(",", ".")) || 0;
   const draftSettlement = {
@@ -131,11 +167,16 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
   const totalPaid = sumSettlementCashBuckets(draftSettlement);
   draftSettlement.total_paid = totalPaid;
 
+  const valorPagoNum = num("valor_pago");
+  const materiality = evaluateSettlementMateriality(valorPagoNum, scheduledPrincipal, scheduledInterest);
   const validation = validateSettlement(draftSettlement, scheduleRow, dataBase);
-  const materiality = checkRoundingMateriality(draftSettlement);
   const willTriggerRecalc = settlementTriggersRecalculation(draftSettlement, scheduleRow);
 
   const handleSave = () => {
+    if (!form.valor_pago) {
+      toast.warning("Informe o valor total pago (conforme o extrato bancário).");
+      return;
+    }
     if (!validation.valid) {
       toast.warning(validation.blockers[0]);
       return;
@@ -176,6 +217,21 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
             </div>
           </div>
 
+          <div className="space-y-1">
+            <Label className="text-xs">Valor total pago (conforme extrato bancário) *</Label>
+            <Input className="h-9 font-mono" value={form.valor_pago} onChange={(e) => handleValorPagoChange(e.target.value)} />
+            <p className="text-[11px] text-slate-500">
+              Previsto: {formatCurrency(scheduledPrincipal)} de principal + {formatCurrency(scheduledInterest)} de juros = {formatCurrency(scheduledPrincipal + scheduledInterest)}.
+              {" "}Diferença:{" "}
+              <span className={materiality.withinMargin ? "text-emerald-600 font-medium" : "text-red-600 font-semibold"}>
+                {formatCurrency(materiality.diferenca)} ({(materiality.percentual * 100).toFixed(2)}%)
+              </span>
+              {materiality.withinMargin
+                ? " — dentro da margem aceitável, tratada automaticamente como ajuste de arredondamento."
+                : " — acima da margem aceitável. Reclassifique abaixo antes de salvar (multa, tarifa, outros, ou principal/juros se o pagamento realmente foi diferente do previsto)."}
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Principal pago</Label>
@@ -208,7 +264,7 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 flex items-center justify-between">
-            <span className="text-xs text-slate-500">Total pago (calculado)</span>
+            <span className="text-xs text-slate-500">Total pago (calculado a partir dos campos acima)</span>
             <span className="font-mono font-semibold text-slate-900">{formatCurrency(totalPaid)}</span>
           </div>
 
@@ -224,12 +280,6 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
               (reabra o contrato no Simulador) antes do fechamento poder ser aprovado.
             </div>
           )}
-          {materiality.material && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              {materiality.message}
-            </div>
-          )}
           {validation.warnings.map((w, i) => (
             <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">{w}</div>
           ))}
@@ -239,7 +289,7 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
-          <Button type="button" onClick={handleSave} disabled={saving || !validation.valid}>
+          <Button type="button" onClick={handleSave} disabled={saving || !validation.valid || !form.valor_pago}>
             {saving ? "Salvando..." : "Salvar baixa"}
           </Button>
         </DialogFooter>
