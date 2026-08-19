@@ -763,6 +763,7 @@ export function getPaymentFlowByBankModalityGuarantee(contracts, baseDate, yearS
       rowsMap.set(key, {
         bankId: contract.bank_id || null,
         operationType: contract.operation_type || null,
+        operationCategory: contract.operation_category || null,
         guarantee: guaranteeLabel,
         byYear: {}, // year -> { principal, interest }
         catchAll: { principal: 0, interest: 0 },

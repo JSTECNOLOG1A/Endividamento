@@ -698,7 +698,22 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             {form.currency_id && (
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Defasagem PTAX</Label>
+                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Defasagem PTAX
+                  <TooltipProvider>
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <p className="text-xs">
+                          Quantos dias antes da data de cada evento (vencimento, apropriação) o sistema busca a
+                          cotação PTAX usada na variação cambial. "D" usa a cotação do próprio dia.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
                 <Select value={form.exchange_lag} onValueChange={(v) => update("exchange_lag", v)}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -850,7 +865,22 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-3">
               <div className="space-y-1.5">
-                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">IOF (R$)</Label>
+                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                   IOF (R$)
+                   <TooltipProvider>
+                     <Tooltip delayDuration={200}>
+                       <TooltipTrigger asChild>
+                         <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                       </TooltipTrigger>
+                       <TooltipContent side="right" className="max-w-xs">
+                         <p className="text-xs">
+                           Imposto sobre Operações Financeiras cobrado pelo banco na operação. Se "financiado",
+                           soma-se ao saldo devedor inicial; senão, é custo à parte, fora do cronograma.
+                         </p>
+                       </TooltipContent>
+                     </Tooltip>
+                   </TooltipProvider>
+                 </Label>
                  <CurrencyInput type="currency" value={form.iof_value} onChange={(e) => update("iof_value", e.target.value)} className="h-9" />
                </div>
               <div className="flex items-center gap-2">
@@ -860,7 +890,22 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Valor do Encargo por Concessão de Garantia (ECG) (R$)</Label>
+                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                   Valor do Encargo por Concessão de Garantia (ECG) (R$)
+                   <TooltipProvider>
+                     <Tooltip delayDuration={200}>
+                       <TooltipTrigger asChild>
+                         <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                       </TooltipTrigger>
+                       <TooltipContent side="right" className="max-w-xs">
+                         <p className="text-xs">
+                           Taxa cobrada pelo banco por aceitar a garantia oferecida na operação (comum em BNDES/FINAME
+                           e crédito rural). Se "financiado", soma-se ao saldo devedor inicial.
+                         </p>
+                       </TooltipContent>
+                     </Tooltip>
+                   </TooltipProvider>
+                 </Label>
                  <CurrencyInput type="currency" value={form.encargo_garantia_value} onChange={(e) => update("encargo_garantia_value", e.target.value)} className="h-9" />
                </div>
               <div className="flex items-center gap-2">
@@ -870,7 +915,22 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Taxas Diversas (R$)</Label>
+                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                   Taxas Diversas (R$)
+                   <TooltipProvider>
+                     <Tooltip delayDuration={200}>
+                       <TooltipTrigger asChild>
+                         <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                       </TooltipTrigger>
+                       <TooltipContent side="right" className="max-w-xs">
+                         <p className="text-xs">
+                           Outras tarifas/taxas cobradas na contratação (ex.: análise de crédito, cadastro,
+                           avaliação de garantia) que não se encaixam em IOF ou ECG.
+                         </p>
+                       </TooltipContent>
+                     </Tooltip>
+                   </TooltipProvider>
+                 </Label>
                  <CurrencyInput type="currency" value={form.other_fees} onChange={(e) => update("other_fees", e.target.value)} className="h-9" />
                </div>
               <div className="flex items-center gap-2">
@@ -881,7 +941,22 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </div>
           <Separator />
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Data da Operação *</Label>
+            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+              Data da Operação *
+              <TooltipProvider>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-xs">
+                    <p className="text-xs">
+                      Data de assinatura/desembolso do contrato. Se a "Referência dos Vencimentos" abaixo ficar
+                      vazia, esta data também vira o ponto de partida para contar as parcelas.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
             <Input type="date" value={form.operation_date} onChange={(e) => update("operation_date", e.target.value)} className="h-9 font-mono w-64" required />
           </div>
           <Separator />
@@ -1051,8 +1126,23 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <Separator />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Carência Principal (meses)</Label>
-              <Input 
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Carência Principal (meses)
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        Meses em que só há apropriação/pagamento de juros — a amortização do principal só começa
+                        depois desse período (o "Gatilho da Primeira Amortização" abaixo define exatamente quando).
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input
                 type="number" 
                 min="0" 
                 value={form.principal_grace_months} 
@@ -1065,8 +1155,24 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Carência Juros (meses)</Label>
-              <Input 
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Carência Juros (meses)
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        Meses em que os juros apropriados não são pagos em caixa — o "Comportamento dos Juros na
+                        Carência" abaixo define se eles capitalizam no saldo, se são pagos à parte, ou se acumulam
+                        para pagar depois (balloon).
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input
                 type="number" 
                 min="0" 
                 value={form.interest_grace_months} 
@@ -1082,8 +1188,24 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           {(parseInt(form.interest_grace_months) > 0 && fieldsStatus.interestGrace) && (
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Comportamento dos Juros na Carência</Label>
-                <Select 
+                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Comportamento dos Juros na Carência
+                  <TooltipProvider>
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <p className="text-xs">
+                          O que acontece com os juros apropriados durante a carência: Capitalizar soma ao saldo
+                          devedor (juros sobre juros); Pagar Juros exige desembolso mensal já na carência; Balloon
+                          acumula juros simples à parte para quitar depois.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+                <Select
                   value={form.grace_interest_behavior} 
                   onValueChange={(v) => {
                     // Bloquear PRICE + BALLOON
@@ -1125,7 +1247,22 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </div>
               {parseInt(form.principal_grace_months) > 0 && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Gatilho da Primeira Amortização</Label>
+                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    Gatilho da Primeira Amortização
+                    <TooltipProvider>
+                      <Tooltip delayDuration={200}>
+                        <TooltipTrigger asChild>
+                          <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs">
+                          <p className="text-xs">
+                            Define a data exata da 1ª parcela de amortização, contada a partir do fim da carência
+                            de principal — as três opções abaixo mudam só esse detalhe de contagem.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
                   <Select value={form.amortization_trigger} onValueChange={(v) => update("amortization_trigger", v)}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>

@@ -24,7 +24,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { CheckCircle2, AlertTriangle, Lock, RotateCcw, Calculator, ClipboardCheck, Settings2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Lock, RotateCcw, Calculator, ClipboardCheck, Settings2, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import AccountingMatrixConfig from "./AccountingMatrixConfig";
 import {
   EVENT_TYPE_LABELS,
@@ -68,6 +69,23 @@ function formatCurrency(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "R$ 0,00";
   return `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Ícone de "i" com tooltip explicativo — mesmo padrão usado no formulário de
+// contrato (ContractForm.jsx), só para colar ao lado de labels não óbvias.
+function InfoTip({ text, side = "right" }) {
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={200}>
+        <TooltipTrigger asChild>
+          <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+        </TooltipTrigger>
+        <TooltipContent side={side} className="max-w-xs">
+          <p className="text-xs">{text}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 function round2(value) {
@@ -251,7 +269,10 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
               <Input className="h-9 font-mono" value={form.fee_paid} onChange={(e) => setForm({ ...form, fee_paid: e.target.value })} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Ajuste de arredondamento</Label>
+              <Label className="text-xs">
+                Ajuste de arredondamento
+                <InfoTip text="Pequena diferença de centavos entre o previsto e o pago (arredondamento de taxa, por exemplo). Dentro da margem aceitável, o sistema já preenche isso sozinho." />
+              </Label>
               <Input className="h-9 font-mono" value={form.rounding_adjustment} onChange={(e) => setForm({ ...form, rounding_adjustment: e.target.value })} />
             </div>
             <div className="space-y-1">
@@ -259,7 +280,10 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
               <Input className="h-9 font-mono" value={form.other_amount} onChange={(e) => setForm({ ...form, other_amount: e.target.value })} />
             </div>
             <div className="space-y-1 col-span-2">
-              <Label className="text-xs">Desconto financeiro obtido (remissão — não é rotina)</Label>
+              <Label className="text-xs">
+                Desconto financeiro obtido (remissão — não é rotina)
+                <InfoTip text="Uso excepcional: quando o banco perdoa/reduz parte do valor devido (renegociação, acordo). Não é o campo para diferenças normais de arredondamento — para isso use 'Ajuste de arredondamento'." />
+              </Label>
               <Input className="h-9 font-mono" value={form.discount_amount} onChange={(e) => setForm({ ...form, discount_amount: e.target.value })} />
             </div>
           </div>
@@ -667,7 +691,10 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 </div>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-slate-500 uppercase tracking-wider">Data-base</Label>
+                <Label className="text-xs text-slate-500 uppercase tracking-wider">
+                  Data-base
+                  <InfoTip text="Data usada para calcular o saldo e reclassificar principal/juros entre circulante e não circulante. Normalmente é o último dia da competência selecionada." />
+                </Label>
                 <Input type="date" className="h-9" value={dataBase} onChange={(e) => setDataBase(e.target.value)} disabled={isApproved} />
               </div>
             </div>
