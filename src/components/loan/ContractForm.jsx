@@ -242,41 +242,62 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
 
   // Calcular data final do bullet (data operação + prazo total)
   const [updatingFromDate, setUpdatingFromDate] = React.useState(false);
-  
+
+  // Soma meses a uma data travando o fim de mês (evita overflow: 31/01 + 1
+  // mês = 28/02, não 03/03) — espelha addMonths() do CalculationEngine.js,
+  // para o rascunho de "Data Vencimento Final" aqui no formulário já bater
+  // com a data que o motor vai efetivamente gerar na última parcela.
+  const addMonthsClamped = (date, months) => {
+    const nominalDay = date.getDate();
+    const d = new Date(date.getFullYear(), date.getMonth(), 1);
+    d.setMonth(d.getMonth() + months);
+    const lastDayOfTargetMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(nominalDay, lastDayOfTargetMonth));
+    return d;
+  };
+
+  // O motor de cálculo (CalculationEngine.js) sempre ancora as parcelas no
+  // dia da "Referência dos Vencimentos" (quando preenchida) ou no dia da
+  // "Data da Operação" (quando vazia) — nunca no dia da própria Data
+  // Vencimento Final. E a 1ª parcela da tabela já nasce EM CIMA dessa data
+  // âncora (não um mês depois) quando a Referência está preenchida. Por
+  // isso, para a última parcela da tabela cair exatamente na Data
+  // Vencimento Final informada:
+  //   • Com Referência preenchida: total de parcelas = nº de meses entre a
+  //     Referência e o Vencimento Final, + 1 (a 1ª parcela já é a própria
+  //     Referência, "mês 0").
+  //   • Sem Referência: total de parcelas = nº de meses entre a Operação e
+  //     o Vencimento Final (a 1ª parcela é 1 mês após a Operação, sem +1).
   React.useEffect(() => {
     if (!isLoaded || updatingFromDate) return;
     if (form.operation_date && form.total_term_months) {
-      const operationDate = new Date(form.operation_date);
-      const finalDate = new Date(operationDate);
-      finalDate.setMonth(finalDate.getMonth() + parseInt(form.total_term_months));
+      const hasReference = !!form.first_payment_date;
+      const anchorDate = new Date(hasReference ? form.first_payment_date : form.operation_date);
+      const n = parseInt(form.total_term_months) || 0;
+      const monthsToAdd = hasReference ? n - 1 : n;
+      const finalDate = addMonthsClamped(anchorDate, monthsToAdd);
       setUpdatingFromDate(true);
       update("final_maturity_date", finalDate.toISOString().split("T")[0]);
       setTimeout(() => setUpdatingFromDate(false), 50);
     }
-  }, [form.operation_date, form.total_term_months, isLoaded]);
+  }, [form.operation_date, form.first_payment_date, form.total_term_months, isLoaded]);
 
-  // Recalcular prazo total quando data final é editada
+  // Recalcular prazo total quando data final é editada (ver explicação acima)
   const handleFinalDateChange = (dateStr) => {
     update("final_maturity_date", dateStr);
-    if (form.operation_date && dateStr) {
-      const operationDate = new Date(form.operation_date);
-      const finalDate = new Date(dateStr);
-      let monthsDiff = (finalDate.getFullYear() - operationDate.getFullYear()) * 12 +
-                         (finalDate.getMonth() - operationDate.getMonth());
-      // Se o dia do vencimento final for anterior ao dia da data da operação,
-      // o último mês ainda não se completou (ex.: operação em 20/05 e
-      // vencimento em 15/06 → passaram só 26 dias, não um mês cheio).
-      // Sem esse ajuste, o cálculo "ano/mês" ingênuo conta um mês a mais
-      // (ex.: 20/05/2022 → 15/06/2027 dava 61 em vez de 60), gerando uma
-      // parcela extra na tabela de amortização.
-      if (finalDate.getDate() < operationDate.getDate()) {
-        monthsDiff -= 1;
-      }
-      if (monthsDiff > 0) {
-        setUpdatingFromDate(true);
-        update("total_term_months", monthsDiff.toString());
-        setTimeout(() => setUpdatingFromDate(false), 50);
-      }
+    if (!dateStr) return;
+    const hasReference = !!form.first_payment_date;
+    const anchorStr = hasReference ? form.first_payment_date : form.operation_date;
+    if (!anchorStr) return;
+    const anchorDate = new Date(anchorStr);
+    const finalDate = new Date(dateStr);
+    const monthsDiff = (finalDate.getFullYear() - anchorDate.getFullYear()) * 12 +
+                       (finalDate.getMonth() - anchorDate.getMonth());
+    const totalInstallments = hasReference ? monthsDiff + 1 : monthsDiff;
+    if (totalInstallments > 0) {
+      setUpdatingFromDate(true);
+      update("total_term_months", totalInstallments.toString());
+      setTimeout(() => setUpdatingFromDate(false), 50);
     }
   };
 

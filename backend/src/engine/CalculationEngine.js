@@ -683,16 +683,21 @@ export async function calculateAmortizationSchedule(params) {
     if (totalTermMonths && totalTermMonths > 0) {
       totalMonths = totalTermMonths;
     } else {
-      const yearDiff = finalDate.getFullYear() - startDate.getFullYear();
-      const monthDiff = finalDate.getMonth() - startDate.getMonth();
+      // Cada linha da tabela usa sempre o dia da âncora (referenceDayOfMonth,
+      // acima) — o dia do vencimento final é ignorado no bucket ano/mês, só
+      // o mês/ano importam aqui. Por isso a diferença é sempre em blocos de
+      // ano/mês "cheios", sem ajuste pelo dia do mês.
+      const anchorForCount = hasFirstPaymentDate ? dueAnchorDate : startDate;
+      const yearDiff = finalDate.getFullYear() - anchorForCount.getFullYear();
+      const monthDiff = finalDate.getMonth() - anchorForCount.getMonth();
       totalMonths = yearDiff * 12 + monthDiff;
-      // Mesmo ajuste de "mês incompleto" do ContractForm (ver comentário lá):
-      // se o dia do vencimento final for anterior ao dia da data da operação,
-      // o último mês ainda não fechou — sem isso o cálculo ingênuo de
-      // ano/mês conta uma parcela a mais (ex.: 20/05/2022 → 15/06/2027 dava
-      // 61 meses em vez de 60).
-      if (finalDate.getDate() < startDate.getDate()) {
-        totalMonths -= 1;
+      // Com Referência preenchida, a 1ª parcela já é a própria Referência
+      // ("mês 0" do loop abaixo), então é preciso +1 mês para a última
+      // parcela cair exatamente na Data Vencimento Final. Sem Referência, a
+      // 1ª parcela já é gerada 1 mês após a Data da Operação (ver loop
+      // "monthIdx + 1" mais abaixo), então não soma nada aqui.
+      if (hasFirstPaymentDate) {
+        totalMonths += 1;
       }
     }
   }
