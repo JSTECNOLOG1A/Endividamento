@@ -375,8 +375,8 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
                               {vinculoLabel(item)}
                             </span>
                           </TableCell>
-                          <TableCell className="whitespace-nowrap font-mono text-xs">{empresaLabel(item.empresa)}</TableCell>
-                          <TableCell className="font-mono whitespace-nowrap">{item.codigo}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{empresaLabel(item.empresa)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{item.codigo}</TableCell>
                           <TableCell>{item.descricao}</TableCell>
                           <TableCell>
                             <Badge variant="outline">

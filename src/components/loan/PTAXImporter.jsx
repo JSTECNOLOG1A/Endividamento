@@ -391,8 +391,8 @@ export default function PTAXImporter() {
               </div>
               {sortedRates.slice(0, viewLimit).map((rate) => (
                 <div key={rate.id} className="grid grid-cols-3 gap-2 text-slate-700 hover:bg-white/50 transition-colors px-1 py-0.5 rounded">
-                  <span className="font-mono">{new Date(rate.rate_date).toLocaleDateString("pt-BR")}</span>
-                  <span className="font-mono text-right">{rate.exchange_rate ? rate.exchange_rate.toFixed(4) : "—"}</span>
+                  <span className="">{new Date(rate.rate_date).toLocaleDateString("pt-BR")}</span>
+                  <span className="text-right">{rate.exchange_rate ? rate.exchange_rate.toFixed(4) : "—"}</span>
                   <span className="text-right text-green-600">{rate.status}</span>
                 </div>
               ))}

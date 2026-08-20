@@ -146,7 +146,7 @@ export default function ClassifyTitleDialog({
               />
               <div className="space-y-1">
                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Loja</Label>
-                <Input value={partyLoja} onChange={(event) => setPartyLoja(event.target.value)} className="h-9 font-mono" placeholder="01" />
+                <Input value={partyLoja} onChange={(event) => setPartyLoja(event.target.value)} className="h-9" placeholder="01" />
               </div>
             </div>
             <div className="space-y-1">

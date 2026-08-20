@@ -108,7 +108,7 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
                 value={form.codigo || ""}
                 onChange={(e) => setForm({ ...form, codigo: e.target.value })}
                 placeholder="101010"
-                className="h-9 font-mono"
+                className="h-9"
                 required
               />
             </div>
@@ -149,7 +149,7 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
                 value={form.c_custo || ""}
                 onChange={(e) => setForm({ ...form, c_custo: e.target.value })}
                 placeholder="Opcional"
-                className="h-9 font-mono"
+                className="h-9"
               />
             </div>
             <div className="space-y-1.5">
@@ -158,7 +158,7 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
                 value={form.c_des_fat || ""}
                 onChange={(e) => setForm({ ...form, c_des_fat: e.target.value })}
                 placeholder="Opcional"
-                className="h-9 font-mono"
+                className="h-9"
               />
             </div>
           </div>

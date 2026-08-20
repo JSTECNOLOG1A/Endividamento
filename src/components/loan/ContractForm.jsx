@@ -812,7 +812,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Valor Convertido (R$) - Calculado Automaticamente
                 </Label>
-                <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm font-mono text-slate-600">
+                <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm text-slate-600">
                   {(() => {
                     const foreign = parseBRNumber(form.amount_foreign);
                     const rate = parseBRNumber(form.exchange_rate_closing);
@@ -957,7 +957,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 </Tooltip>
               </TooltipProvider>
             </Label>
-            <Input type="date" value={form.operation_date} onChange={(e) => update("operation_date", e.target.value)} className="h-9 font-mono w-64" required />
+            <Input type="date" value={form.operation_date} onChange={(e) => update("operation_date", e.target.value)} className="h-9 w-64" required />
           </div>
           <Separator />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -967,7 +967,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa Mensal Equivalente</Label>
-              <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm font-mono text-slate-600">
+              <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm text-slate-600">
                 {form.fixed_rate && !isNaN(parseFloat(form.fixed_rate)) 
                   ? `${((Math.pow(1 + parseFloat(form.fixed_rate) / 100, 1/12) - 1) * 100).toFixed(4)}% a.m.`
                   : "—"}
@@ -1069,7 +1069,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 min="1"
                 value={form.total_term_months}
                 onChange={(e) => update("total_term_months", e.target.value)}
-                className="h-9 font-mono"
+                className="h-9"
                 disabled={!fieldsStatus.totalTerm}
                 required
               />
@@ -1090,7 +1090,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 type="date" 
                 value={form.final_maturity_date} 
                 onChange={(e) => handleFinalDateChange(e.target.value)} 
-                className="h-9 font-mono" 
+                className="h-9" 
                 disabled={!fieldsStatus.totalTerm}
               />
               <p className="text-xs text-slate-500">Calculado automaticamente, editável</p>
@@ -1118,7 +1118,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 type="date"
                 value={form.first_payment_date}
                 onChange={(e) => update("first_payment_date", e.target.value)}
-                className="h-9 font-mono"
+                className="h-9"
                 placeholder="Se vazio, usa a Data da Operação"
               />
             </div>
@@ -1372,7 +1372,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 value={form.amortization_percentages}
                 onChange={(e) => update("amortization_percentages", e.target.value)}
                 placeholder="Ex: 24.18, 28.09, 32.72, 38.18"
-                className="h-9 font-mono border-amber-300"
+                className="h-9 border-amber-300"
               />
               <p className="text-xs text-amber-600">
                 Insira os percentuais separados por vírgula. Ex: primeira parcela 24,18%, segunda 28,09%, etc.

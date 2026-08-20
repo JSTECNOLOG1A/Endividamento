@@ -141,7 +141,7 @@ export default function BankAccountForm({
                 value={form.agencia || ""}
                 onChange={(e) => setForm({ ...form, agencia: e.target.value })}
                 placeholder="0001"
-                className="h-9 font-mono"
+                className="h-9"
                 required
               />
             </div>
@@ -151,7 +151,7 @@ export default function BankAccountForm({
                 value={form.conta || ""}
                 onChange={(e) => setForm({ ...form, conta: e.target.value })}
                 placeholder="12345-6"
-                className="h-9 font-mono"
+                className="h-9"
                 required
               />
             </div>
@@ -161,7 +161,7 @@ export default function BankAccountForm({
                 value={form.digito || ""}
                 onChange={(e) => setForm({ ...form, digito: e.target.value })}
                 placeholder="Opcional"
-                className="h-9 font-mono"
+                className="h-9"
               />
             </div>
           </div>

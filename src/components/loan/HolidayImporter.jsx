@@ -213,7 +213,7 @@ export default function HolidayImporter() {
                 <TableBody>
                   {paginatedHolidays.map((holiday) => (
                     <TableRow key={holiday.id}>
-                      <TableCell className="font-mono text-sm">
+                      <TableCell className="text-sm">
                         {new Date(holiday.holiday_date + "T12:00:00").toLocaleDateString("pt-BR")}
                       </TableCell>
                       <TableCell className="text-sm">{holiday.day_of_week || "—"}</TableCell>

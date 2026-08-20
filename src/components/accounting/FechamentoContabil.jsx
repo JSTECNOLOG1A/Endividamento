@@ -238,7 +238,7 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
 
           <div className="space-y-1">
             <Label className="text-xs">Valor total pago (conforme extrato bancário) *</Label>
-            <Input className="h-9 font-mono" value={form.valor_pago} onChange={(e) => handleValorPagoChange(e.target.value)} />
+            <Input className="h-9" value={form.valor_pago} onChange={(e) => handleValorPagoChange(e.target.value)} />
             <p className="text-[11px] text-slate-500">
               Previsto: {formatCurrency(scheduledPrincipal)} de principal + {formatCurrency(scheduledInterest)} de juros = {formatCurrency(scheduledPrincipal + scheduledInterest)}.
               {" "}Diferença:{" "}
@@ -254,43 +254,43 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Principal pago</Label>
-              <Input className="h-9 font-mono" value={form.principal_paid} onChange={(e) => setForm({ ...form, principal_paid: e.target.value })} />
+              <Input className="h-9" value={form.principal_paid} onChange={(e) => setForm({ ...form, principal_paid: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Juros pago</Label>
-              <Input className="h-9 font-mono" value={form.interest_paid} onChange={(e) => setForm({ ...form, interest_paid: e.target.value })} />
+              <Input className="h-9" value={form.interest_paid} onChange={(e) => setForm({ ...form, interest_paid: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Multa / mora</Label>
-              <Input className="h-9 font-mono" value={form.penalty_paid} onChange={(e) => setForm({ ...form, penalty_paid: e.target.value })} />
+              <Input className="h-9" value={form.penalty_paid} onChange={(e) => setForm({ ...form, penalty_paid: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Tarifa bancária</Label>
-              <Input className="h-9 font-mono" value={form.fee_paid} onChange={(e) => setForm({ ...form, fee_paid: e.target.value })} />
+              <Input className="h-9" value={form.fee_paid} onChange={(e) => setForm({ ...form, fee_paid: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">
                 Ajuste de arredondamento
                 <InfoTip text="Pequena diferença de centavos entre o previsto e o pago (arredondamento de taxa, por exemplo). Dentro da margem aceitável, o sistema já preenche isso sozinho." />
               </Label>
-              <Input className="h-9 font-mono" value={form.rounding_adjustment} onChange={(e) => setForm({ ...form, rounding_adjustment: e.target.value })} />
+              <Input className="h-9" value={form.rounding_adjustment} onChange={(e) => setForm({ ...form, rounding_adjustment: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Outros</Label>
-              <Input className="h-9 font-mono" value={form.other_amount} onChange={(e) => setForm({ ...form, other_amount: e.target.value })} />
+              <Input className="h-9" value={form.other_amount} onChange={(e) => setForm({ ...form, other_amount: e.target.value })} />
             </div>
             <div className="space-y-1 col-span-2">
               <Label className="text-xs">
                 Desconto financeiro obtido (remissão — não é rotina)
                 <InfoTip text="Uso excepcional: quando o banco perdoa/reduz parte do valor devido (renegociação, acordo). Não é o campo para diferenças normais de arredondamento — para isso use 'Ajuste de arredondamento'." />
               </Label>
-              <Input className="h-9 font-mono" value={form.discount_amount} onChange={(e) => setForm({ ...form, discount_amount: e.target.value })} />
+              <Input className="h-9" value={form.discount_amount} onChange={(e) => setForm({ ...form, discount_amount: e.target.value })} />
             </div>
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 flex items-center justify-between">
             <span className="text-xs text-slate-500">Total pago (calculado a partir dos campos acima)</span>
-            <span className="font-mono font-semibold text-slate-900">{formatCurrency(totalPaid)}</span>
+            <span className="font-semibold text-slate-900">{formatCurrency(totalPaid)}</span>
           </div>
 
           <div className="space-y-1">
@@ -758,9 +758,9 @@ export default function FechamentoContabil({ entityId, entityName }) {
                       <tr key={`${contract.id}-${row.parcela}`} className="border-b border-slate-100 hover:bg-slate-50">
                         <td className="px-2 py-2 text-slate-700">{contract.contract_number}</td>
                         <td className="px-2 py-2 text-slate-700">{row.dataVencimento?.split("-").reverse().join("/")}</td>
-                        <td className="px-2 py-2 text-right font-mono text-slate-700">{formatCurrency(row.amortizacao)}</td>
-                        <td className="px-2 py-2 text-right font-mono text-slate-700">{formatCurrency(row.jurosPagos)}</td>
-                        <td className="px-2 py-2 text-right font-mono text-slate-700">
+                        <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(row.amortizacao)}</td>
+                        <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(row.jurosPagos)}</td>
+                        <td className="px-2 py-2 text-right text-slate-700">
                           {settlement && !isEstornado ? formatCurrency(settlement.total_paid) : "—"}
                         </td>
                         <td className="px-2 py-2">
@@ -834,19 +834,19 @@ export default function FechamentoContabil({ entityId, entityName }) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               <div className="rounded-lg border border-slate-200 px-3 py-2">
                 <p className="text-xs text-slate-500">Saldo anterior</p>
-                <p className="font-mono font-semibold">{formatCurrency(calcResult.opening.principal + calcResult.opening.interest + calcResult.opening.fx)}</p>
+                <p className="font-semibold">{formatCurrency(calcResult.opening.principal + calcResult.opening.interest + calcResult.opening.fx)}</p>
               </div>
               <div className="rounded-lg border border-slate-200 px-3 py-2">
                 <p className="text-xs text-slate-500">Saldo final</p>
-                <p className="font-mono font-semibold">{formatCurrency(calcResult.closing.principal + calcResult.closing.interest + calcResult.closing.fx)}</p>
+                <p className="font-semibold">{formatCurrency(calcResult.closing.principal + calcResult.closing.interest + calcResult.closing.fx)}</p>
               </div>
               <div className="rounded-lg border border-slate-200 px-3 py-2">
                 <p className="text-xs text-slate-500">Contratos no lote</p>
-                <p className="font-mono font-semibold">{calcResult.perContract.length}</p>
+                <p className="font-semibold">{calcResult.perContract.length}</p>
               </div>
               <div className="rounded-lg border border-slate-200 px-3 py-2">
                 <p className="text-xs text-slate-500">Pendências</p>
-                <p className={`font-mono font-semibold ${calcResult.hasBlockingDivergence ? "text-red-600" : "text-emerald-600"}`}>
+                <p className={`font-semibold ${calcResult.hasBlockingDivergence ? "text-red-600" : "text-emerald-600"}`}>
                   {calcResult.pendingRecalculation.length}
                 </p>
               </div>
@@ -863,7 +863,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
                   {Object.entries(calcResult.eventTotals).map(([type, amount]) => (
                     <tr key={type} className="border-b border-slate-100">
                       <td className="px-2 py-2 text-slate-700">{EVENT_TYPE_LABELS[type] || type}</td>
-                      <td className="px-2 py-2 text-right font-mono text-slate-700">{formatCurrency(amount)}</td>
+                      <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(amount)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -908,16 +908,16 @@ export default function FechamentoContabil({ entityId, entityName }) {
                       <td className="px-2 py-2 text-slate-700">{e.entry_date?.split("-").reverse().join("/")}</td>
                       <td className="px-2 py-2 text-slate-700">{EVENT_TYPE_LABELS[e.event_type] || e.event_type}</td>
                       <td className="px-2 py-2 text-slate-700">{accountName(e.account_id)}</td>
-                      <td className="px-2 py-2 text-right font-mono text-slate-700">{e.side === "debito" ? formatCurrency(e.amount) : ""}</td>
-                      <td className="px-2 py-2 text-right font-mono text-slate-700">{e.side === "credito" ? formatCurrency(e.amount) : ""}</td>
+                      <td className="px-2 py-2 text-right text-slate-700">{e.side === "debito" ? formatCurrency(e.amount) : ""}</td>
+                      <td className="px-2 py-2 text-right text-slate-700">{e.side === "credito" ? formatCurrency(e.amount) : ""}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-300 font-semibold">
                     <td className="px-2 py-2" colSpan={3}>Totais</td>
-                    <td className="px-2 py-2 text-right font-mono">{formatCurrency(journalResult.totalDebito)}</td>
-                    <td className="px-2 py-2 text-right font-mono">{formatCurrency(journalResult.totalCredito)}</td>
+                    <td className="px-2 py-2 text-right">{formatCurrency(journalResult.totalDebito)}</td>
+                    <td className="px-2 py-2 text-right">{formatCurrency(journalResult.totalCredito)}</td>
                   </tr>
                 </tfoot>
               </table>

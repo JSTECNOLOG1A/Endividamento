@@ -195,7 +195,7 @@ export default function IntegrityValidator({ beforeResult, afterResult, currency
                     )}
                     <span className="font-semibold text-slate-700">{check.field}:</span>
                   </div>
-                  <div className="flex items-center gap-3 font-mono text-[10px]">
+                  <div className="flex items-center gap-3 text-[10px]">
                     <span className="text-slate-500">{check.before}</span>
                     <span className="text-slate-400">→</span>
                     <span className={check.passed ? "text-green-700" : "text-red-700 font-bold"}>

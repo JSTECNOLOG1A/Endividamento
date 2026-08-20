@@ -583,24 +583,24 @@ export default function AccountsPayable() {
                       <td className="px-3 py-2.5 align-middle font-medium text-slate-800 max-w-[180px] truncate" title={item.entity_name || ""}>
                         {item.entity_name || "—"}
                       </td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700" title="Empresa do título no SE2 (E2_FILIAL / M0_CODIGO)">
+                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700" title="Empresa do título no SE2 (E2_FILIAL / M0_CODIGO)">
                         {item.filial || "—"}
                       </td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700" title="Filial de origem (E2_FILORIG). Pode ser diferente da unidade da sessão, ex.: 0301 ou 0104">
+                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700" title="Filial de origem (E2_FILORIG). Pode ser diferente da unidade da sessão, ex.: 0301 ou 0104">
                         {item.filial_origem || "—"}
                       </td>
                       <td className="px-2 py-2.5 align-middle text-xs text-slate-700 max-w-[200px] truncate" title={supplierLabel(item)}>
                         {supplierLabel(item)}
                       </td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700">{item.prefixo}</td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700 whitespace-nowrap">{item.titulo_numero}</td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700">{item.parcela}</td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700">{item.tipo}</td>
+                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700">{item.prefixo}</td>
+                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700 whitespace-nowrap">{item.titulo_numero}</td>
+                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700">{item.parcela}</td>
+                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700">{item.tipo}</td>
                       <td className="px-2 py-2.5 align-middle text-xs text-slate-600 whitespace-nowrap">{formatDate(item.emissao)}</td>
                       <td className="px-2 py-2.5 align-middle text-xs text-slate-600 whitespace-nowrap">{formatDate(item.vencimento)}</td>
                       <td className="px-2 py-2.5 align-middle text-right text-xs tabular-nums whitespace-nowrap">{formatMoney(item.valor)}</td>
                       <td className="px-2 py-2.5 align-middle text-right text-xs tabular-nums whitespace-nowrap">{formatMoney(item.saldo)}</td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-600 whitespace-nowrap" title={natureLabel(item.natureza, natures)}>
+                      <td className="px-2 py-2.5 align-middle text-xs text-slate-600 whitespace-nowrap" title={natureLabel(item.natureza, natures)}>
                         {natureLabel(item.natureza, natures)}
                       </td>
                       <td className="px-3 py-2.5 align-middle text-xs text-slate-600 max-w-[220px] truncate" title={item.historico || ""}>

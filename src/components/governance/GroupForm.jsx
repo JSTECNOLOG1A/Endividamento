@@ -53,7 +53,7 @@ export default function GroupForm({ onSubmit, onCancel, initialData }) {
                 value={form.cnpj_group}
                 onChange={(e) => setForm({ ...form, cnpj_group: e.target.value })}
                 placeholder="00.000.000/0000-00"
-                className="h-9 font-mono"
+                className="h-9"
               />
             </div>
           </div>

@@ -48,7 +48,7 @@ export default function ChartOfAccountsForm({ onSubmit, onCancel, initialData })
                 value={form.account_code || ""}
                 onChange={(e) => setForm({ ...form, account_code: e.target.value })}
                 placeholder="3.1.01.001"
-                className="h-9 font-mono"
+                className="h-9"
                 required
               />
             </div>

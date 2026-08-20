@@ -431,9 +431,9 @@ export default function ZeroRiskRegressionTest() {
                       
                       {check.expected && (
                         <div className="text-[10px] text-slate-500 ml-6 mt-1 space-y-0.5">
-                          <div>Esperado: <span className="font-mono">{check.expected}</span></div>
-                          <div>Obtido: <span className="font-mono">{check.actual}</span></div>
-                          {check.diff && <div>Diferença: <span className="font-mono">{check.diff}</span></div>}
+                          <div>Esperado: <span className="">{check.expected}</span></div>
+                          <div>Obtido: <span className="">{check.actual}</span></div>
+                          {check.diff && <div>Diferença: <span className="">{check.diff}</span></div>}
                         </div>
                       )}
                     </div>
@@ -460,7 +460,7 @@ export default function ZeroRiskRegressionTest() {
                 <p className="text-xs text-blue-700 mb-2">
                   Este é o baseline. Copie os valores abaixo para <code>EXPECTED_VALUES</code>:
                 </p>
-                <pre className="text-[10px] bg-white p-2 rounded border border-blue-200 overflow-x-auto font-mono">
+                <pre className="text-[10px] bg-white p-2 rounded border border-blue-200 overflow-x-auto">
 {`calculation_hash_strict: "${result?.calculation_metadata?.calculation_hash_strict}",
 schedule_usd_hash: "${result?.snapshot?.schedule_usd_hash || 'N/A'}",
 total_interest_usd: ${result?.schedule?.reduce((s, r) => s + (r.jurosTotal_USD || 0), 0).toFixed(2)},`}

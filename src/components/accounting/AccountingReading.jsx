@@ -104,7 +104,7 @@ function KPICard({ icon: Icon, title, value, subtitle, color = "blue" }) {
 // deixa a linha de Saldo (abertura/fechamento) em destaque, como uma
 // conciliação contábil de verdade.
 function RollForwardRow({ label, bucket, strong = false, sign = null }) {
-  const cellClass = `px-3 py-2 text-right font-mono ${strong ? "font-semibold text-slate-900" : "text-slate-700"}`;
+  const cellClass = `px-3 py-2 text-right ${strong ? "font-semibold text-slate-900" : "text-slate-700"}`;
   const fmt = (v) => {
     if (sign === "+" && v > 0) return formatCurrency(v);
     if (sign === "-" && v > 0) return `(${formatCurrency(v)})`;
@@ -559,14 +559,14 @@ export default function AccountingReading() {
                                 <td className="px-2 py-2 text-slate-700">{operationTypeLabel(row.operationType)}</td>
                                 <td className="px-2 py-2 text-slate-700">{row.guarantee}</td>
                                 {analysis.paymentFlow.years.map((y) => (
-                                  <td key={y} className="px-2 py-2 text-right font-mono text-slate-700">
+                                  <td key={y} className="px-2 py-2 text-right text-slate-700">
                                     {formatCurrency(valueForFlow(row.byYear[y] || { principal: 0, interest: 0 }, flowView))}
                                   </td>
                                 ))}
-                                <td className="px-2 py-2 text-right font-mono text-slate-700">
+                                <td className="px-2 py-2 text-right text-slate-700">
                                   {formatCurrency(valueForFlow(row.catchAll, flowView))}
                                 </td>
-                                <td className="px-2 py-2 text-right font-mono font-semibold text-slate-900">
+                                <td className="px-2 py-2 text-right font-semibold text-slate-900">
                                   {formatCurrency(rowTotal)}
                                 </td>
                               </tr>
@@ -597,14 +597,14 @@ export default function AccountingReading() {
                               <tr key={g.category} className="border-b border-slate-100">
                                 <td className="px-2 py-2 text-slate-700 font-medium">{g.label}</td>
                                 {analysis.paymentFlow.years.map((y) => (
-                                  <td key={y} className="px-2 py-2 text-right font-mono text-slate-700">
+                                  <td key={y} className="px-2 py-2 text-right text-slate-700">
                                     {formatCurrency(g.byYear[y] || 0)}
                                   </td>
                                 ))}
-                                <td className="px-2 py-2 text-right font-mono text-slate-700">
+                                <td className="px-2 py-2 text-right text-slate-700">
                                   {formatCurrency(g.catchAll)}
                                 </td>
-                                <td className="px-2 py-2 text-right font-mono font-semibold text-slate-900">
+                                <td className="px-2 py-2 text-right font-semibold text-slate-900">
                                   {formatCurrency(g.total)}
                                 </td>
                               </tr>
@@ -613,16 +613,16 @@ export default function AccountingReading() {
                               <tr className="bg-slate-50 border-y border-slate-200">
                                 <td className="px-2 py-2 font-semibold text-slate-900">Total Geral</td>
                                 {analysis.paymentFlow.years.map((y) => (
-                                  <td key={y} className="px-2 py-2 text-right font-mono font-semibold text-slate-900">
+                                  <td key={y} className="px-2 py-2 text-right font-semibold text-slate-900">
                                     {formatCurrency(
                                       flowCategorySubtotals.reduce((sum, g) => sum + (g.byYear[y] || 0), 0)
                                     )}
                                   </td>
                                 ))}
-                                <td className="px-2 py-2 text-right font-mono font-semibold text-slate-900">
+                                <td className="px-2 py-2 text-right font-semibold text-slate-900">
                                   {formatCurrency(flowCategorySubtotals.reduce((sum, g) => sum + g.catchAll, 0))}
                                 </td>
-                                <td className="px-2 py-2 text-right font-mono font-semibold text-slate-900">
+                                <td className="px-2 py-2 text-right font-semibold text-slate-900">
                                   {formatCurrency(flowGrandTotal)}
                                 </td>
                               </tr>

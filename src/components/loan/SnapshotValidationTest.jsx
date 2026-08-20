@@ -257,7 +257,7 @@ export default function SnapshotValidationTest({ calculationResult }) {
                   {check.status === "WARN" && <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />}
                   <div className="flex-1">
                     <div className="font-medium text-slate-700">{check.name}</div>
-                    <div className="text-slate-500 font-mono">{check.message}</div>
+                    <div className="text-slate-500">{check.message}</div>
                   </div>
                 </div>
               ))}
@@ -269,7 +269,7 @@ export default function SnapshotValidationTest({ calculationResult }) {
                 <div className="text-xs font-semibold text-slate-700 mb-2">
                   📊 Amostra Schedule (Parcela {testResult.sampleData.parcela})
                 </div>
-                <pre className="text-xs font-mono text-slate-600 overflow-x-auto">
+                <pre className="text-xs text-slate-600 overflow-x-auto">
                   {JSON.stringify(testResult.sampleData, null, 2)}
                 </pre>
               </div>

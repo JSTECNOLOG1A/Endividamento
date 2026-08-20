@@ -398,14 +398,14 @@ export default function BankAccountImportModal({ open, onOpenChange, entities = 
                               {vinculoLabel(item)}
                             </span>
                           </TableCell>
-                          <TableCell className="whitespace-nowrap font-mono text-xs">{empresaLabel(item.empresa)}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">{empresaLabel(item.empresa)}</TableCell>
                           <TableCell className="whitespace-nowrap">
                             <span className={item.bank_id ? "text-slate-800" : "text-amber-700"}>
                               {bancoLabel(item)}
                             </span>
                           </TableCell>
-                          <TableCell className="font-mono whitespace-nowrap text-xs">{item.agencia}</TableCell>
-                          <TableCell className="font-mono whitespace-nowrap text-xs">
+                          <TableCell className="whitespace-nowrap text-xs">{item.agencia}</TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">
                             {item.conta}{item.digito ? `-${item.digito}` : ""}
                           </TableCell>
                           <TableCell>{item.nome}</TableCell>

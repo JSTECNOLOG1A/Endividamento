@@ -338,7 +338,7 @@ export default function CDIImporter() {
                   type="date"
                   value={filterStart}
                   onChange={(e) => { setFilterStart(e.target.value); setPage(0); }}
-                  className="h-8 text-xs w-36 font-mono"
+                  className="h-8 text-xs w-36"
                   placeholder="De"
                 />
                 <span className="text-xs text-slate-400">até</span>
@@ -346,7 +346,7 @@ export default function CDIImporter() {
                   type="date"
                   value={filterEnd}
                   onChange={(e) => { setFilterEnd(e.target.value); setPage(0); }}
-                  className="h-8 text-xs w-36 font-mono"
+                  className="h-8 text-xs w-36"
                   placeholder="Até"
                 />
                 <Button variant="ghost" size="sm" onClick={() => setSortAsc(!sortAsc)} className="h-8 gap-1 text-xs">
@@ -370,15 +370,15 @@ export default function CDIImporter() {
                 <TableBody>
                   {pageData.map((r, idx) => (
                     <TableRow key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                      <TableCell className="font-mono text-xs">
+                      <TableCell className="text-xs">
                         {r.rate_date.includes("-")
                           ? format(new Date(r.rate_date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })
                           : r.rate_date}
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-right font-medium">
+                      <TableCell className="text-xs text-right font-medium">
                         {r.annual_rate.toFixed(4)}%
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-right text-slate-500">
+                      <TableCell className="text-xs text-right text-slate-500">
                         {(r.daily_factor || Math.pow(1 + r.annual_rate / 100, 1 / 252)).toFixed(8)}
                       </TableCell>
                       <TableCell>

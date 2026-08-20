@@ -114,7 +114,7 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
               value={form.document_number}
               onChange={(e) => setForm({ ...form, document_number: e.target.value })}
               placeholder={form.document_type === "CPF" ? "000.000.000-00" : "00.000.000/0000-00"}
-              className="h-9 font-mono"
+              className="h-9"
               required
             />
           </div>
@@ -135,7 +135,7 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
                 value={form.codigo_empresa}
                 onChange={(e) => setForm({ ...form, codigo_empresa: e.target.value })}
                 placeholder="02"
-                className="h-9 font-mono"
+                className="h-9"
                 maxLength={10}
               />
             </div>
@@ -145,7 +145,7 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
                 value={form.codigo_filial}
                 onChange={(e) => setForm({ ...form, codigo_filial: e.target.value })}
                 placeholder="01"
-                className="h-9 font-mono"
+                className="h-9"
                 maxLength={10}
               />
             </div>

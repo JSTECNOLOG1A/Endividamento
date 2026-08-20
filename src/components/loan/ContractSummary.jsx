@@ -75,7 +75,7 @@ function Field({ label, value, mono = false, span = 3 }) {
   return (
     <div className={`bg-white px-3 py-2 ${SPAN[span] || SPAN[3]}`}>
       <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{label}</p>
-      <p className={`text-sm text-slate-900 mt-0.5 ${mono ? "font-mono" : ""}`}>
+      <p className={`text-sm text-slate-900 mt-0.5 ${mono ? "" : ""}`}>
         {value === "" || value === null || value === undefined ? "—" : value}
       </p>
     </div>
@@ -86,7 +86,7 @@ function FeeField({ label, value, financed, span = 2 }) {
   return (
     <div className={`bg-white px-3 py-2 ${SPAN[span] || SPAN[2]}`}>
       <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{label}</p>
-      <p className="text-sm text-slate-900 font-mono mt-0.5">{formatCurrency(value)}</p>
+      <p className="text-sm text-slate-900 mt-0.5">{formatCurrency(value)}</p>
       <p className="text-[11px] text-slate-500 mt-0.5">{financed ? "Financiado (soma ao principal)" : "Não financiado"}</p>
     </div>
   );
@@ -220,7 +220,7 @@ export default function ContractSummary({ contract, groups, entities, banks, cur
             </div>
             <div className="bg-amber-50/30 px-3 py-2 sm:col-span-6">
               <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide">Percentuais por Parcela (%)</p>
-              <p className="text-sm text-slate-900 font-mono mt-0.5">{contract.amortization_percentages || "—"}</p>
+              <p className="text-sm text-slate-900 mt-0.5">{contract.amortization_percentages || "—"}</p>
             </div>
           </div>
         </Card>

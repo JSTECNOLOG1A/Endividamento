@@ -44,7 +44,7 @@ export default function ScheduleChart({ schedule }) {
         {payload.map((entry, i) => (
           <p key={i} className="flex justify-between gap-4" style={{ color: entry.color }}>
             <span>{entry.name}:</span>
-            <span className="font-mono font-medium">
+            <span className="font-medium">
               R$ {entry.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
             </span>
           </p>

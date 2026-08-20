@@ -99,7 +99,7 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
   // estreitas, em vez de forçar rótulos e valores a quebrar em 2 linhas.
   const headClass = "text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap px-4 py-3";
   // Uma única classe de célula para TODOS os campos — mesma fonte (sans, sem
-  // font-mono), mesmo tamanho e mesma cor, em vez de misturar font-mono nos
+  //), mesmo tamanho e mesma cor, em vez de misturar nos
   // números com a fonte padrão no texto (o que dava a sensação de fontes
   // diferentes lado a lado). Alinhamento à direita continua só um detalhe de
   // layout (cellClassRight), não muda fonte/cor.

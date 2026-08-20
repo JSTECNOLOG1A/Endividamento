@@ -42,7 +42,7 @@ export default function BankForm({ onSubmit, onCancel, initialData }) {
                 value={form.bank_code}
                 onChange={(e) => setForm({ ...form, bank_code: e.target.value })}
                 placeholder="001"
-                className="h-9 font-mono"
+                className="h-9"
                 required
               />
             </div>

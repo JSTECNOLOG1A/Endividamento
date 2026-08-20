@@ -342,8 +342,8 @@ export default function AuditLogPanel() {
                     {row.actionLabel}
                   </Badge>
                 </TableCell>
-                <TableCell className="max-w-[160px] truncate font-mono text-[11px] text-slate-600" title={row.de}>{row.de}</TableCell>
-                <TableCell className="max-w-[160px] truncate font-mono text-[11px] text-slate-600" title={row.para}>{row.para}</TableCell>
+                <TableCell className="max-w-[160px] truncate text-[11px] text-slate-600" title={row.de}>{row.de}</TableCell>
+                <TableCell className="max-w-[160px] truncate text-[11px] text-slate-600" title={row.para}>{row.para}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -423,8 +423,8 @@ export default function AuditLogPanel() {
                       {selected.changes.map((change) => (
                         <TableRow key={change.campo}>
                           <TableCell className="font-medium">{fieldLabel(change.campo)}</TableCell>
-                          <TableCell className="whitespace-pre-wrap font-mono text-[11px] text-slate-600">{change.de}</TableCell>
-                          <TableCell className="whitespace-pre-wrap font-mono text-[11px] text-slate-600">{change.para}</TableCell>
+                          <TableCell className="whitespace-pre-wrap text-[11px] text-slate-600">{change.de}</TableCell>
+                          <TableCell className="whitespace-pre-wrap text-[11px] text-slate-600">{change.para}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -434,13 +434,13 @@ export default function AuditLogPanel() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">De</p>
-                    <pre className="max-h-64 overflow-auto rounded-md bg-slate-50 p-3 font-mono text-[11px] text-slate-700">
+                    <pre className="max-h-64 overflow-auto rounded-md bg-slate-50 p-3 text-[11px] text-slate-700">
                       {pretty(selected.before)}
                     </pre>
                   </div>
                   <div>
                     <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Para</p>
-                    <pre className="max-h-64 overflow-auto rounded-md bg-slate-50 p-3 font-mono text-[11px] text-slate-700">
+                    <pre className="max-h-64 overflow-auto rounded-md bg-slate-50 p-3 text-[11px] text-slate-700">
                       {pretty(selected.after)}
                     </pre>
                   </div>

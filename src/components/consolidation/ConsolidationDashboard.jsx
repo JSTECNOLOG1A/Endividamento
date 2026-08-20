@@ -286,13 +286,13 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-slate-500 mb-1">Valor Original</p>
-              <p className="text-2xl font-bold font-mono">{formatCurrency(groupData.valorOriginal)}</p>
+              <p className="text-2xl font-bold">{formatCurrency(groupData.valorOriginal)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-slate-500 mb-1">Saldo Atual</p>
-              <p className="text-2xl font-bold font-mono text-blue-600">{formatCurrency(groupData.saldoAtual)}</p>
+              <p className="text-2xl font-bold text-blue-600">{formatCurrency(groupData.saldoAtual)}</p>
             </CardContent>
           </Card>
         </div>
@@ -323,16 +323,16 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
                     return (
                       <TableRow key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                         <TableCell className="text-xs">{c.bankName}</TableCell>
-                        <TableCell className="text-xs font-mono">{c.contract_number}</TableCell>
+                        <TableCell className="text-xs">{c.contract_number}</TableCell>
                         <TableCell className="text-xs">{c.operation_type}</TableCell>
-                        <TableCell className="text-xs text-right font-mono">{formatCurrency(c.operation_value)}</TableCell>
-                        <TableCell className="text-xs text-right font-mono text-blue-600">{formatCurrency(c.saldoDevedor)}</TableCell>
+                        <TableCell className="text-xs text-right">{formatCurrency(c.operation_value)}</TableCell>
+                        <TableCell className="text-xs text-right text-blue-600">{formatCurrency(c.saldoDevedor)}</TableCell>
                         <TableCell className="text-xs text-right">
                           <Badge variant={pctAmortizado > 70 ? "default" : "secondary"} className="text-xs">
                             {pctAmortizado.toFixed(1)}%
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-xs text-right font-mono text-amber-600">{formatCurrency(c.jurosFuturos)}</TableCell>
+                        <TableCell className="text-xs text-right text-amber-600">{formatCurrency(c.jurosFuturos)}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -410,21 +410,21 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Valor Original</p>
-            <p className="text-xl font-bold text-slate-900 font-mono">{formatCurrency(totalValorOriginal)}</p>
+            <p className="text-xl font-bold text-slate-900">{formatCurrency(totalValorOriginal)}</p>
             <p className="text-xs text-slate-400 mt-1">{totalContracts} contratos</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Saldo Atual</p>
-            <p className="text-xl font-bold text-blue-600 font-mono">{formatCurrency(totalSaldoAtual)}</p>
+            <p className="text-xl font-bold text-blue-600">{formatCurrency(totalSaldoAtual)}</p>
             <p className="text-xs text-slate-400 mt-1">em {format(new Date(referenceDate), "dd/MM/yyyy")}</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Amortizado</p>
-            <p className="text-xl font-bold text-emerald-600 font-mono">{formatCurrency(amortizadoTotal)}</p>
+            <p className="text-xl font-bold text-emerald-600">{formatCurrency(amortizadoTotal)}</p>
             <p className="text-xs text-slate-400 mt-1">
               {totalValorOriginal > 0 ? ((amortizadoTotal / totalValorOriginal) * 100).toFixed(1) : 0}% do total
             </p>
@@ -433,14 +433,14 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Juros Futuros</p>
-            <p className="text-xl font-bold text-amber-600 font-mono">{formatCurrency(totalJurosFuturos)}</p>
+            <p className="text-xl font-bold text-amber-600">{formatCurrency(totalJurosFuturos)}</p>
             <p className="text-xs text-slate-400 mt-1">até o vencimento</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Devido</p>
-            <p className="text-xl font-bold text-red-600 font-mono">{formatCurrency(totalSaldoAtual + totalJurosFuturos)}</p>
+            <p className="text-xl font-bold text-red-600">{formatCurrency(totalSaldoAtual + totalJurosFuturos)}</p>
             <p className="text-xs text-slate-400 mt-1">saldo + juros</p>
           </CardContent>
         </Card>
@@ -547,14 +547,14 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
                       <TableRow key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                         <TableCell className="text-sm font-medium text-slate-700">{group.name}</TableCell>
                         <TableCell className="text-xs text-right">{group.contracts}</TableCell>
-                        <TableCell className="text-sm text-right font-mono">{formatCurrency(group.valorOriginal)}</TableCell>
-                        <TableCell className="text-sm text-right font-mono text-blue-600 font-semibold">{formatCurrency(group.saldoAtual)}</TableCell>
+                        <TableCell className="text-sm text-right">{formatCurrency(group.valorOriginal)}</TableCell>
+                        <TableCell className="text-sm text-right text-blue-600 font-semibold">{formatCurrency(group.saldoAtual)}</TableCell>
                         <TableCell className="text-xs text-right">
                           <Badge variant={pctAmortizado > 50 ? "default" : "secondary"}>
                             {pctAmortizado.toFixed(1)}%
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-xs text-right font-mono text-amber-600">{formatCurrency(group.jurosFuturos)}</TableCell>
+                        <TableCell className="text-xs text-right text-amber-600">{formatCurrency(group.jurosFuturos)}</TableCell>
                         <TableCell className="text-right">
                           <Button 
                             variant="ghost" 
@@ -603,8 +603,8 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
                       <TableRow key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                         <TableCell className="text-sm font-medium text-slate-700">{bank.name}</TableCell>
                         <TableCell className="text-xs text-right">{bank.contracts}</TableCell>
-                        <TableCell className="text-sm text-right font-mono">{formatCurrency(bank.valorOriginal)}</TableCell>
-                        <TableCell className="text-sm text-right font-mono text-blue-600 font-semibold">
+                        <TableCell className="text-sm text-right">{formatCurrency(bank.valorOriginal)}</TableCell>
+                        <TableCell className="text-sm text-right text-blue-600 font-semibold">
                           {formatCurrency(bank.saldoAtual)}
                         </TableCell>
                         <TableCell className="text-xs text-right">
@@ -655,8 +655,8 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
                       <TableRow key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                         <TableCell className="text-sm font-medium text-slate-700">{op.name}</TableCell>
                         <TableCell className="text-xs text-right">{op.contracts}</TableCell>
-                        <TableCell className="text-sm text-right font-mono">{formatCurrency(op.valorOriginal)}</TableCell>
-                        <TableCell className="text-sm text-right font-mono text-blue-600 font-semibold">
+                        <TableCell className="text-sm text-right">{formatCurrency(op.valorOriginal)}</TableCell>
+                        <TableCell className="text-sm text-right text-blue-600 font-semibold">
                           {formatCurrency(op.saldoAtual)}
                         </TableCell>
                         <TableCell className="text-xs text-right">

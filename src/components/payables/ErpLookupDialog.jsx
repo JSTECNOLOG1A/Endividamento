@@ -142,13 +142,13 @@ export default function ErpLookupPanel({
                   >
                     {isTipos ? (
                       <>
-                        <span className="font-mono text-sm font-semibold text-slate-800">{item.codigo}</span>
+                        <span className="text-sm font-semibold text-slate-800">{item.codigo}</span>
                         <span className="text-xs text-slate-500">{item.descricao}</span>
                       </>
                     ) : (
                       <>
                         <span className="text-sm font-medium text-slate-800">
-                          <span className="font-mono">{item.codigo}</span>
+                          <span className="">{item.codigo}</span>
                           <span className="mx-1.5 text-slate-300">·</span>
                           loja {item.loja}
                           <span className="mx-1.5 text-slate-300">·</span>
@@ -183,7 +183,7 @@ export function LookupField({ label, value, onChange, onLookup, placeholder, cla
         <Input
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className={`h-9 ${mono ? "font-mono" : ""}`}
+          className={`h-9 ${mono ? "" : ""}`}
           placeholder={placeholder}
         />
         <Button
