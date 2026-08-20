@@ -98,7 +98,13 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
   // larga de propósito; ela rola horizontalmente só em telas realmente
   // estreitas, em vez de forçar rótulos e valores a quebrar em 2 linhas.
   const headClass = "text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap px-4 py-3";
-  const cellClass = "whitespace-nowrap px-4 py-3.5";
+  // Uma única classe de célula para TODOS os campos — mesma fonte (sans, sem
+  // font-mono), mesmo tamanho e mesma cor, em vez de misturar font-mono nos
+  // números com a fonte padrão no texto (o que dava a sensação de fontes
+  // diferentes lado a lado). Alinhamento à direita continua só um detalhe de
+  // layout (cellClassRight), não muda fonte/cor.
+  const cellClass = "whitespace-nowrap px-4 py-3.5 text-sm text-slate-700";
+  const cellClassRight = `${cellClass} text-right`;
 
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
@@ -148,17 +154,17 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
                   }}
                   className="cursor-pointer hover:bg-slate-50"
                 >
-                  <TableCell className={`${cellClass} font-medium text-slate-800`}>{groupName}</TableCell>
-                  <TableCell className={`${cellClass} text-slate-700`}>{entityName}</TableCell>
-                  <TableCell className={`${cellClass} font-medium text-slate-800`}>{bankName}</TableCell>
-                  <TableCell className={`${cellClass} font-mono text-slate-500`}>{c.contract_number}</TableCell>
-                  <TableCell className={`${cellClass} text-slate-700`}>{categoryLabel}</TableCell>
-                  <TableCell className={`${cellClass} text-slate-700`}>{guaranteeLabel}</TableCell>
-                  <TableCell className={`${cellClass} text-right font-mono text-slate-800`}>{formatCurrency(c.operation_value)}</TableCell>
-                  <TableCell className={`${cellClass} text-right font-mono text-slate-700`}>{jurosLabel(c)}</TableCell>
-                  <TableCell className={`${cellClass} text-right font-mono text-slate-700`}>{formatPercent(cet, 2)}</TableCell>
-                  <TableCell className={`${cellClass} text-right font-mono text-slate-700`}>{formatCurrency(shortTerm)}</TableCell>
-                  <TableCell className={`${cellClass} text-right font-mono text-slate-700`}>{formatCurrency(longTerm)}</TableCell>
+                  <TableCell className={cellClass}>{groupName}</TableCell>
+                  <TableCell className={cellClass}>{entityName}</TableCell>
+                  <TableCell className={cellClass}>{bankName}</TableCell>
+                  <TableCell className={cellClass}>{c.contract_number}</TableCell>
+                  <TableCell className={cellClass}>{categoryLabel}</TableCell>
+                  <TableCell className={cellClass}>{guaranteeLabel}</TableCell>
+                  <TableCell className={cellClassRight}>{formatCurrency(c.operation_value)}</TableCell>
+                  <TableCell className={cellClassRight}>{jurosLabel(c)}</TableCell>
+                  <TableCell className={cellClassRight}>{formatPercent(cet, 2)}</TableCell>
+                  <TableCell className={cellClassRight}>{formatCurrency(shortTerm)}</TableCell>
+                  <TableCell className={cellClassRight}>{formatCurrency(longTerm)}</TableCell>
                   <TableCell className={cellClass}>
                     <Badge className={`text-[10px] border ${statusBadgeClass(c.status)}`}>
                       {statusLabel(c.status)}
