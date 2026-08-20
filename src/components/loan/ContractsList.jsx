@@ -109,6 +109,7 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
               <TableHead className={headClass}>Grupo Econômico</TableHead>
               <TableHead className={headClass}>Entidade Componente</TableHead>
               <TableHead className={headClass}>Banco</TableHead>
+              <TableHead className={headClass}>Nº Contrato</TableHead>
               <TableHead className={headClass}>Categoria da Operação</TableHead>
               <TableHead className={headClass}>Garantia</TableHead>
               <TableHead className={`${headClass} text-right`}>Valor da Operação</TableHead>
@@ -116,6 +117,7 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
               <TableHead className={`${headClass} text-right`}>CET a.a.</TableHead>
               <TableHead className={`${headClass} text-right`}>Circulante</TableHead>
               <TableHead className={`${headClass} text-right`}>Não Circulante</TableHead>
+              <TableHead className={headClass}>Status</TableHead>
               <TableHead className={`${headClass} w-20`} />
             </TableRow>
           </TableHeader>
@@ -148,15 +150,8 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
                 >
                   <TableCell className={`${cellClass} font-medium text-slate-800`}>{groupName}</TableCell>
                   <TableCell className={`${cellClass} text-slate-700`}>{entityName}</TableCell>
-                  <TableCell className={cellClass}>
-                    <div className="font-medium text-slate-800">{bankName}</div>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <span className="font-mono text-[11px] text-slate-400">{c.contract_number}</span>
-                      <Badge className={`text-[10px] border ${statusBadgeClass(c.status)}`}>
-                        {statusLabel(c.status)}
-                      </Badge>
-                    </div>
-                  </TableCell>
+                  <TableCell className={`${cellClass} font-medium text-slate-800`}>{bankName}</TableCell>
+                  <TableCell className={`${cellClass} font-mono text-slate-500`}>{c.contract_number}</TableCell>
                   <TableCell className={`${cellClass} text-slate-700`}>{categoryLabel}</TableCell>
                   <TableCell className={`${cellClass} text-slate-700`}>{guaranteeLabel}</TableCell>
                   <TableCell className={`${cellClass} text-right font-mono text-slate-800`}>{formatCurrency(c.operation_value)}</TableCell>
@@ -164,6 +159,11 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
                   <TableCell className={`${cellClass} text-right font-mono text-slate-700`}>{formatPercent(cet, 2)}</TableCell>
                   <TableCell className={`${cellClass} text-right font-mono text-slate-700`}>{formatCurrency(shortTerm)}</TableCell>
                   <TableCell className={`${cellClass} text-right font-mono text-slate-700`}>{formatCurrency(longTerm)}</TableCell>
+                  <TableCell className={cellClass}>
+                    <Badge className={`text-[10px] border ${statusBadgeClass(c.status)}`}>
+                      {statusLabel(c.status)}
+                    </Badge>
+                  </TableCell>
                   <TableCell className={cellClass}>
                     <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
                       <Button
