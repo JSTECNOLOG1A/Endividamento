@@ -16,7 +16,6 @@ import {
   Receipt,
   Banknote,
   ChevronDown,
-  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
@@ -30,7 +29,6 @@ import {
 const NAV_ITEMS = [
   { name: "Calculadora", page: "Simulator", icon: Calculator },
   { name: "Contratos", page: "Contracts", icon: FolderOpen },
-  { name: "Documentos", page: "Documents", icon: FileText },
   { name: "Governança", page: "Governance", icon: Building },
   { name: "Contabilidade", page: "Accounting", icon: BarChart3 },
   { name: "Consolidação", page: "Consolidation", icon: BarChart3 },

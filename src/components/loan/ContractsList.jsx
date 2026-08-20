@@ -10,11 +10,19 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, Trash2, Copy, ChevronRight } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { FileText, Trash2, Copy, ChevronRight, MoreHorizontal, Download, Mail } from "lucide-react";
 import { statusLabel, statusBadgeClass, EDITABLE_STATUSES } from "@/lib/contractStatus";
 import { combineGuaranteeLabel, operationCategoryLabel } from "@/lib/contractOptions";
 import { computeContractCET } from "@/lib/cetFromSchedule";
+import { sanitizeFilename, downloadRenamed } from "@/lib/documentActions";
 import { getContractCirculanteSplit } from "../accounting/debtAnalytics";
+import EmailDialog from "../shared/EmailDialog";
 
 function formatCurrency(value) {
   const n = Number(value);
@@ -63,6 +71,7 @@ function deriveRow(contract, today) {
 
 export default function ContractsList({ contracts, banks, groups, entities, onView, onEdit, onDelete, onDuplicate, isLoading }) {
   const today = React.useMemo(() => new Date().toISOString().split("T")[0], []);
+  const [emailTarget, setEmailTarget] = React.useState(null);
 
   // Deriva CET e Circulante/Não Circulante uma vez por lista (não a cada
   // re-render) — envolve reprocessar o cronograma inteiro de cada contrato.
@@ -124,7 +133,7 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
               <TableHead className={`${headClass} text-right`}>Circulante</TableHead>
               <TableHead className={`${headClass} text-right`}>Não Circulante</TableHead>
               <TableHead className={headClass}>Status</TableHead>
-              <TableHead className={`${headClass} w-20`} />
+              <TableHead className={headClass} />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -135,10 +144,22 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
               const categoryLabel = operationCategoryLabel(c.operation_category);
               const guaranteeLabel = combineGuaranteeLabel(c.guarantee_real_type, c.guarantee_personal_type);
               const isEditable = EDITABLE_STATUSES.includes(c.status || "rascunho");
+              const hasPdf = !!c.contract_pdf_url;
               // Clicar na linha sempre "dá andamento" no contrato: rascunho/devolvido
               // abrem na Calculadora para continuar editando; pendente/aprovado abrem
               // a tela de revisão (com os botões de Aprovar/Devolver, se aplicável).
               const openContract = () => (isEditable ? onEdit(c) : onView(c));
+              const handleDownload = () => {
+                const filename = `${sanitizeFilename(bankName)}_${sanitizeFilename(c.contract_number)}.pdf`;
+                downloadRenamed(c.contract_pdf_url, filename);
+              };
+              const openEmailDialog = () => {
+                setEmailTarget({
+                  documentType: "contract_pdf",
+                  id: c.id,
+                  label: `Contrato — ${bankName} nº ${c.contract_number}`,
+                });
+              };
 
               return (
                 <TableRow
@@ -171,31 +192,45 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
                     </Badge>
                   </TableCell>
                   <TableCell className={cellClass}>
-                    <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => onDuplicate(c)}
-                        className="h-8 w-8 text-slate-400 hover:text-purple-600"
-                        title="Duplicar"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </Button>
-                      {isEditable && onDelete && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            if (window.confirm("⚠️ Tem certeza que deseja excluir este contrato?\n\nEsta ação não poderá ser desfeita.")) {
-                              onDelete(c.id);
-                            }
-                          }}
-                          className="h-8 w-8 text-slate-400 hover:text-red-500"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
+                    <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+                            Ações <MoreHorizontal className="w-3.5 h-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {hasPdf && (
+                            <DropdownMenuItem onClick={handleDownload}>
+                              <Download className="w-3.5 h-3.5 mr-2" />
+                              Baixar
+                            </DropdownMenuItem>
+                          )}
+                          {hasPdf && (
+                            <DropdownMenuItem onClick={openEmailDialog}>
+                              <Mail className="w-3.5 h-3.5 mr-2" />
+                              Enviar por e-mail
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => onDuplicate(c)}>
+                            <Copy className="w-3.5 h-3.5 mr-2" />
+                            Duplicar
+                          </DropdownMenuItem>
+                          {isEditable && onDelete && (
+                            <DropdownMenuItem
+                              className="text-red-600 focus:text-red-600"
+                              onClick={() => {
+                                if (window.confirm("⚠️ Tem certeza que deseja excluir este contrato?\n\nEsta ação não poderá ser desfeita.")) {
+                                  onDelete(c.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       <ChevronRight className="w-4 h-4 text-slate-300" />
                     </div>
                   </TableCell>
@@ -205,6 +240,7 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
           </TableBody>
         </Table>
       </div>
+      <EmailDialog open={!!emailTarget} onOpenChange={(open) => !open && setEmailTarget(null)} document={emailTarget} />
     </Card>
   );
 }
