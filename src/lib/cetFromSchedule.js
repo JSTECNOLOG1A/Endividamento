@@ -80,8 +80,14 @@ export function computeContractCET(contract, schedule) {
         )
       : 0;
 
+  // Desembolso líquido no momento zero precisa descontar o Sinal do Negócio
+  // (signal_value) — mesma correção aplicada em calculateCET() no motor
+  // (backend/src/engine/CalculationEngine.js). Sem isso, o CET considerava
+  // que o cliente recebeu o valor da operação inteiro (sem abater o sinal),
+  // inflando o "caixa recebido" e fazendo o CET sair artificialmente abaixo
+  // da taxa nominal.
   const { cetAnnual } = calculateCET(
-    contract.operation_value || 0,
+    (contract.operation_value || 0) - (contract.signal_value || 0),
     upFrontFees,
     financedFeesImpactOnCash,
     schedule,

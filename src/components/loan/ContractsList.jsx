@@ -106,7 +106,7 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
   // Cabeçalho e células em uma linha só (sem quebra de texto) — a tabela é
   // larga de propósito; ela rola horizontalmente só em telas realmente
   // estreitas, em vez de forçar rótulos e valores a quebrar em 2 linhas.
-  const headClass = "text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap px-4 py-3";
+  const headClass = "text-xs font-bold text-slate-700 uppercase tracking-wide whitespace-nowrap px-4 py-3 bg-slate-50 border-b-2 border-slate-200";
   // Uma única classe de célula para TODOS os campos — mesma fonte (sans, sem
   //), mesmo tamanho e mesma cor, em vez de misturar nos
   // números com a fonte padrão no texto (o que dava a sensação de fontes

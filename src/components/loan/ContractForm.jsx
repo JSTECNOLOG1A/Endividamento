@@ -278,17 +278,18 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
   };
 
   // O motor de cálculo (CalculationEngine.js) sempre ancora as parcelas no
-  // dia da "Referência dos Vencimentos" (quando preenchida) ou no dia da
-  // "Data da Operação" (quando vazia) — nunca no dia da própria Data
+  // dia do "Primeiro Vencimento" (quando preenchido) ou no dia da
+  // "Data da Operação" (quando vazio) — nunca no dia da própria Data
   // Vencimento Final. E a 1ª parcela da tabela já nasce EM CIMA dessa data
-  // âncora (não um mês depois) quando a Referência está preenchida. Por
-  // isso, para a última parcela da tabela cair exatamente na Data
+  // âncora (não um mês depois) quando o Primeiro Vencimento está preenchido.
+  // Por isso, para a última parcela da tabela cair exatamente na Data
   // Vencimento Final informada:
-  //   • Com Referência preenchida: total de parcelas = nº de meses entre a
-  //     Referência e o Vencimento Final, + 1 (a 1ª parcela já é a própria
-  //     Referência, "mês 0").
-  //   • Sem Referência: total de parcelas = nº de meses entre a Operação e
-  //     o Vencimento Final (a 1ª parcela é 1 mês após a Operação, sem +1).
+  //   • Com Primeiro Vencimento preenchido: total de parcelas = nº de meses
+  //     entre o Primeiro Vencimento e o Vencimento Final, + 1 (a 1ª parcela
+  //     já é o próprio Primeiro Vencimento, "mês 0").
+  //   • Sem Primeiro Vencimento: total de parcelas = nº de meses entre a
+  //     Operação e o Vencimento Final (a 1ª parcela é 1 mês após a Operação,
+  //     sem +1).
   React.useEffect(() => {
     if (!isLoaded || updatingFromDate) return;
     if (form.operation_date && form.total_term_months) {
@@ -324,17 +325,18 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     }
   };
 
-  // Texto de apoio abaixo do "Prazo Total (Meses)": só aparece quando a
-  // Referência dos Vencimentos está preenchida, caso em que esse número é
-  // a quantidade de parcelas/linhas da tabela (inclui a própria Referência
-  // como 1ª linha) — 1 a mais que a duração "redonda" do contrato entre a
-  // Referência e a Data Vencimento Final. Puramente informativo: não altera
-  // nenhum valor calculado ou salvo, só ajuda a entender o número exibido.
+  // Texto de apoio abaixo do "Prazo Total (Meses)": só aparece quando o
+  // Primeiro Vencimento está preenchido, caso em que esse número é
+  // a quantidade de parcelas/linhas da tabela (inclui o próprio Primeiro
+  // Vencimento como 1ª linha) — 1 a mais que a duração "redonda" do contrato
+  // entre o Primeiro Vencimento e a Data Vencimento Final. Puramente
+  // informativo: não altera nenhum valor calculado ou salvo, só ajuda a
+  // entender o número exibido.
   const totalTermDurationHint = React.useMemo(() => {
     if (!form.first_payment_date) return null;
     const n = parseInt(form.total_term_months) || 0;
     if (n <= 1) return null;
-    return `≈ ${n - 1} meses de duração (Referência dos Vencimentos → Data Vencimento Final). O total de ${n} parcelas inclui a própria Referência como 1ª linha da tabela.`;
+    return `≈ ${n - 1} meses de duração (Primeiro Vencimento → Data Vencimento Final). O total de ${n} parcelas inclui o próprio Primeiro Vencimento como 1ª linha da tabela.`;
   }, [form.total_term_months, form.first_payment_date]);
 
   // Desabilitar campos conforme sistema selecionado
@@ -950,8 +952,8 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                   </TooltipTrigger>
                   <TooltipContent side="right" className="max-w-xs">
                     <p className="text-xs">
-                      Data de assinatura/desembolso do contrato. Se a "Referência dos Vencimentos" abaixo ficar
-                      vazia, esta data também vira o ponto de partida para contar as parcelas.
+                      Data de assinatura/desembolso do contrato. Se o "Primeiro Vencimento" abaixo ficar
+                      vazio, esta data também vira o ponto de partida para contar as parcelas.
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -1055,7 +1057,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                     <TooltipContent side="right" className="max-w-xs">
                       <p className="text-xs">
                         É a quantidade de parcelas/linhas geradas na tabela — não necessariamente a duração
-                        "redonda" do contrato. Quando a Referência dos Vencimentos está preenchida, a 1ª
+                        "redonda" do contrato. Quando o Primeiro Vencimento está preenchido, a 1ª
                         parcela já nasce na própria data de Referência (não um mês depois), então esse total
                         fica 1 a mais que os meses entre a Referência e a Data Vencimento Final (ex.: um
                         contrato de 5 anos = 60 meses de duração gera 61 parcelas).
@@ -1097,7 +1099,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Referência dos Vencimentos
+                Primeiro Vencimento
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>

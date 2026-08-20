@@ -764,15 +764,15 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
             <Table className="w-full text-[10px]">
               <TableHeader>
                 <TableRow className="bg-slate-50">
-                  <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5">Mês</TableHead>
-                  <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5">Venc.</TableHead>
+                  <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5">Mês</TableHead>
+                  <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5">Venc.</TableHead>
                   
                   {/* FASE 2: VISÃO FINANCEIRA (fxAtual) */}
                   {isUSD && viewMode === "financeiro" && (
                     <>
                       <TableHead className="font-semibold text-blue-600 whitespace-nowrap px-1 py-1.5 text-right">SD Ini USD</TableHead>
                       <TableHead className="font-semibold text-blue-600 whitespace-nowrap px-1 py-1.5 text-right">PTAX Atual</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">
                         <TooltipProvider>
                           <Tooltip delayDuration={200}>
                             <TooltipTrigger asChild>
@@ -824,7 +824,7 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
                         </TooltipProvider>
                       </TableHead>
                       <TableHead className="font-semibold text-blue-600 whitespace-nowrap px-1 py-1.5 text-right">SD Fin USD</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">
                         <TooltipProvider>
                           <Tooltip delayDuration={200}>
                             <TooltipTrigger asChild>
@@ -845,7 +845,7 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
                       <TableHead className="font-semibold text-blue-600 whitespace-nowrap px-1 py-1.5 text-right">SD Ini USD</TableHead>
                       <TableHead className="font-semibold text-slate-600 whitespace-nowrap px-1 py-1.5 text-right">PTAX Ant.</TableHead>
                       <TableHead className="font-semibold text-blue-600 whitespace-nowrap px-1 py-1.5 text-right">PTAX Fim</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">
                         <TooltipProvider>
                           <Tooltip delayDuration={200}>
                             <TooltipTrigger asChild>
@@ -883,7 +883,7 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
                         </TooltipProvider>
                       </TableHead>
                       <TableHead className="font-semibold text-blue-600 whitespace-nowrap px-1 py-1.5 text-right">Amort Paga BRL</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">
                         <TooltipProvider>
                           <Tooltip delayDuration={200}>
                             <TooltipTrigger asChild>
@@ -901,21 +901,21 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
                   {/* BRL (sem USD) - visão única */}
                   {!isUSD && (
                     <>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">SD Ini BRL</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">DC</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">DU</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">Tx.Fixa%</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">J.Fixos</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">Idx%</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">J.Var</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">Tot.J</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">SD Ini BRL</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">DC</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">DU</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">Tx.Fixa%</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">J.Fixos</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">Idx%</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">J.Var</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">Tot.J</TableHead>
                       {displaySchedule.some(r => (r.jurosAcruados || 0) > 0) && (
                         <TableHead className="font-semibold text-purple-600 whitespace-nowrap px-1 py-1.5 text-right">J.Balloon</TableHead>
                       )}
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">SD Atual</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">Amort BRL</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right font-bold">PMT BRL</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">SD Fin BRL</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">SD Atual</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">Amort BRL</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right font-bold">PMT BRL</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">SD Fin BRL</TableHead>
                     </>
                   )}
                 </TableRow>

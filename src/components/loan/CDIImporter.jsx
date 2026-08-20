@@ -361,10 +361,10 @@ export default function CDIImporter() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead className="text-xs font-semibold text-slate-500">Data</TableHead>
-                    <TableHead className="text-xs font-semibold text-slate-500 text-right">Taxa (% a.a.)</TableHead>
-                    <TableHead className="text-xs font-semibold text-slate-500 text-right">Fator Diário</TableHead>
-                    <TableHead className="text-xs font-semibold text-slate-500">Tipo</TableHead>
+                    <TableHead className="text-xs font-bold text-slate-700">Data</TableHead>
+                    <TableHead className="text-xs font-bold text-slate-700 text-right">Taxa (% a.a.)</TableHead>
+                    <TableHead className="text-xs font-bold text-slate-700 text-right">Fator Diário</TableHead>
+                    <TableHead className="text-xs font-bold text-slate-700">Tipo</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

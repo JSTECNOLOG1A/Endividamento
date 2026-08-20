@@ -195,7 +195,7 @@ export default function ContractSummary({ contract, groups, entities, banks, cur
         <Field label="Quantidade de Parcelas" value={installmentsCount} mono span={2} />
         <Field label="Data Vencimento Final" value={formatDate(contract.final_maturity_date)} mono span={2} />
         <Field
-          label="Referência dos Vencimentos"
+          label="Primeiro Vencimento"
           value={contract.first_payment_date ? formatDate(contract.first_payment_date) : "Usa a Data da Operação"}
           mono
           span={2}

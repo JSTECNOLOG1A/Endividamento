@@ -1390,8 +1390,17 @@ export async function calculateAmortizationSchedule(params) {
   );
   
   // 🔐 DUAL-VIEW CET: Custo Nominal (USD) vs Custo Real Projetado (BRL)
+  // 🔐 CORREÇÃO: o desembolso líquido no momento zero (base do CET) precisa
+  // descontar o Sinal do Negócio (signalValue), do mesmo jeito que o `principal`
+  // usado no cronograma já faz (linhas ~640/646 acima) — sem isso, o CET
+  // considerava que o cliente recebeu o valor da operação inteiro, inflando
+  // artificialmente o "caixa recebido" e fazendo o CET sair abaixo da taxa
+  // nominal (o que nunca deveria acontecer).
+  const cetNominalBase = isUSD
+    ? (amount_foreign ? (amount_foreign - (signalValue > 0 ? signalValue / prevPtaxRate : 0)) : principal)
+    : (operationValue - signalValue);
   const cetNominalUSD = calculateCET(
-    isUSD ? (amount_foreign || principal) : operationValue,
+    cetNominalBase,
     upFrontFees,
     financedFeesImpactOnCash,
     schedule,
@@ -1399,11 +1408,11 @@ export async function calculateAmortizationSchedule(params) {
     isUSD ? "USD" : "BRL",
     false // Sem conversão PTAX
   );
-  
+
   // CET Projetado em BRL: considera conversão cambial sobre todo o fluxo futuro
-  const cetProjetadoBRL = isUSD 
+  const cetProjetadoBRL = isUSD
     ? calculateCET(
-        operationValue, // Valor em BRL
+        operationValue - signalValue, // Valor em BRL, líquido do Sinal do Negócio
         upFrontFees,
         financedFeesImpactOnCash,
         schedule,
