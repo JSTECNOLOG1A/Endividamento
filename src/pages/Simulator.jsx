@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Save, Send, RotateCcw, X, FileText, Trash2, AlertTriangle } from "lucide-react";
+import { Save, Send, RotateCcw, X, FileText, Trash2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "../utils";
 import ContractForm from "../components/loan/ContractForm";
@@ -591,6 +591,28 @@ export default function Simulator() {
     setUploadedPdfUrl(null);
   };
 
+  // Sai da edição sem salvar — volta para o Fechamento Contábil de origem se
+  // o contrato foi reaberto em "modo recálculo" (ver FechamentoContabil.jsx),
+  // senão para a tela de Contratos. Confirma antes, já que não há como saber
+  // com certeza se o usuário alterou algo no formulário.
+  const handleBack = () => {
+    if (!window.confirm("Sair sem salvar? Alterações não salvas neste contrato serão perdidas.")) return;
+    if (recalcFlag?.returnTo) navigate(recalcFlag.returnTo);
+    else navigate(createPageUrl("Contracts"));
+  };
+
+  // Esc é o mesmo atalho do botão "Voltar" — só ativo enquanto há um
+  // contrato existente em edição (contrato novo, ainda não salvo, não tem
+  // "para onde voltar" óbvio).
+  React.useEffect(() => {
+    if (!editingContractId) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") handleBack();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editingContractId, recalcFlag]);
+
   const handleCloseContract = async () => {
     if (!editingContractId || (!formParams && !reopenData)) {
       alert("Nenhum contrato aberto para fechar.");
@@ -740,6 +762,14 @@ export default function Simulator() {
 
   return (
     <div className="w-full px-4 sm:px-6 py-8">
+      {editingContractId && (
+        <div className="mb-4">
+          <Button variant="outline" size="sm" onClick={handleBack} className="gap-1.5 text-xs">
+            <ArrowLeft className="w-3.5 h-3.5" />
+            {recalcFlag?.returnTo ? "Voltar para o Fechamento Contábil" : "Voltar para Contratos"}
+          </Button>
+        </div>
+      )}
       {recalcFlag && (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />

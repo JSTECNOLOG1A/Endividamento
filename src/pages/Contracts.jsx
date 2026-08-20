@@ -34,6 +34,17 @@ export default function Contracts() {
     setShowPdf(!!selected?.contract?.contract_pdf_url);
   }, [selected?.contract?.id]);
 
+  // Esc fecha a revisão do contrato e volta para a lista — mesmo atalho que
+  // o botão "Voltar para Contratos", para quem prefere teclado.
+  React.useEffect(() => {
+    if (!selected) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") setSelected(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selected]);
+
   const { data: contracts, isLoading } = useQuery({
     queryKey: ["contracts"],
     queryFn: () => base44.entities.LoanContract.list("-created_date", 1000),
@@ -185,8 +196,8 @@ export default function Contracts() {
     return (
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-8">
         <div className="flex items-center justify-between mb-4">
-          <Button variant="ghost" size="sm" onClick={() => setSelected(null)} className="gap-1.5 text-xs">
-            <ArrowLeft className="w-3.5 h-3.5" /> Voltar
+          <Button variant="outline" size="sm" onClick={() => setSelected(null)} className="gap-1.5 text-xs">
+            <ArrowLeft className="w-3.5 h-3.5" /> Voltar para Contratos
           </Button>
           {hasPdf && (
             <Button
