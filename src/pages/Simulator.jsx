@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Save, Send, RotateCcw, X, FileText, Trash2, AlertTriangle, ArrowLeft } from "lucide-react";
+import { RotateCcw, X, FileText, Trash2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "../utils";
 import ContractForm from "../components/loan/ContractForm";
@@ -821,6 +821,10 @@ export default function Simulator() {
               uploadedPdfUrl={uploadedPdfUrl}
               onPdfUpload={handlePdfUpload}
               isUploadingPdf={isUploadingPdf}
+              hasResult={!!result}
+              isSaving={saving}
+              onSaveDraft={handleSaveDraft}
+              onSubmitForReview={handleSubmitForReview}
             />
           </div>
         </div>
@@ -831,22 +835,12 @@ export default function Simulator() {
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-900 tracking-tight">Resultado</h2>
-                <div className="flex gap-2">
-                  {editingContractId && (
-                    <Button onClick={handleCloseContract} disabled={saving} size="sm" variant="outline" className="gap-1.5 text-xs">
-                      <X className="w-3.5 h-3.5" />
-                      Fechar Contrato
-                    </Button>
-                  )}
-                  <Button onClick={handleSaveDraft} disabled={saving} size="sm" variant="outline" className="gap-1.5 text-xs">
-                    <Save className="w-3.5 h-3.5" />
-                    {saving ? "Salvando..." : "Salvar como Rascunho"}
+                {editingContractId && (
+                  <Button onClick={handleCloseContract} disabled={saving} size="sm" variant="outline" className="gap-1.5 text-xs">
+                    <X className="w-3.5 h-3.5" />
+                    Fechar Contrato
                   </Button>
-                  <Button onClick={handleSubmitForReview} disabled={saving} size="sm" className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <Send className="w-3.5 h-3.5" />
-                    {saving ? "Enviando..." : "Enviar para Revisão"}
-                  </Button>
-                </div>
+                )}
               </div>
 
               <Tabs value={activeTab} onValueChange={setActiveTab}>

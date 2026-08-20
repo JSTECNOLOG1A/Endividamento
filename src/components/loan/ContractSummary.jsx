@@ -132,6 +132,22 @@ export default function ContractSummary({ contract, groups, entities, banks, cur
   const hasGrace = Number(contract.principal_grace_months) > 0 || Number(contract.interest_grace_months) > 0;
   const isForeignCurrency = !!contract.currency_id;
   const isPercentageResidual = contract.calculation_system === "PERCENTAGE_RESIDUAL";
+
+  // Quantidade de Parcelas: conceitualmente diferente de Prazo Total (meses)
+  // — o prazo é a duração total do contrato (inclui carência), enquanto a
+  // quantidade de parcelas é o número de eventos de pagamento efetivamente
+  // gerados no cronograma (ex.: 61 meses de prazo com 1 mês de carência
+  // resulta em 60 parcelas). Sempre derivada do cronograma calculado — nunca
+  // um campo digitável, pra não haver divergência entre o que foi informado
+  // e o que foi de fato calculado.
+  let installmentsCount = null;
+  if (contract.schedule_data) {
+    try {
+      installmentsCount = JSON.parse(contract.schedule_data).schedule?.length ?? null;
+    } catch {
+      installmentsCount = null;
+    }
+  }
   const hasSpread = !!contract.indexer && contract.indexer !== "NA";
 
   return (
@@ -176,6 +192,7 @@ export default function ContractSummary({ contract, groups, entities, banks, cur
       {/* Prazos e Periodicidades */}
       <SummarySection icon={Calendar} title="Prazos e Periodicidades">
         <Field label="Prazo Total (meses)" value={contract.total_term_months} mono span={2} />
+        <Field label="Quantidade de Parcelas" value={installmentsCount} mono span={2} />
         <Field label="Data Vencimento Final" value={formatDate(contract.final_maturity_date)} mono span={2} />
         <Field
           label="Referência dos Vencimentos"

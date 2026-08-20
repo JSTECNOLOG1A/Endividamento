@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCircle, Info, Paperclip, Trash2 } from "lucide-react";
+import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCircle, Info, Paperclip, Trash2, Save, Send } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 
@@ -74,7 +74,7 @@ const parseBRNumber = (str) => {
   return parseFloat(cleaned) || 0;
 };
 
-export default function ContractForm({ onCalculate, onIdentificationChange, initialData, groups, entities, banks, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf, draftKey = "new" }) {
+export default function ContractForm({ onCalculate, onIdentificationChange, initialData, groups, entities, banks, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf, draftKey = "new", hasResult = false, onSaveDraft, onSubmitForReview, isSaving = false }) {
   const [form, setForm] = useState(defaultForm);
   const [initialForm, setInitialForm] = useState(defaultForm);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -1450,6 +1450,40 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
         {isCalculating && (
           <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
             <div className="h-full bg-blue-600 animate-pulse" style={{ width: "100%" }} />
+          </div>
+        )}
+
+        {/* Salvar/Enviar ficam logo abaixo de Calcular — próximos o bastante
+            para o usuário enxergar o próximo passo sem procurar em outra
+            parte da tela. Ficam desabilitados até existir um cálculo (result)
+            porque é dele que vem o cronograma que será persistido. */}
+        {(onSaveDraft || onSubmitForReview) && (
+          <div className="grid grid-cols-2 gap-2">
+            {onSaveDraft && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!hasResult || isSaving}
+                onClick={onSaveDraft}
+                className="gap-1.5 text-xs disabled:opacity-60 disabled:cursor-not-allowed"
+                title={!hasResult ? "Calcule o contrato antes de salvar" : undefined}
+              >
+                <Save className="w-3.5 h-3.5" />
+                {isSaving ? "Salvando..." : "Salvar como Rascunho"}
+              </Button>
+            )}
+            {onSubmitForReview && (
+              <Button
+                type="button"
+                disabled={!hasResult || isSaving}
+                onClick={onSubmitForReview}
+                className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                title={!hasResult ? "Calcule o contrato antes de enviar" : undefined}
+              >
+                <Send className="w-3.5 h-3.5" />
+                {isSaving ? "Enviando..." : "Enviar para Revisão"}
+              </Button>
+            )}
           </div>
         )}
       </div>
