@@ -301,7 +301,10 @@ export default function Contracts() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+    // A tabela de contratos tem 11 colunas — mais larga que o padrão
+    // max-w-7xl do resto do app. Usa uma largura maior aqui para caber sem
+    // precisar quebrar texto ou rolar horizontalmente em telas normais.
+    <div className="max-w-[1900px] mx-auto px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contratos</h1>
         <p className="text-sm text-slate-500 mt-0.5">Visualize e gerencie os contratos cadastrados</p>

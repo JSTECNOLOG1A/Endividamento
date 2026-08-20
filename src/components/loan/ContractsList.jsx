@@ -94,23 +94,29 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
     );
   }
 
+  // Cabeçalho e células em uma linha só (sem quebra de texto) — a tabela é
+  // larga de propósito; ela rola horizontalmente só em telas realmente
+  // estreitas, em vez de forçar rótulos e valores a quebrar em 2 linhas.
+  const headClass = "text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap px-4 py-3";
+  const cellClass = "whitespace-nowrap px-4 py-3.5";
+
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
-        <Table className="min-w-[1400px]">
+        <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Grupo Econômico</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Entidade Componente</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Banco</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Categoria da Operação</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Garantia</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Valor da Operação</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Juros a.a.</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">CET a.a.</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Circulante</TableHead>
-              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Não Circulante</TableHead>
-              <TableHead className="w-20" />
+              <TableHead className={headClass}>Grupo Econômico</TableHead>
+              <TableHead className={headClass}>Entidade Componente</TableHead>
+              <TableHead className={headClass}>Banco</TableHead>
+              <TableHead className={headClass}>Categoria da Operação</TableHead>
+              <TableHead className={headClass}>Garantia</TableHead>
+              <TableHead className={`${headClass} text-right`}>Valor da Operação</TableHead>
+              <TableHead className={`${headClass} text-right`}>Juros a.a.</TableHead>
+              <TableHead className={`${headClass} text-right`}>CET a.a.</TableHead>
+              <TableHead className={`${headClass} text-right`}>Circulante</TableHead>
+              <TableHead className={`${headClass} text-right`}>Não Circulante</TableHead>
+              <TableHead className={`${headClass} w-20`} />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -140,25 +146,25 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
                   }}
                   className="cursor-pointer hover:bg-slate-50"
                 >
-                  <TableCell className="font-medium text-slate-800">{groupName}</TableCell>
-                  <TableCell className="text-slate-700">{entityName}</TableCell>
-                  <TableCell>
+                  <TableCell className={`${cellClass} font-medium text-slate-800`}>{groupName}</TableCell>
+                  <TableCell className={`${cellClass} text-slate-700`}>{entityName}</TableCell>
+                  <TableCell className={cellClass}>
                     <div className="font-medium text-slate-800">{bankName}</div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="flex items-center gap-1.5 mt-1">
                       <span className="font-mono text-[11px] text-slate-400">{c.contract_number}</span>
                       <Badge className={`text-[10px] border ${statusBadgeClass(c.status)}`}>
                         {statusLabel(c.status)}
                       </Badge>
                     </div>
                   </TableCell>
-                  <TableCell className="text-slate-700">{categoryLabel}</TableCell>
-                  <TableCell className="text-slate-700">{guaranteeLabel}</TableCell>
-                  <TableCell className="text-right font-mono text-slate-800">{formatCurrency(c.operation_value)}</TableCell>
-                  <TableCell className="text-right font-mono text-slate-700">{jurosLabel(c)}</TableCell>
-                  <TableCell className="text-right font-mono text-slate-700">{formatPercent(cet, 2)}</TableCell>
-                  <TableCell className="text-right font-mono text-slate-700">{formatCurrency(shortTerm)}</TableCell>
-                  <TableCell className="text-right font-mono text-slate-700">{formatCurrency(longTerm)}</TableCell>
-                  <TableCell>
+                  <TableCell className={`${cellClass} text-slate-700`}>{categoryLabel}</TableCell>
+                  <TableCell className={`${cellClass} text-slate-700`}>{guaranteeLabel}</TableCell>
+                  <TableCell className={`${cellClass} text-right font-mono text-slate-800`}>{formatCurrency(c.operation_value)}</TableCell>
+                  <TableCell className={`${cellClass} text-right font-mono text-slate-700`}>{jurosLabel(c)}</TableCell>
+                  <TableCell className={`${cellClass} text-right font-mono text-slate-700`}>{formatPercent(cet, 2)}</TableCell>
+                  <TableCell className={`${cellClass} text-right font-mono text-slate-700`}>{formatCurrency(shortTerm)}</TableCell>
+                  <TableCell className={`${cellClass} text-right font-mono text-slate-700`}>{formatCurrency(longTerm)}</TableCell>
+                  <TableCell className={cellClass}>
                     <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant="ghost"
