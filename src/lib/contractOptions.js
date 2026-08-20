@@ -19,6 +19,10 @@ export const OPERATION_TYPES = {
   ],
   financiamentos: [
     { value: "bndes_finame", label: "BNDES/FINAME" },
+    { value: "aquisicao_veiculos", label: "Aquisição de Veículos" },
+    { value: "aquisicao_maquinas_equipamentos", label: "Aquisição de Máquinas e Equipamentos" },
+    { value: "cdc_bens", label: "CDC — Crédito Direto ao Consumidor (Bens)" },
+    { value: "financiamento_imobiliario", label: "Financiamento Imobiliário" },
     { value: "credito_rural_custeio", label: "Crédito Rural (Custeio)" },
     { value: "credito_rural_investimento_solos", label: "Crédito rural (Investimento em solos)" },
     { value: "leasing", label: "Leasing Imobiliário/Equipamentos" },
