@@ -399,7 +399,7 @@ export default function UserManual() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
+    <div className="w-full px-4 sm:px-6 py-12">
       <Card className="border-slate-200 shadow-lg">
         <CardHeader className="text-center pb-4">
           <div className="flex justify-center mb-3">

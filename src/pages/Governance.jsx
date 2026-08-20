@@ -420,7 +420,7 @@ export default function Governance() {
   }, [accountsWithRefs, accountSearch, accountEntityFilter, accountStatusFilter, selectedBankId]);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <div className="w-full px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Governança</h1>
         <p className="text-sm text-slate-500 mt-0.5">Grupos, entidades, bancos, contas, naturezas e plano de contas</p>

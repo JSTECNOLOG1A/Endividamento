@@ -194,7 +194,7 @@ export default function Contracts() {
     const pdfVisible = showPdf && hasPdf;
 
     return (
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-8">
+      <div className="w-full px-4 sm:px-6 py-8">
         <div className="flex items-center justify-between mb-4">
           <Button variant="outline" size="sm" onClick={() => setSelected(null)} className="gap-1.5 text-xs">
             <ArrowLeft className="w-3.5 h-3.5" /> Voltar para Contratos
@@ -312,10 +312,8 @@ export default function Contracts() {
   }
 
   return (
-    // A tabela de contratos tem 11 colunas — mais larga que o padrão
-    // max-w-7xl do resto do app. Usa uma largura maior aqui para caber sem
-    // precisar quebrar texto ou rolar horizontalmente em telas normais.
-    <div className="max-w-[1900px] mx-auto px-4 sm:px-6 py-8">
+    // Largura máxima da tela, como o padrão em todas as telas do sistema.
+    <div className="w-full px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contratos</h1>
         <p className="text-sm text-slate-500 mt-0.5">Visualize e gerencie os contratos cadastrados</p>

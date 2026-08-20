@@ -6,7 +6,7 @@ import PTAXImporter from "../components/loan/PTAXImporter";
 
 export default function CDIManager() {
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+    <div className="w-full px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Indexadores e Feriados</h1>
         <p className="text-sm text-slate-500 mt-0.5">Importação de séries históricas (CDI, SELIC, PTAX USD) e feriados nacionais</p>

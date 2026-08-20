@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FileText, Trash2, Copy, ChevronRight, MoreHorizontal, Download, Mail } from "lucide-react";
+import { FileText, Trash2, Copy, ChevronRight, MoreHorizontal, Download, Mail, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { statusLabel, statusBadgeClass, EDITABLE_STATUSES } from "@/lib/contractStatus";
 import { combineGuaranteeLabel, operationCategoryLabel } from "@/lib/contractOptions";
 import { computeContractCET } from "@/lib/cetFromSchedule";
@@ -50,11 +50,11 @@ function jurosLabel(contract) {
   return `${contract.indexer} + ${formatPercent(contract.indexer_spread)} a.a.`;
 }
 
-// Parseia o cronograma salvo e deriva, a partir dele, o CET Anual e o split
-// Circulante/Não Circulante (saldo de principal a vencer em até/acima de 12
-// meses a partir de hoje) — os três únicos valores da tabela que não vêm
-// direto dos campos do contrato.
-function deriveRow(contract, today) {
+// Parseia o cronograma salvo e deriva, a partir dele, o CET Anual, o split
+// Circulante/Não Circulante e os rótulos já resolvidos (Grupo/Entidade/Banco/
+// Categoria/Garantia) — tudo o que a tabela precisa tanto pra exibir quanto
+// pra ordenar por coluna, calculado uma única vez por linha.
+function deriveRow(contract, today, groups, entities, banks) {
   let schedule = [];
   if (contract.schedule_data) {
     try {
@@ -66,18 +66,86 @@ function deriveRow(contract, today) {
   }
   const { cet } = computeContractCET(contract, schedule);
   const { shortTerm, longTerm } = getContractCirculanteSplit(contract, today);
-  return { cet, shortTerm, longTerm };
+  return {
+    cet,
+    shortTerm,
+    longTerm,
+    groupName: groups?.find((g) => g.id === contract.group_id)?.group_name || "—",
+    entityName: entities?.find((e) => e.id === contract.entity_id)?.entity_name || "—",
+    bankName: banks?.find((b) => b.id === contract.bank_id)?.bank_name || "—",
+    categoryLabel: operationCategoryLabel(contract.operation_category),
+    guaranteeLabel: combineGuaranteeLabel(contract.guarantee_real_type, contract.guarantee_personal_type),
+  };
+}
+
+// Colunas ordenáveis por clique no título — cada uma aponta pra um campo já
+// resolvido em `rows` (ver deriveRow acima). `numeric: true` ordena como
+// número em vez de string.
+const SORTABLE_COLUMNS = {
+  groupName: { numeric: false },
+  entityName: { numeric: false },
+  bankName: { numeric: false },
+  contract_number: { numeric: false, fromContract: true },
+  categoryLabel: { numeric: false },
+  guaranteeLabel: { numeric: false },
+  operation_value: { numeric: true, fromContract: true },
+  fixed_rate: { numeric: true, fromContract: true },
+  cet: { numeric: true },
+  shortTerm: { numeric: true },
+  longTerm: { numeric: true },
+  status: { numeric: false, fromContract: true },
+};
+
+function SortIcon({ active, dir }) {
+  if (!active) return <ArrowUpDown className="w-3 h-3 ml-1 inline-block text-slate-400" />;
+  return dir === "asc"
+    ? <ArrowUp className="w-3 h-3 ml-1 inline-block text-slate-700" />
+    : <ArrowDown className="w-3 h-3 ml-1 inline-block text-slate-700" />;
 }
 
 export default function ContractsList({ contracts, banks, groups, entities, onView, onEdit, onDelete, onDuplicate, isLoading }) {
   const today = React.useMemo(() => new Date().toISOString().split("T")[0], []);
   const [emailTarget, setEmailTarget] = React.useState(null);
+  // Ordenação por coluna: clique no título alterna asc → desc → sem ordenação
+  // (volta à ordem original da lista recebida via props).
+  const [sortKey, setSortKey] = React.useState(null);
+  const [sortDir, setSortDir] = React.useState("asc");
 
-  // Deriva CET e Circulante/Não Circulante uma vez por lista (não a cada
-  // re-render) — envolve reprocessar o cronograma inteiro de cada contrato.
+  const toggleSort = (key) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("asc");
+    } else if (sortDir === "asc") {
+      setSortDir("desc");
+    } else {
+      setSortKey(null);
+      setSortDir("asc");
+    }
+  };
+
+  // Deriva CET, Circulante/Não Circulante e os rótulos uma vez por lista (não
+  // a cada re-render) — envolve reprocessar o cronograma inteiro de cada
+  // contrato.
   const rows = React.useMemo(() => {
-    return (contracts || []).map((c) => ({ contract: c, ...deriveRow(c, today) }));
-  }, [contracts, today]);
+    return (contracts || []).map((c) => ({ contract: c, ...deriveRow(c, today, groups, entities, banks) }));
+  }, [contracts, today, groups, entities, banks]);
+
+  const sortedRows = React.useMemo(() => {
+    if (!sortKey) return rows;
+    const config = SORTABLE_COLUMNS[sortKey];
+    const getValue = (row) => (config?.fromContract ? row.contract[sortKey] : row[sortKey]);
+    const sorted = [...rows].sort((a, b) => {
+      const va = getValue(a);
+      const vb = getValue(b);
+      if (config?.numeric) {
+        const na = Number(va) || 0;
+        const nb = Number(vb) || 0;
+        return na - nb;
+      }
+      return String(va ?? "").localeCompare(String(vb ?? ""), "pt-BR");
+    });
+    return sortDir === "desc" ? sorted.reverse() : sorted;
+  }, [rows, sortKey, sortDir]);
 
   if (isLoading) {
     return (
@@ -115,34 +183,42 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
   const cellClass = "whitespace-nowrap px-4 py-3.5 text-sm text-slate-700";
   const cellClassRight = `${cellClass} text-right`;
 
+  // Título de coluna clicável — ordena por esse campo, com seta indicando a
+  // direção atual. `sortField` é a chave em SORTABLE_COLUMNS; se omitida, a
+  // coluna não é ordenável (ex.: a última, de ações).
+  const SortableHead = ({ sortField, right, children }) => (
+    <TableHead
+      className={`${headClass}${right ? " text-right" : ""}${sortField ? " cursor-pointer select-none hover:bg-slate-100" : ""}`}
+      onClick={sortField ? () => toggleSort(sortField) : undefined}
+    >
+      {children}
+      {sortField && <SortIcon active={sortKey === sortField} dir={sortDir} />}
+    </TableHead>
+  );
+
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className={headClass}>Grupo Econômico</TableHead>
-              <TableHead className={headClass}>Entidade Componente</TableHead>
-              <TableHead className={headClass}>Banco</TableHead>
-              <TableHead className={headClass}>Nº Contrato</TableHead>
-              <TableHead className={headClass}>Categoria da Operação</TableHead>
-              <TableHead className={headClass}>Garantia</TableHead>
-              <TableHead className={`${headClass} text-right`}>Valor da Operação</TableHead>
-              <TableHead className={`${headClass} text-right`}>Juros a.a.</TableHead>
-              <TableHead className={`${headClass} text-right`}>CET a.a.</TableHead>
-              <TableHead className={`${headClass} text-right`}>Circulante</TableHead>
-              <TableHead className={`${headClass} text-right`}>Não Circulante</TableHead>
-              <TableHead className={headClass}>Status</TableHead>
+              <SortableHead sortField="groupName">Grupo Econômico</SortableHead>
+              <SortableHead sortField="entityName">Entidade Componente</SortableHead>
+              <SortableHead sortField="bankName">Banco</SortableHead>
+              <SortableHead sortField="contract_number">Nº Contrato</SortableHead>
+              <SortableHead sortField="categoryLabel">Categoria da Operação</SortableHead>
+              <SortableHead sortField="guaranteeLabel">Garantia</SortableHead>
+              <SortableHead sortField="operation_value" right>Valor da Operação</SortableHead>
+              <SortableHead sortField="fixed_rate" right>Juros a.a.</SortableHead>
+              <SortableHead sortField="cet" right>CET a.a.</SortableHead>
+              <SortableHead sortField="shortTerm" right>Circulante</SortableHead>
+              <SortableHead sortField="longTerm" right>Não Circulante</SortableHead>
+              <SortableHead sortField="status">Status</SortableHead>
               <TableHead className={headClass} />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map(({ contract: c, cet, shortTerm, longTerm }) => {
-              const groupName = groups?.find((g) => g.id === c.group_id)?.group_name || "—";
-              const entityName = entities?.find((e) => e.id === c.entity_id)?.entity_name || "—";
-              const bankName = banks?.find((b) => b.id === c.bank_id)?.bank_name || "—";
-              const categoryLabel = operationCategoryLabel(c.operation_category);
-              const guaranteeLabel = combineGuaranteeLabel(c.guarantee_real_type, c.guarantee_personal_type);
+            {sortedRows.map(({ contract: c, cet, shortTerm, longTerm, groupName, entityName, bankName, categoryLabel, guaranteeLabel }) => {
               const isEditable = EDITABLE_STATUSES.includes(c.status || "rascunho");
               const hasPdf = !!c.contract_pdf_url;
               // Clicar na linha sempre "dá andamento" no contrato: rascunho/devolvido
