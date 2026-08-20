@@ -299,7 +299,16 @@ export default function AccountingReading() {
               <Input
                 type="date"
                 value={baseDate}
-                onChange={(e) => setBaseDate(e.target.value)}
+                onChange={(e) => {
+                  // O input nativo de data emite valor vazio enquanto o
+                  // usuário está digitando um dos segmentos (dia/mês/ano)
+                  // incompleto — se deixarmos essa string vazia virar
+                  // baseDate, os cálculos de data mais abaixo (que assumem
+                  // baseDate sempre válido) explodem e derrubam a tela
+                  // inteira em branco. Ignora e mantém a última data válida
+                  // até o usuário terminar de digitar uma data completa.
+                  if (e.target.value) setBaseDate(e.target.value);
+                }}
                 className="h-9 mt-2"
               />
             </CardContent>

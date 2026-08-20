@@ -86,6 +86,68 @@ async function getPTAXFromBACEN(payload = {}) {
   return { success: true, official: foundRate, targetDate, lag };
 }
 
+const BCB_DAILY_SERIES = { CDI: 12, SELIC: 11 };
+
+function formatBCBDate(date) {
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${date.getFullYear()}`;
+}
+
+// Busca CDI ou SELIC direto do BACEN (Sistema Gerenciador de Séries
+// Temporais — SGS, api.bcb.gov.br), a mesma fonte oficial já usada pra PTAX
+// acima. Séries 12 (CDI) e 11 (SELIC) trazem a taxa DIÁRIA em % — o sistema
+// guarda a taxa já anualizada em base 252 (mesmo campo/convenção que a
+// importação manual por CSV usa), então converte aqui pra manter os dois
+// caminhos consistentes entre si.
+async function getRatesFromBACEN(payload = {}) {
+  const { rateType = "CDI", startDate, endDate } = payload;
+  const seriesId = BCB_DAILY_SERIES[rateType];
+  if (!seriesId) {
+    const err = new Error(`rateType inválido: ${rateType} (use 'CDI' ou 'SELIC')`);
+    err.status = 400;
+    throw err;
+  }
+  if (!startDate || !endDate) {
+    const err = new Error("startDate e endDate são obrigatórios (YYYY-MM-DD)");
+    err.status = 400;
+    throw err;
+  }
+  const start = formatBCBDate(new Date(`${startDate}T00:00:00`));
+  const end = formatBCBDate(new Date(`${endDate}T00:00:00`));
+  const url =
+    `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${seriesId}/dados` +
+    `?formato=json&dataInicial=${start}&dataFinal=${end}`;
+  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!response.ok) {
+    const err = new Error(`BACEN API retornou ${response.status}`);
+    err.status = 502;
+    throw err;
+  }
+  const data = await response.json();
+  if (!Array.isArray(data)) {
+    const err = new Error("Resposta inesperada da API do BACEN");
+    err.status = 502;
+    throw err;
+  }
+  const rates = data
+    .map((item) => {
+      const [dd, mm, yyyy] = String(item.data || "").split("/");
+      const dailyRate = parseFloat(String(item.valor).replace(",", "."));
+      if (!dd || !mm || !yyyy || !Number.isFinite(dailyRate)) return null;
+      const dailyFactor = 1 + dailyRate / 100;
+      const annualRate = (Math.pow(dailyFactor, 252) - 1) * 100;
+      return {
+        rate_date: `${yyyy}-${mm}-${dd}`,
+        annual_rate: Math.round(annualRate * 100) / 100,
+        daily_factor: parseFloat(dailyFactor.toFixed(9)),
+        rate_type: rateType,
+      };
+    })
+    .filter(Boolean);
+  return { success: true, rate_type: rateType, count: rates.length, rates };
+}
+
 async function validateAllApprovedContracts(payload = {}) {
   const { group_ids = null, entity_ids = null, limit = 1000 } = payload;
   const started = Date.now();
@@ -170,6 +232,7 @@ const FUNCTION_AUDIT = {
 
 const handlers = {
   getPTAXFromBACEN,
+  getRatesFromBACEN,
   validateAllApprovedContracts,
   calculateAmortizationSchedule,
   previewNatures: () => previewNatures(),

@@ -752,11 +752,23 @@ export function getDebtKPIs(contracts, targetDate) {
  * @returns {string} Data de início do exercício (YYYY-MM-DD)
  */
 export function getExercicioStart(baseDate, startMonth) {
-  const baseDateObj = new Date(baseDate + "T00:00:00");
-  const baseYear = baseDateObj.getFullYear();
-  const baseMonth = baseDateObj.getMonth() + 1; // 1-12
+  let baseDateObj = new Date(baseDate + "T00:00:00");
   const normalizedStartMonth = Math.min(12, Math.max(1, parseInt(startMonth) || 1));
 
+  // Proteção: se baseDate vier vazio/inválido (ex.: input nativo de data
+  // emitindo string vazia no meio da digitação), Date.getFullYear() retorna
+  // NaN, e isso se propagava como "NaN-01-01" pros cálculos seguintes — que
+  // então explodiam ao tentar montar um Date a partir disso (toISOString()
+  // lança RangeError em Invalid Date), derrubando a tela inteira. Sem uma
+  // data-base válida, cai pra data de hoje só pra manter o retorno uma data
+  // real (os componentes que chamam essa função sempre esperam uma string
+  // "YYYY-MM-DD" utilizável, nunca null) — os cálculos que dependem dela vão
+  // se corrigir sozinhos assim que o usuário terminar de digitar uma data
+  // válida no campo.
+  if (Number.isNaN(baseDateObj.getTime())) baseDateObj = new Date();
+
+  const baseYear = baseDateObj.getFullYear();
+  const baseMonth = baseDateObj.getMonth() + 1; // 1-12
   const exercicioYear = baseMonth < normalizedStartMonth ? baseYear - 1 : baseYear;
 
   return `${exercicioYear}-${String(normalizedStartMonth).padStart(2, "0")}-01`;

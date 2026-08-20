@@ -695,7 +695,20 @@ export default function FechamentoContabil({ entityId, entityName }) {
                   Data-base
                   <InfoTip text="Data usada para calcular o saldo e reclassificar principal/juros entre circulante e não circulante. Normalmente é o último dia da competência selecionada." />
                 </Label>
-                <Input type="date" className="h-9" value={dataBase} onChange={(e) => setDataBase(e.target.value)} disabled={isApproved} />
+                <Input
+                  type="date"
+                  className="h-9"
+                  value={dataBase}
+                  onChange={(e) => {
+                    // Mesma proteção do que a tela de Leitura Contábil: o
+                    // input nativo de data emite valor vazio enquanto o
+                    // usuário digita um segmento incompleto — não deixa essa
+                    // string vazia virar dataBase (quebraria os cálculos de
+                    // fechamento mais abaixo e derrubaria a tela em branco).
+                    if (e.target.value) setDataBase(e.target.value);
+                  }}
+                  disabled={isApproved}
+                />
               </div>
             </div>
             <div className="flex flex-col items-end gap-1.5">

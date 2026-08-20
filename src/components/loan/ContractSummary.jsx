@@ -134,16 +134,21 @@ export default function ContractSummary({ contract, groups, entities, banks, cur
   const isPercentageResidual = contract.calculation_system === "PERCENTAGE_RESIDUAL";
 
   // Quantidade de Parcelas: conceitualmente diferente de Prazo Total (meses)
-  // — o prazo é a duração total do contrato (inclui carência), enquanto a
-  // quantidade de parcelas é o número de eventos de pagamento efetivamente
-  // gerados no cronograma (ex.: 61 meses de prazo com 1 mês de carência
-  // resulta em 60 parcelas). Sempre derivada do cronograma calculado — nunca
-  // um campo digitável, pra não haver divergência entre o que foi informado
-  // e o que foi de fato calculado.
+  // — Prazo Total é o total de linhas/meses gerados no cronograma (inclui a
+  // própria linha de carência, quando existe), enquanto Quantidade de
+  // Parcelas é o número de linhas que efetivamente têm pagamento (prestação
+  // > 0). Ex.: 61 meses de Prazo Total com 1 mês de carência sem pagamento
+  // no início resulta em 60 parcelas. Por isso NÃO usamos schedule.length
+  // aqui (isso sempre bate com Prazo Total, já que o motor gera uma linha
+  // por mês do prazo) — filtramos pelas linhas com prestação paga, que é o
+  // dado que realmente diverge do prazo quando há carência.
   let installmentsCount = null;
   if (contract.schedule_data) {
     try {
-      installmentsCount = JSON.parse(contract.schedule_data).schedule?.length ?? null;
+      const schedule = JSON.parse(contract.schedule_data).schedule;
+      installmentsCount = Array.isArray(schedule)
+        ? schedule.filter((row) => Number(row?.prestacao || 0) > 0).length
+        : null;
     } catch {
       installmentsCount = null;
     }

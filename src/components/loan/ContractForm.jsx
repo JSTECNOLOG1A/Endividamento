@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Combobox } from "@/components/ui/combobox";
 import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCircle, Info, Paperclip, Trash2, Save, Send } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -326,17 +327,18 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
   };
 
   // Texto de apoio abaixo do "Prazo Total (Meses)": só aparece quando o
-  // Primeiro Vencimento está preenchido, caso em que esse número é
-  // a quantidade de parcelas/linhas da tabela (inclui o próprio Primeiro
-  // Vencimento como 1ª linha) — 1 a mais que a duração "redonda" do contrato
-  // entre o Primeiro Vencimento e a Data Vencimento Final. Puramente
-  // informativo: não altera nenhum valor calculado ou salvo, só ajuda a
-  // entender o número exibido.
+  // Primeiro Vencimento está preenchido, caso em que esse número é o total
+  // de meses/linhas do cronograma (inclui o próprio Primeiro Vencimento como
+  // 1ª linha) — 1 a mais que a duração "redonda" do contrato entre o
+  // Primeiro Vencimento e a Data Vencimento Final. Puramente informativo:
+  // não altera nenhum valor calculado ou salvo, só ajuda a entender o
+  // número exibido (e evita confundir esse total com "Quantidade de
+  // Parcelas", que é outro campo, calculado à parte na revisão).
   const totalTermDurationHint = React.useMemo(() => {
     if (!form.first_payment_date) return null;
     const n = parseInt(form.total_term_months) || 0;
     if (n <= 1) return null;
-    return `≈ ${n - 1} meses de duração (Primeiro Vencimento → Data Vencimento Final). O total de ${n} parcelas inclui o próprio Primeiro Vencimento como 1ª linha da tabela.`;
+    return `≈ ${n - 1} meses de duração (Primeiro Vencimento → Data Vencimento Final). O Prazo Total de ${n} inclui o próprio Primeiro Vencimento como 1ª linha da tabela — a Quantidade de Parcelas (na revisão) pode ser 1 a menos se houver carência sem pagamento no início.`;
   }, [form.total_term_months, form.first_payment_date]);
 
   // Desabilitar campos conforme sistema selecionado
@@ -547,41 +549,36 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Grupo Econômico *</Label>
-              <Select 
-                value={form.group_id || ""} 
-                onValueChange={(v) => update("group_id", v)}
-              >
-                <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {groups?.map((g) => (<SelectItem key={g.id} value={g.id}>{g.group_name}</SelectItem>))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                value={form.group_id || ""}
+                onChange={(v) => update("group_id", v)}
+                options={(groups || []).map((g) => ({ value: g.id, label: g.group_name }))}
+                placeholder="Selecione"
+                searchPlaceholder="Buscar grupo..."
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Entidade Componente *</Label>
-              <Select 
+              <Combobox
                 value={form.entity_id || ""}
-                onValueChange={(v) => v && update("entity_id", v)}
+                onChange={(v) => v && update("entity_id", v)}
+                options={(filteredEntities || []).map((e) => ({ value: e.id, label: e.entity_name }))}
                 disabled={!form.group_id}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder={form.group_id ? "Selecione" : "Selecione um grupo primeiro"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredEntities?.map((e) => (<SelectItem key={e.id} value={e.id}>{e.entity_name}</SelectItem>))}
-                </SelectContent>
-              </Select>
+                placeholder={form.group_id ? "Selecione" : "Selecione um grupo primeiro"}
+                searchPlaceholder="Buscar entidade..."
+              />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Banco Credor *</Label>
-              <Select value={form.bank_id || ""} onValueChange={(v) => v && update("bank_id", v)}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {banks?.map((b) => (<SelectItem key={b.id} value={b.id}>{b.bank_name}</SelectItem>))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                value={form.bank_id || ""}
+                onChange={(v) => v && update("bank_id", v)}
+                options={(banks || []).map((b) => ({ value: b.id, label: b.bank_name }))}
+                placeholder="Selecione"
+                searchPlaceholder="Buscar banco..."
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nº Contrato *</Label>
@@ -1056,11 +1053,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-xs">
                       <p className="text-xs">
-                        É a quantidade de parcelas/linhas geradas na tabela — não necessariamente a duração
-                        "redonda" do contrato. Quando o Primeiro Vencimento está preenchido, a 1ª
-                        parcela já nasce na própria data de Referência (não um mês depois), então esse total
-                        fica 1 a mais que os meses entre a Referência e a Data Vencimento Final (ex.: um
-                        contrato de 5 anos = 60 meses de duração gera 61 parcelas).
+                        Total de meses/linhas gerados no cronograma — determina onde cai a Data Vencimento
+                        Final. Quando o Primeiro Vencimento está preenchido, a 1ª linha da tabela já nasce
+                        na própria data do Primeiro Vencimento (não um mês depois), então esse total fica 1
+                        a mais que os meses entre o Primeiro Vencimento e a Data Vencimento Final (ex.: um
+                        contrato de 5 anos = 60 meses de duração gera Prazo Total = 61). Não confundir com
+                        "Quantidade de Parcelas" (na tela de revisão): esse outro campo conta só as linhas
+                        com pagamento efetivo, que pode ser 1 a menos quando há carência sem pagamento no
+                        início.
                       </p>
                     </TooltipContent>
                   </Tooltip>

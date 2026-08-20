@@ -37,6 +37,9 @@ export default function CDIImporter() {
   const [filterEnd, setFilterEnd] = useState("");
   const [rateType, setRateType] = useState("CDI");
   const [totalImported, setTotalImported] = useState(0);
+  const [bacenStart, setBacenStart] = useState("");
+  const [bacenEnd, setBacenEnd] = useState("");
+  const [importingBacen, setImportingBacen] = useState(false);
 
   // Auto-load from database on mount and when rateType changes
   React.useEffect(() => {
@@ -174,6 +177,64 @@ export default function CDIImporter() {
     reader.readAsText(file);
   }, [rateType]);
 
+  // Busca CDI/SELIC direto do BACEN (SGS — api.bcb.gov.br, fonte oficial e
+  // gratuita, mesma usada pra PTAX) pro período informado, e importa só as
+  // datas que ainda não existem no banco — mesma lógica de deduplicação do
+  // import por CSV acima.
+  const handleImportFromBACEN = useCallback(async () => {
+    if (!bacenStart || !bacenEnd) {
+      setError("Informe o período (data inicial e final) para buscar no BACEN.");
+      return;
+    }
+    setImportingBacen(true);
+    setError(null);
+    try {
+      const { data } = await base44.functions.invoke("getRatesFromBACEN", {
+        rateType,
+        startDate: bacenStart,
+        endDate: bacenEnd,
+      });
+      const parsed = data?.rates || [];
+      if (parsed.length === 0) {
+        setError("O BACEN não retornou taxas para esse período.");
+        setImportingBacen(false);
+        return;
+      }
+
+      const existingRates = await base44.entities.CDIRate.filter({ rate_type: rateType }, "rate_date", 10000);
+      const existingDatesSet = new Set(existingRates.map((r) => r.rate_date));
+      const newRates = parsed.filter((r) => !existingDatesSet.has(r.rate_date));
+
+      if (newRates.length === 0) {
+        setError(`Todas as ${parsed.length} taxas do período já existem no banco. Nenhuma taxa nova foi importada.`);
+        setImportingBacen(false);
+        return;
+      }
+
+      const batchSize = 100;
+      for (let i = 0; i < newRates.length; i += batchSize) {
+        await base44.entities.CDIRate.bulkCreate(newRates.slice(i, i + batchSize));
+      }
+
+      alert(`✅ ${newRates.length} novas taxas ${rateType} importadas do BACEN!\n${parsed.length - newRates.length} taxas já existiam no banco.`);
+
+      const refreshed = await base44.entities.CDIRate.filter({ rate_type: rateType }, "rate_date", 10000);
+      setRates(
+        refreshed.map((d) => ({
+          rate_date: d.rate_date,
+          annual_rate: d.annual_rate,
+          daily_factor: d.daily_factor,
+          rate_type: d.rate_type,
+        }))
+      );
+      setTotalImported(refreshed.length);
+      setPage(0);
+    } catch (err) {
+      setError("Erro ao importar do BACEN: " + (err.message || "tente novamente"));
+    }
+    setImportingBacen(false);
+  }, [rateType, bacenStart, bacenEnd]);
+
   const loadFromDatabase = useCallback(async () => {
     setImporting(true);
     setError(null);
@@ -283,6 +344,30 @@ export default function CDIImporter() {
             <p className="text-xs text-slate-500">
               <strong>Layout:</strong> Data (DD/MM/AAAA); Taxa (% a.a.) — Separador: vírgula ou ponto-e-vírgula.
               Suporta séries com mais de 10.000 registros.
+            </p>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
+              Ou importar automaticamente do BACEN
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Data Inicial</Label>
+                <Input type="date" value={bacenStart} onChange={(e) => setBacenStart(e.target.value)} className="h-9" disabled={importingBacen} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Data Final</Label>
+                <Input type="date" value={bacenEnd} onChange={(e) => setBacenEnd(e.target.value)} className="h-9" disabled={importingBacen} />
+              </div>
+              <Button type="button" onClick={handleImportFromBACEN} disabled={importingBacen} className="h-9 gap-1.5">
+                <Database className="w-3.5 h-3.5" />
+                {importingBacen ? "Buscando..." : `Buscar ${rateType} no BACEN`}
+              </Button>
+            </div>
+            <p className="text-xs text-slate-400 mt-2">
+              Busca a série oficial do Banco Central (api.bcb.gov.br) pro período informado e importa só as datas
+              que ainda não estão no banco.
             </p>
           </div>
 
