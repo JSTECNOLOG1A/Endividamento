@@ -19,7 +19,10 @@ import { computeContractCET } from "../lib/cetFromSchedule";
 
 export default function Contracts() {
   const [selected, setSelected] = useState(null);
-  const [statusFilter, setStatusFilter] = useState("all");
+  // Abre por padrão só nos contratos Aprovados — é o recorte mais usado no
+  // dia a dia (consulta/consolidação); os outros status continuam a um
+  // clique de distância nos cards/filtro acima.
+  const [statusFilter, setStatusFilter] = useState("aprovado");
   const [bankFilter, setBankFilter] = useState("all");
   // Controla o painel lateral com o PDF do contrato (conferência lado a
   // lado no modo de revisão). Começa aberto automaticamente sempre que um
@@ -387,6 +390,8 @@ export default function Contracts() {
       <ContractsList
         contracts={filteredContracts}
         banks={banks}
+        groups={groups}
+        entities={entities}
         onView={handleView}
         onEdit={handleEdit}
         onDelete={(id) => deleteMutation.mutate(id)}

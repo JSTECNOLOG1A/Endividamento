@@ -35,7 +35,7 @@ import {
   getPaymentFlowByBankModalityGuarantee,
   getMonthlyRollForward,
 } from "./debtAnalytics";
-import { OPERATION_TYPES, OPERATION_CATEGORIES } from "@/lib/contractOptions";
+import { OPERATION_TYPES, OPERATION_CATEGORIES, operationCategoryLabel } from "@/lib/contractOptions";
 
 const MONTHS = [
   { value: "1", label: "Janeiro" },
@@ -69,10 +69,6 @@ function operationTypeLabel(operationType) {
     if (found) return found.label;
   }
   return operationType || "Sem Tipo";
-}
-
-function operationCategoryLabel(operationCategory) {
-  return OPERATION_CATEGORIES.find((c) => c.value === operationCategory)?.label || "Sem Categoria";
 }
 
 // Mesma regra usada nas linhas da tabela de Fluxo Futuro — alterna entre

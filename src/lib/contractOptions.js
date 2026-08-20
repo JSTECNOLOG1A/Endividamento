@@ -142,3 +142,10 @@ export function combineGuaranteeLabel(realType, personalType) {
   if (personalLabel) return personalLabel;
   return "Não informado";
 }
+
+// Rótulo da Categoria da Operação — usado em qualquer lista/tabela que
+// precise exibir a categoria (Contratos, Leitura Contábil etc.), para não
+// duplicar a mesma busca em OPERATION_CATEGORIES em cada tela.
+export function operationCategoryLabel(operationCategory) {
+  return OPERATION_CATEGORIES.find((c) => c.value === operationCategory)?.label || "Sem Categoria";
+}

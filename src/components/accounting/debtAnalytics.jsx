@@ -258,6 +258,49 @@ export function getDebtMaturityBreakdown(contracts, baseDate) {
 }
 
 /**
+ * 2️⃣b CIRCULANTE / NÃO CIRCULANTE POR CONTRATO
+ * Mesma classificação de getDebtMaturityBreakdown (saldo de principal a
+ * vencer em até 12 meses = circulante; acima disso = não circulante), mas
+ * calculada para UM contrato por vez e indexada por contract.id — usada na
+ * tabela de Contratos, onde cada linha precisa do próprio saldo, sem
+ * depender de agrupar por número de contrato (que não é garantidamente
+ * único entre bancos/entidades diferentes).
+ *
+ * Parcelas já vencidas (dataVencimento no passado em relação a baseDate)
+ * entram no circulante — são, por definição, uma obrigação corrente.
+ */
+export function getContractCirculanteSplit(contract, baseDate) {
+  const result = { shortTerm: 0, longTerm: 0 };
+  if (!contract?.schedule_data) return result;
+
+  let schedule;
+  try {
+    schedule = JSON.parse(contract.schedule_data).schedule || [];
+  } catch {
+    return result;
+  }
+
+  const baseDateObj = new Date(baseDate + "T00:00:00");
+  schedule.forEach((row) => {
+    if (!(row.amortizacao > 0)) return;
+    const rowDate = new Date(row.dataVencimento + "T00:00:00");
+    const daysToMaturity = Math.ceil((rowDate - baseDateObj) / (1000 * 60 * 60 * 24));
+    if (daysToMaturity < 0) {
+      result.shortTerm += row.amortizacao; // Vencido — obrigação corrente.
+      return;
+    }
+    const monthsToMaturity = Math.floor(daysToMaturity / 30.44);
+    if (monthsToMaturity <= 12) result.shortTerm += row.amortizacao;
+    else result.longTerm += row.amortizacao;
+  });
+
+  return {
+    shortTerm: Math.round(result.shortTerm * 100) / 100,
+    longTerm: Math.round(result.longTerm * 100) / 100,
+  };
+}
+
+/**
  * 3️⃣ INTEREST BY MONTH
  * Juros apropriados por mês
  */

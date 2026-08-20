@@ -1,37 +1,84 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Building2, FileText, Trash2, Copy, ChevronRight } from "lucide-react";
+import { FileText, Trash2, Copy, ChevronRight } from "lucide-react";
 import { statusLabel, statusBadgeClass, EDITABLE_STATUSES } from "@/lib/contractStatus";
+import { combineGuaranteeLabel, operationCategoryLabel } from "@/lib/contractOptions";
+import { computeContractCET } from "@/lib/cetFromSchedule";
+import { getContractCirculanteSplit } from "../accounting/debtAnalytics";
 
 function formatCurrency(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,
-  }).format(value || 0);
+  }).format(n);
 }
 
-const systemLabels = {
-  SAC: "SAC",
-  PRICE: "Price",
-  AMERICANO: "Americano",
-  BULLET: "Bullet",
-};
+function formatPercent(value, maxDigits = 4) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: maxDigits })}%`;
+}
 
-export default function ContractsList({ contracts, banks, onView, onEdit, onDelete, onDuplicate, isLoading }) {
+// "Juros a.a.": taxa fixa quando prefixado (indexer N/A ou vazio), ou
+// indexador + spread quando a operação é pós-fixada — mesma regra usada no
+// cabeçalho da tela de revisão do contrato (Contracts.jsx).
+function jurosLabel(contract) {
+  if (!contract.indexer || contract.indexer === "NA") {
+    return `${formatPercent(contract.fixed_rate)} a.a.`;
+  }
+  return `${contract.indexer} + ${formatPercent(contract.indexer_spread)} a.a.`;
+}
+
+// Parseia o cronograma salvo e deriva, a partir dele, o CET Anual e o split
+// Circulante/Não Circulante (saldo de principal a vencer em até/acima de 12
+// meses a partir de hoje) — os três únicos valores da tabela que não vêm
+// direto dos campos do contrato.
+function deriveRow(contract, today) {
+  let schedule = [];
+  if (contract.schedule_data) {
+    try {
+      const parsed = JSON.parse(contract.schedule_data);
+      schedule = parsed.schedule || [];
+    } catch {
+      schedule = [];
+    }
+  }
+  const { cet } = computeContractCET(contract, schedule);
+  const { shortTerm, longTerm } = getContractCirculanteSplit(contract, today);
+  return { cet, shortTerm, longTerm };
+}
+
+export default function ContractsList({ contracts, banks, groups, entities, onView, onEdit, onDelete, onDuplicate, isLoading }) {
+  const today = React.useMemo(() => new Date().toISOString().split("T")[0], []);
+
+  // Deriva CET e Circulante/Não Circulante uma vez por lista (não a cada
+  // re-render) — envolve reprocessar o cronograma inteiro de cada contrato.
+  const rows = React.useMemo(() => {
+    return (contracts || []).map((c) => ({ contract: c, ...deriveRow(c, today) }));
+  }, [contracts, today]);
+
   if (isLoading) {
     return (
-      <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <Card key={i} className="border-slate-200 animate-pulse">
-            <CardContent className="p-4">
-              <div className="h-16 bg-slate-100 rounded" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <Card className="border-slate-200">
+        <CardContent className="p-4 space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-10 bg-slate-100 rounded animate-pulse" />
+          ))}
+        </CardContent>
+      </Card>
     );
   }
 
@@ -48,92 +95,104 @@ export default function ContractsList({ contracts, banks, onView, onEdit, onDele
   }
 
   return (
-    <div className="space-y-3">
-      {contracts.map((c) => {
-        const bankName = banks?.find(b => b.id === c.bank_id)?.bank_name || "N/A";
-        const isEditable = EDITABLE_STATUSES.includes(c.status || "rascunho");
-        // Clicar no card sempre "dá andamento" no contrato: rascunho/devolvido
-        // abrem na Calculadora para continuar editando; pendente/aprovado abrem
-        // a tela de revisão (com os botões de Aprovar/Devolver, se aplicável).
-        const openContract = () => (isEditable ? onEdit(c) : onView(c));
-        return (
-          <Card
-            key={c.id}
-            role="button"
-            tabIndex={0}
-            onClick={openContract}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                openContract();
-              }
-            }}
-            className="border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-shadow cursor-pointer"
-          >
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-100 flex-shrink-0">
-                    <Building2 className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-semibold text-slate-800 truncate">{bankName}</h3>
-                      <Badge variant="outline" className="text-xs font-mono">{c.contract_number}</Badge>
-                      <Badge className={`text-xs border ${statusBadgeClass(c.status)}`}>
+    <Card className="border-slate-200 shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <Table className="min-w-[1400px]">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Grupo Econômico</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Entidade Componente</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Banco</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Categoria da Operação</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Garantia</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Valor da Operação</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Juros a.a.</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">CET a.a.</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Circulante</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Não Circulante</TableHead>
+              <TableHead className="w-20" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map(({ contract: c, cet, shortTerm, longTerm }) => {
+              const groupName = groups?.find((g) => g.id === c.group_id)?.group_name || "—";
+              const entityName = entities?.find((e) => e.id === c.entity_id)?.entity_name || "—";
+              const bankName = banks?.find((b) => b.id === c.bank_id)?.bank_name || "—";
+              const categoryLabel = operationCategoryLabel(c.operation_category);
+              const guaranteeLabel = combineGuaranteeLabel(c.guarantee_real_type, c.guarantee_personal_type);
+              const isEditable = EDITABLE_STATUSES.includes(c.status || "rascunho");
+              // Clicar na linha sempre "dá andamento" no contrato: rascunho/devolvido
+              // abrem na Calculadora para continuar editando; pendente/aprovado abrem
+              // a tela de revisão (com os botões de Aprovar/Devolver, se aplicável).
+              const openContract = () => (isEditable ? onEdit(c) : onView(c));
+
+              return (
+                <TableRow
+                  key={c.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={openContract}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openContract();
+                    }
+                  }}
+                  className="cursor-pointer hover:bg-slate-50"
+                >
+                  <TableCell className="font-medium text-slate-800">{groupName}</TableCell>
+                  <TableCell className="text-slate-700">{entityName}</TableCell>
+                  <TableCell>
+                    <div className="font-medium text-slate-800">{bankName}</div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="font-mono text-[11px] text-slate-400">{c.contract_number}</span>
+                      <Badge className={`text-[10px] border ${statusBadgeClass(c.status)}`}>
                         {statusLabel(c.status)}
                       </Badge>
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
-                      <span className="font-mono font-medium text-slate-700">{formatCurrency(c.operation_value)}</span>
-                      <span>•</span>
-                      <span>{systemLabels[c.calculation_system] || c.calculation_system}</span>
-                      <span>•</span>
-                      <span>{c.fixed_rate}% a.a.</span>
-                      {c.indexer !== "NA" && (
-                        <>
-                          <span>+</span>
-                          <span>{c.indexer}</span>
-                        </>
+                  </TableCell>
+                  <TableCell className="text-slate-700">{categoryLabel}</TableCell>
+                  <TableCell className="text-slate-700">{guaranteeLabel}</TableCell>
+                  <TableCell className="text-right font-mono text-slate-800">{formatCurrency(c.operation_value)}</TableCell>
+                  <TableCell className="text-right font-mono text-slate-700">{jurosLabel(c)}</TableCell>
+                  <TableCell className="text-right font-mono text-slate-700">{formatPercent(cet, 2)}</TableCell>
+                  <TableCell className="text-right font-mono text-slate-700">{formatCurrency(shortTerm)}</TableCell>
+                  <TableCell className="text-right font-mono text-slate-700">{formatCurrency(longTerm)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onDuplicate(c)}
+                        className="h-8 w-8 text-slate-400 hover:text-purple-600"
+                        title="Duplicar"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                      {isEditable && onDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (window.confirm("⚠️ Tem certeza que deseja excluir este contrato?\n\nEsta ação não poderá ser desfeita.")) {
+                              onDelete(c.id);
+                            }
+                          }}
+                          className="h-8 w-8 text-slate-400 hover:text-red-500"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       )}
-                      <span>•</span>
-                      <span>{c.principal_installments}x</span>
+                      <ChevronRight className="w-4 h-4 text-slate-300" />
                     </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => { e.stopPropagation(); onDuplicate(c); }}
-                    className="h-8 w-8 text-slate-400 hover:text-purple-600"
-                    title="Duplicar"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </Button>
-                  {isEditable && onDelete && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm("⚠️ Tem certeza que deseja excluir este contrato?\n\nEsta ação não poderá ser desfeita.")) {
-                          onDelete(c.id);
-                        }
-                      }}
-                      className="h-8 w-8 text-slate-400 hover:text-red-500"
-                      title="Excluir"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  )}
-                  <ChevronRight className="w-4 h-4 text-slate-300" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
   );
 }
