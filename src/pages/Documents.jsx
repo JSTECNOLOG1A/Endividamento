@@ -8,7 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { FileText, Download, Mail, Search } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { FileText, Download, Mail, Search, MoreHorizontal } from "lucide-react";
 
 function sanitizeFilename(name) {
   return String(name || "documento")
@@ -232,13 +238,24 @@ export default function Documents() {
                         <td className="px-2 py-2 text-slate-700">{row.empresa}</td>
                         <td className="px-2 py-2 text-slate-700">{row.data ? String(row.data).slice(0, 10).split("-").reverse().join("/") : "—"}</td>
                         <td className="px-2 py-2 text-right">
-                          <div className="flex gap-1.5 justify-end">
-                            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => handleDownload(row)}>
-                              <Download className="w-3 h-3" /> Baixar
-                            </Button>
-                            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setEmailTarget(row)}>
-                              <Mail className="w-3 h-3" /> E-mail
-                            </Button>
+                          <div className="flex justify-end">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs">
+                                  Ações <MoreHorizontal className="w-3.5 h-3.5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleDownload(row)}>
+                                  <Download className="w-3.5 h-3.5 mr-2" />
+                                  Baixar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setEmailTarget(row)}>
+                                  <Mail className="w-3.5 h-3.5 mr-2" />
+                                  Enviar por e-mail
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </td>
                       </tr>
