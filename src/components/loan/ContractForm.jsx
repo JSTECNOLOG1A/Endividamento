@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Combobox } from "@/components/ui/combobox";
-import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCircle, Info, Paperclip, Trash2, Save, Send } from "lucide-react";
+import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCircle, Info, Paperclip, Trash2, Save, Send, Banknote, Receipt, LayoutList } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 
@@ -74,6 +74,30 @@ const parseBRNumber = (str) => {
   const cleaned = String(str).replace(/\./g, '').replace(',', '.');
   return parseFloat(cleaned) || 0;
 };
+
+// Numeral discreto antes do ícone de cada seção principal (Identificação /
+// Composição / Prazos) — reforça a leitura de "passo 1, 2, 3" do formulário
+// sem precisar de um wizard de verdade (o usuário continua vendo tudo numa
+// tela só, mas a numeração ajuda a orientar por onde começar).
+function SectionBadge({ n }) {
+  return (
+    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] font-bold shrink-0">
+      {n}
+    </span>
+  );
+}
+
+// Sub-título interno usado para dividir a seção "Composição e Remuneração da
+// Dívida" (a mais longa das três) em blocos menores e escaneáveis — sem criar
+// Cards separados, que quebrariam o agrupamento de 3 seções pedido.
+function SubsectionHeading({ icon: Icon, children }) {
+  return (
+    <h4 className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide">
+      <Icon className="w-3.5 h-3.5 text-blue-600" />
+      {children}
+    </h4>
+  );
+}
 
 export default function ContractForm({ onCalculate, onIdentificationChange, initialData, groups, entities, banks, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf, draftKey = "new", hasResult = false, onSaveDraft, onSubmitForReview, isSaving = false }) {
   const [form, setForm] = useState(defaultForm);
@@ -382,6 +406,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
   const filteredEntities = form.group_id ? entities?.filter((e) => e.group_id === form.group_id) : [];
   const selectedEntity = form.entity_id ? entities?.find((e) => e.id === form.entity_id) : null;
   const missingData = !form.group_id || !form.entity_id || !form.bank_id;
+  const selectedSystem = SYSTEMS.find((s) => s.value === form.calculation_system);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -541,11 +566,15 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
+            <SectionBadge n={1} />
             <Building2 className="w-4 h-4 text-blue-600" />
             Identificação
           </CardTitle>
+          <CardDescription className="text-xs text-slate-600 pl-7">
+            Grupo, entidade, banco credor e garantias do contrato.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Grupo Econômico *</Label>
@@ -678,12 +707,17 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
+            <SectionBadge n={2} />
             <CreditCard className="w-4 h-4 text-blue-600" />
             Composição e Remuneração da Dívida
           </CardTitle>
+          <CardDescription className="text-xs text-slate-600 pl-7">
+            Moeda, valores, custos da operação e como a dívida é remunerada.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           {/* Moeda e Defasagem PTAX - Primeiro Bloco */}
+          <SubsectionHeading icon={Banknote}>Moeda e Câmbio</SubsectionHeading>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Moeda (Opcional)</Label>
@@ -830,7 +864,8 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           )}
           
           <Separator />
-          
+
+          <SubsectionHeading icon={Receipt}>Custos da Operação</SubsectionHeading>
           {/* Valor da Operação e Sinal */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -861,7 +896,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
           </div>
           <Separator />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 rounded-lg border border-slate-100 bg-slate-50/70 p-4">
             <div className="space-y-3">
               <div className="space-y-1.5">
                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
@@ -939,26 +974,29 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
           </div>
           <Separator />
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-              Data da Operação *
-              <TooltipProvider>
-                <Tooltip delayDuration={200}>
-                  <TooltipTrigger asChild>
-                    <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="max-w-xs">
-                    <p className="text-xs">
-                      Data de assinatura/desembolso do contrato. Se o "Primeiro Vencimento" abaixo ficar
-                      vazio, esta data também vira o ponto de partida para contar as parcelas.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Label>
-            <Input type="date" value={form.operation_date} onChange={(e) => update("operation_date", e.target.value)} className="h-9 w-64" required />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Data da Operação *
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        Data de assinatura/desembolso do contrato. Se o "Primeiro Vencimento" abaixo ficar
+                        vazio, esta data também vira o ponto de partida para contar as parcelas.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input type="date" value={form.operation_date} onChange={(e) => update("operation_date", e.target.value)} className="h-9" required />
+            </div>
           </div>
           <Separator />
+          <SubsectionHeading icon={Percent}>Taxa e Indexação</SubsectionHeading>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Taxa Fixa (% a.a.) *</Label>
@@ -993,42 +1031,25 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             )}
           </div>
           <Separator />
-          <div className="space-y-3">
-            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Sistema de Amortização</Label>
-            <TooltipProvider>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <SubsectionHeading icon={LayoutList}>Sistema de Amortização</SubsectionHeading>
+            <Select value={form.calculation_system} onValueChange={(v) => update("calculation_system", v)}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
                 {SYSTEMS.map((s) => (
-                  <div key={s.value} className="relative">
-                    <button
-                      type="button"
-                      onClick={() => update("calculation_system", s.value)}
-                      className={`w-full p-3 pr-10 rounded-lg border-2 text-left transition-all duration-200 ${
-                        form.calculation_system === s.value
-                          ? "border-blue-600 bg-blue-50 text-blue-900"
-                          : "border-slate-200 hover:border-slate-300 text-slate-600"
-                      }`}
-                    >
-                      <span className="text-sm font-semibold">{s.value}</span>
-                      <p className="text-xs mt-0.5 opacity-70">{s.label.split("—")[1]?.trim()}</p>
-                    </button>
-                    <Tooltip delayDuration={200}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          className="absolute top-3 right-3 p-1 rounded-full hover:bg-slate-200 transition-colors"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Info className="w-4 h-4 text-slate-500 hover:text-blue-600" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="max-w-xs">
-                        <p className="text-xs leading-relaxed">{s.description}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
+                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                 ))}
-              </div>
-            </TooltipProvider>
+              </SelectContent>
+            </Select>
+            {/* Descrição do sistema escolhido: antes só aparecia num tooltip
+                ao passar o mouse sobre cada botão — agora fica sempre visível
+                abaixo do dropdown, sem depender de hover (nenhuma informação
+                perdida na troca para lista suspensa). */}
+            {selectedSystem && (
+              <p className="text-xs text-slate-600 leading-relaxed rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+                {selectedSystem.description}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1037,11 +1058,15 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
+            <SectionBadge n={3} />
             <Calendar className="w-4 h-4 text-blue-600" />
             Prazos e Periodicidades
           </CardTitle>
+          <CardDescription className="text-xs text-slate-600 pl-7">
+            Prazo total, datas de vencimento, carências e frequência de pagamento.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
