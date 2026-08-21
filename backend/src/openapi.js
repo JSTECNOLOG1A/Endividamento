@@ -3,9 +3,9 @@ import { ENTITIES } from "./modules/entities/catalog.js";
 export const openApiDocument = {
   openapi: "3.0.3",
   info: {
-    title: "Endividamento API",
+    title: "AllDebt API",
     version: "1.0.0",
-    description: "API relacional do Endividamento. Datas ISO 8601, moedas ISO 4217, auditoria append-only.",
+    description: "API relacional do AllDebt. Datas ISO 8601, moedas ISO 4217, auditoria append-only.",
   },
   servers: [{ url: "/api" }],
   components: {

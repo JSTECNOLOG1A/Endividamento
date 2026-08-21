@@ -333,7 +333,7 @@ export default function AccountingReading() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Módulo Contábil · Endividamento</p>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Módulo Contábil · AllDebt</p>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Leitura Contábil</h1>
           <p className="text-sm text-slate-600 mt-1">
             Posição, competência e fluxo futuro dos contratos aprovados

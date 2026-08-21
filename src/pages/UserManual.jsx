@@ -85,7 +85,7 @@ export default function UserManual() {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(28);
     doc.setTextColor(255, 255, 255);
-    doc.text("Endividamento", margin, 55);
+    doc.text("AllDebt", margin, 55);
     doc.setFontSize(14);
     doc.setFont("helvetica", "normal");
     doc.text("Motor de Cálculo para Empréstimos e Financiamentos", margin, 78);
@@ -94,7 +94,7 @@ export default function UserManual() {
 
     y = 160;
     addTitle("Manual de Uso", 22, [15, 23, 42]);
-    addParagraph("Guia completo para utilização da plataforma Endividamento — simulação, gestão de contratos, governança, contabilidade e consolidação de operações de crédito.");
+    addParagraph("Guia completo para utilização da plataforma AllDebt — simulação, gestão de contratos, governança, contabilidade e consolidação de operações de crédito.");
 
     addDivider();
     addParagraph("Versão: 1.0    |    Data: " + new Date().toLocaleDateString("pt-BR"));
@@ -127,7 +127,7 @@ export default function UserManual() {
     addTitle("1. Visão Geral da Plataforma", 18);
     addDivider();
     addParagraph(
-      "O Endividamento é uma plataforma de cálculo financeiro para operações de empréstimos e financiamentos, aderente às normas do Banco Central do Brasil (BACEN) e às práticas contábeis brasileiras (CPC 26)."
+      "O AllDebt é uma plataforma de cálculo financeiro para operações de empréstimos e financiamentos, aderente às normas do Banco Central do Brasil (BACEN) e às práticas contábeis brasileiras (CPC 26)."
     );
     addParagraph("A plataforma oferece seis módulos principais, acessíveis pela barra de navegação superior:");
     addBullet("Calculadora — Cálculo de tabelas de amortização com gráficos e validações");
@@ -149,7 +149,7 @@ export default function UserManual() {
     addTitle("2. Calculadora de Operações", 18);
     addDivider();
     addParagraph(
-      "A Calculadora é o módulo principal do Endividamento. Permite configurar todos os parâmetros de uma operação de crédito e visualizar a tabela de amortização completa, gráficos e indicadores financeiros."
+      "A Calculadora é o módulo principal do AllDebt. Permite configurar todos os parâmetros de uma operação de crédito e visualizar a tabela de amortização completa, gráficos e indicadores financeiros."
     );
 
     addSubtitle("Como calcular uma operação");
@@ -286,7 +286,7 @@ export default function UserManual() {
     y = margin;
     addTitle("8. Sistemas de Amortização", 18);
     addDivider();
-    addParagraph("O Endividamento suporta cinco sistemas de amortização:");
+    addParagraph("O AllDebt suporta cinco sistemas de amortização:");
 
     addSubtitle("SAC — Sistema de Amortização Constante");
     addParagraph("Amortização do principal em valores iguais a cada período. Juros decrescentes calculados sobre o saldo devedor. Prestações decrescentes ao longo do prazo.");
@@ -309,7 +309,7 @@ export default function UserManual() {
     addTitle("9. Operações em Moeda Estrangeira (USD)", 18);
     addDivider();
     addParagraph(
-      "Para operações em moeda estrangeira (Resolução CMN 4.131 / Lei 4.131), o Endividamento oferece duas visões complementares:"
+      "Para operações em moeda estrangeira (Resolução CMN 4.131 / Lei 4.131), o AllDebt oferece duas visões complementares:"
     );
 
     addSubtitle("Visão Financeira (Fluxo de Caixa)");
@@ -388,13 +388,13 @@ export default function UserManual() {
       doc.setFontSize(8);
       doc.setTextColor(148, 163, 184);
       doc.text(
-        `Endividamento — Manual de Uso    |    Página ${i} de ${totalPages}`,
+        `AllDebt — Manual de Uso    |    Página ${i} de ${totalPages}`,
         margin,
         pageH - 24
       );
     }
 
-    doc.save("Endividamento-Manual-de-Uso.pdf");
+    doc.save("AllDebt-Manual-de-Uso.pdf");
     setGenerating(false);
   };
 
@@ -408,7 +408,7 @@ export default function UserManual() {
             </div>
           </div>
           <CardTitle className="text-xl font-bold text-slate-900">
-            Manual de Uso — Endividamento
+            Manual de Uso — AllDebt
           </CardTitle>
           <p className="text-sm text-slate-600 mt-1">
             Gere e baixe o manual completo em PDF para enviar aos usuários

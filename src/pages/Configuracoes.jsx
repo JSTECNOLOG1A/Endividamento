@@ -6,7 +6,7 @@ export default function Configuracoes() {
     <div className="w-full px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Configurações</h1>
-        <p className="text-sm text-slate-600 mt-0.5">Preferências gerais do sistema Endividamento</p>
+        <p className="text-sm text-slate-600 mt-0.5">Preferências gerais do sistema AllDebt</p>
       </div>
 
       <div className="space-y-6">
@@ -74,7 +74,7 @@ export default function Configuracoes() {
           <dl className="grid sm:grid-cols-2 gap-4 text-sm">
             <div>
               <dt className="text-xs font-medium text-slate-600 uppercase tracking-wide">Aplicação</dt>
-              <dd className="text-slate-700 mt-0.5">Endividamento</dd>
+              <dd className="text-slate-700 mt-0.5">AllDebt</dd>
             </div>
             <div>
               <dt className="text-xs font-medium text-slate-600 uppercase tracking-wide">Motor de Cálculo</dt>

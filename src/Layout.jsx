@@ -90,7 +90,7 @@ export default function Layout({ children, currentPageName }) {
                 <Sigma className="w-4 h-4 text-white" strokeWidth={2.5} />
               </div>
               <div>
-                <span className="text-sm font-bold text-slate-900 tracking-tight">Endividamento</span>
+                <span className="text-sm font-bold text-slate-900 tracking-tight">AllDebt</span>
                 <span className="text-[10px] text-slate-500 font-medium ml-1.5 hidden sm:inline">BACEN</span>
               </div>
             </Link>
