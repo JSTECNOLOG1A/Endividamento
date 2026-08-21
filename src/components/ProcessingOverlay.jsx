@@ -35,7 +35,7 @@ export default function ProcessingOverlay({ open, message }) {
           </div>
         </div>
         <p className="text-sm font-semibold text-slate-900">{message || "Processando…"}</p>
-        <p className="mt-1 text-xs text-slate-500">Aguarde, o sistema está trabalhando. Isso pode levar alguns segundos.</p>
+        <p className="mt-1 text-xs text-slate-600">Aguarde, o sistema está trabalhando. Isso pode levar alguns segundos.</p>
         <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-slate-100">
           <div className="processing-bar h-full w-2/5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600" />
         </div>

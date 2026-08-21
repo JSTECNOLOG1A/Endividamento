@@ -554,7 +554,7 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
                   <div key={change.parcela} className="flex justify-between text-xs border-b border-slate-200 pb-2 last:border-b-0">
                     <span className="font-semibold text-slate-700">Parcela {change.parcela}:</span>
                     <div className="text-right">
-                      <span className="text-slate-500 line-through">{formatDate(change.original)}</span>
+                      <span className="text-slate-600 line-through">{formatDate(change.original)}</span>
                       <span className="text-emerald-600 font-semibold ml-2">→ {formatDate(change.alterada)}</span>
                     </div>
                   </div>
@@ -953,13 +953,13 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
                     <TableCell className="text-right text-slate-700 px-1 py-0.5">
                       {formatCurrency(row0.aberturaBRL)}
                     </TableCell>
-                    <TableCell className="text-right text-slate-400 px-1 py-0.5">
+                    <TableCell className="text-right text-slate-500 px-1 py-0.5">
                       —
                     </TableCell>
-                    <TableCell className="text-right text-slate-400 px-1 py-0.5">
+                    <TableCell className="text-right text-slate-500 px-1 py-0.5">
                       —
                     </TableCell>
-                    <TableCell className="text-right text-slate-400 px-1 py-0.5">
+                    <TableCell className="text-right text-slate-500 px-1 py-0.5">
                       —
                     </TableCell>
                     <TableCell className="text-right text-slate-700 px-1 py-0.5">
@@ -1104,10 +1104,10 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
                         <TableCell className="text-right text-slate-700 px-1 py-0.5">
                           {formatCurrency(row.sdInicial)}
                         </TableCell>
-                        <TableCell className="text-right text-slate-500 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-600 px-1 py-0.5">
                           {row.diasCorridos}
                         </TableCell>
-                        <TableCell className="text-right text-slate-500 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-600 px-1 py-0.5">
                           {row.diasUteis}
                         </TableCell>
                         <TableCell className="text-right text-slate-600 px-1 py-0.5">
@@ -1241,7 +1241,7 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t bg-white">
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-slate-600">
                 Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, schedule.length)} de {schedule.length}
               </span>
               <div className="flex items-center gap-1">
@@ -1317,14 +1317,14 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
                 })}
                 
                 {schedule.length > 5 && (
-                  <p className="text-[10px] text-slate-400 text-center mt-2">
+                  <p className="text-[10px] text-slate-500 text-center mt-2">
                     ... mostrando primeiras 5 parcelas. Veja CSV Contábil para tabela completa.
                   </p>
                 )}
               </div>
               
               <div className="mt-4 pt-3 border-t border-slate-200">
-                <p className="text-[10px] text-slate-500 leading-relaxed">
+                <p className="text-[10px] text-slate-600 leading-relaxed">
                   <strong>✅ Critério de validação:</strong> Delta ≤ R$ 0,10 (arredondamento contábil aceitável)
                   <br />
                   <strong className="text-emerald-700">Status:</strong> OK (delta ≤ 0,10) | ALERTA (delta &gt; 0,10)

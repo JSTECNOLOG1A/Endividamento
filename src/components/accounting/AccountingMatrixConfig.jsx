@@ -111,7 +111,7 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Settings2 className="w-4 h-4" /> Matriz contábil desta empresa</DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-slate-500 -mt-2">
+        <p className="text-xs text-slate-600 -mt-2">
           Cada categoria de operação tem seu próprio conjunto de contas — obrigatório separar mútuos com
           partes relacionadas e com terceiros entre si e das demais operações para o balancete.
         </p>
@@ -147,7 +147,7 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
                       {EVENT_TYPE_LABELS[type]}
                       {!configured && <span className="ml-1.5 text-[10px] text-amber-600">não configurado</span>}
                       {RECLASSIFICATION_TYPES.has(type) && (
-                        <p className="text-[10px] text-slate-400 mt-0.5">
+                        <p className="text-[10px] text-slate-500 mt-0.5">
                           Débito = conta não circulante · Crédito = conta circulante (o sistema inverte o lado
                           sozinho se o saldo migrar de volta pro não circulante)
                         </p>

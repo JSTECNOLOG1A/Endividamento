@@ -342,7 +342,7 @@ export default function ZeroRiskRegressionTest() {
             <CardTitle className="text-lg font-bold text-slate-900">
               🔐 Zero Risk Regression Test
             </CardTitle>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-600 mt-1">
               Garante que mudanças de UI/export não alteram cálculos validados
             </p>
           </div>
@@ -430,7 +430,7 @@ export default function ZeroRiskRegressionTest() {
                       <p className="text-xs text-slate-600 ml-6">{check.message}</p>
                       
                       {check.expected && (
-                        <div className="text-[10px] text-slate-500 ml-6 mt-1 space-y-0.5">
+                        <div className="text-[10px] text-slate-600 ml-6 mt-1 space-y-0.5">
                           <div>Esperado: <span className="">{check.expected}</span></div>
                           <div>Obtido: <span className="">{check.actual}</span></div>
                           {check.diff && <div>Diferença: <span className="">{check.diff}</span></div>}
@@ -471,7 +471,7 @@ total_interest_usd: ${result?.schedule?.reduce((s, r) => s + (r.jurosTotal_USD |
         )}
         
         {testResults.length === 0 && !running && (
-          <div className="text-center py-8 text-slate-400">
+          <div className="text-center py-8 text-slate-500">
             <PlayCircle className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p className="text-sm">Clique em "Rodar Teste" para iniciar validação</p>
           </div>

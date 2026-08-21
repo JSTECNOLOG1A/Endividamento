@@ -226,7 +226,7 @@ export default function Contracts() {
                       {statusLabel(selected.contract.status)}
                     </Badge>
                   </CardTitle>
-                  <p className="text-sm text-slate-500 mt-1">
+                  <p className="text-sm text-slate-600 mt-1">
                     {selected.contract.calculation_system} • {selected.contract.fixed_rate}% a.a.
                     {selected.contract.indexer !== "NA" ? ` + ${selected.contract.indexer}` : ""}
                   </p>
@@ -316,7 +316,7 @@ export default function Contracts() {
     <div className="w-full px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contratos</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Visualize e gerencie os contratos cadastrados</p>
+        <p className="text-sm text-slate-600 mt-0.5">Visualize e gerencie os contratos cadastrados</p>
       </div>
 
       {/* Dashboard Cards */}
@@ -324,8 +324,8 @@ export default function Contracts() {
         <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("all")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-slate-500" />
-              <div className="text-xs text-slate-500">Total</div>
+              <FileText className="w-4 h-4 text-slate-600" />
+              <div className="text-xs text-slate-600">Total</div>
             </div>
             <div className="text-2xl font-bold mt-1">{statusCounts.all}</div>
           </CardContent>
@@ -334,7 +334,7 @@ export default function Contracts() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <Edit className="w-4 h-4 text-blue-500" />
-              <div className="text-xs text-slate-500">Rascunho</div>
+              <div className="text-xs text-slate-600">Rascunho</div>
             </div>
             <div className="text-2xl font-bold mt-1 text-blue-600">{statusCounts.rascunho}</div>
           </CardContent>
@@ -343,7 +343,7 @@ export default function Contracts() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-amber-500" />
-              <div className="text-xs text-slate-500">Pendente</div>
+              <div className="text-xs text-slate-600">Pendente</div>
             </div>
             <div className="text-2xl font-bold mt-1 text-amber-600">{statusCounts.pendente_aprovacao}</div>
           </CardContent>
@@ -352,7 +352,7 @@ export default function Contracts() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-green-500" />
-              <div className="text-xs text-slate-500">Aprovado</div>
+              <div className="text-xs text-slate-600">Aprovado</div>
             </div>
             <div className="text-2xl font-bold mt-1 text-green-600">{statusCounts.aprovado}</div>
           </CardContent>
@@ -361,7 +361,7 @@ export default function Contracts() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <RotateCcw className="w-4 h-4 text-red-500" />
-              <div className="text-xs text-slate-500">Devolvido</div>
+              <div className="text-xs text-slate-600">Devolvido</div>
             </div>
             <div className="text-2xl font-bold mt-1 text-red-600">{statusCounts.cancelado}</div>
           </CardContent>

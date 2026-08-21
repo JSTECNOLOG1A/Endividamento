@@ -488,7 +488,7 @@ export default function EngineTestSuite() {
       </CardHeader>
       <CardContent className="space-y-2">
         {results.length === 0 && (
-          <p className="text-xs text-slate-500 text-center py-4">
+          <p className="text-xs text-slate-600 text-center py-4">
             Clique em "Executar Testes" para validar o motor
           </p>
         )}

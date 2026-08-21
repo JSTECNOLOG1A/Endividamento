@@ -97,7 +97,7 @@ export default function ErpLookupPanel({
           {isTipos ? "Tipos de título no Protheus" : partyLabel}
         </p>
       </div>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-slate-600">
         {isTipos
           ? "Consulta SX5 tabela 05. Tipos deletados não aparecem."
           : "Busca no Protheus por código, nome ou CNPJ (espaços são ignorados). Deletados e bloqueados não aparecem."}
@@ -112,21 +112,21 @@ export default function ErpLookupPanel({
           autoFocus
         />
         {loading && items.length > 0 ? (
-          <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-slate-400" />
+          <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-slate-500" />
         ) : null}
       </div>
       <ScrollArea className="h-72 rounded-md border border-slate-200">
         {waitingChars ? (
-          <div className="flex h-72 items-center justify-center px-6 text-center text-sm text-slate-500">
+          <div className="flex h-72 items-center justify-center px-6 text-center text-sm text-slate-600">
             Digite ao menos {MIN_PARTY} caracteres para consultar o Protheus.
           </div>
         ) : showSpinner ? (
-          <div className="flex h-72 items-center justify-center gap-2 text-sm text-slate-500">
+          <div className="flex h-72 items-center justify-center gap-2 text-sm text-slate-600">
             <Loader2 className="h-4 w-4 animate-spin" />
             Consultando Protheus...
           </div>
         ) : items.length === 0 ? (
-          <div className="flex h-72 items-center justify-center px-6 text-center text-sm text-slate-500">
+          <div className="flex h-72 items-center justify-center px-6 text-center text-sm text-slate-600">
             Nenhum registro ativo encontrado. Tente o início do nome, o código ou o CNPJ.
           </div>
         ) : (
@@ -143,7 +143,7 @@ export default function ErpLookupPanel({
                     {isTipos ? (
                       <>
                         <span className="text-sm font-semibold text-slate-800">{item.codigo}</span>
-                        <span className="text-xs text-slate-500">{item.descricao}</span>
+                        <span className="text-xs text-slate-600">{item.descricao}</span>
                       </>
                     ) : (
                       <>
@@ -155,7 +155,7 @@ export default function ErpLookupPanel({
                           {item.nome}
                         </span>
                         {(item.razao && item.razao !== item.nome) || item.cnpj ? (
-                          <span className="text-xs text-slate-500">
+                          <span className="text-xs text-slate-600">
                             {[item.razao !== item.nome ? item.razao : "", formatCnpj(item.cnpj)].filter(Boolean).join(" · ")}
                           </span>
                         ) : null}
@@ -169,7 +169,7 @@ export default function ErpLookupPanel({
         )}
       </ScrollArea>
       {meta?.truncated ? (
-        <p className="text-xs text-slate-400">Mostrando os primeiros registros. Refine a busca para localizar o item.</p>
+        <p className="text-xs text-slate-500">Mostrando os primeiros registros. Refine a busca para localizar o item.</p>
       ) : null}
     </div>
   );
@@ -178,7 +178,7 @@ export default function ErpLookupPanel({
 export function LookupField({ label, value, onChange, onLookup, placeholder, className = "", mono = false }) {
   return (
     <div className={`space-y-1 ${className}`}>
-      <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</Label>
+      <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">{label}</Label>
       <div className="flex gap-1">
         <Input
           value={value}

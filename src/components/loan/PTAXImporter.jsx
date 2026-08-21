@@ -294,11 +294,11 @@ export default function PTAXImporter() {
               </Label>
               <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
-                  <Label className="text-[11px] text-slate-500">Data inicial</Label>
+                  <Label className="text-[11px] text-slate-600">Data inicial</Label>
                   <Input type="date" value={bacenStart} onChange={(e) => setBacenStart(e.target.value)} className="h-9 w-[9.5rem]" disabled={importingBacen} />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px] text-slate-500">Data final</Label>
+                  <Label className="text-[11px] text-slate-600">Data final</Label>
                   <Input type="date" value={bacenEnd} onChange={(e) => setBacenEnd(e.target.value)} className="h-9 w-[9.5rem]" disabled={importingBacen} />
                 </div>
                 <Button type="button" onClick={handleImportFromBACEN} disabled={importingBacen} className="h-9 gap-1.5">
@@ -306,7 +306,7 @@ export default function PTAXImporter() {
                   {importingBacen ? "Buscando..." : "Buscar PTAX no BACEN"}
                 </Button>
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-500">
                 Busca a série oficial do Banco Central (PTAX venda, olinda.bcb.gov.br) e importa só as datas que
                 ainda não estão no cadastro.
               </p>
@@ -329,7 +329,7 @@ export default function PTAXImporter() {
                   {importing ? "Importando..." : "Importar"}
                 </Button>
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-500">
                 Layout: DDMMYYYY 220 A USD taxa_compra taxa_venda 1 1 — aceita separador TAB, ; ou |.
               </p>
             </div>
@@ -352,7 +352,7 @@ export default function PTAXImporter() {
                     {result.errors.slice(0, 10).map((err, i) => (
                       <li key={i}>{err}</li>
                     ))}
-                    {result.errors.length > 10 && <li className="text-slate-500">... e mais {result.errors.length - 10}</li>}
+                    {result.errors.length > 10 && <li className="text-slate-600">... e mais {result.errors.length - 10}</li>}
                   </ul>
                 </details>
               )}
@@ -401,7 +401,7 @@ export default function PTAXImporter() {
                   className="h-8 text-xs w-36"
                   placeholder="De"
                 />
-                <span className="text-xs text-slate-400">até</span>
+                <span className="text-xs text-slate-500">até</span>
                 <Input
                   type="date"
                   value={filterEnd}
@@ -442,7 +442,7 @@ export default function PTAXImporter() {
 
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t bg-white">
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-slate-600">
                   {displayData.length.toLocaleString("pt-BR")} registros filtrados — Página {page + 1} de {totalPages}
                 </span>
                 <div className="flex items-center gap-1">

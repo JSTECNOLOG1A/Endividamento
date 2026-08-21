@@ -333,9 +333,9 @@ export default function AccountingReading() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Módulo Contábil · Endividamento</p>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Módulo Contábil · Endividamento</p>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Leitura Contábil</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-600 mt-1">
             Posição, competência e fluxo futuro dos contratos aprovados
           </p>
         </div>
@@ -344,7 +344,7 @@ export default function AccountingReading() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardContent className="pt-6">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Data-Base</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Data-Base</Label>
               <Input
                 type="date"
                 value={baseDate}
@@ -364,7 +364,7 @@ export default function AccountingReading() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Empresa</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Empresa</Label>
               <Select value={entityFilter} onValueChange={setEntityFilter}>
                 <SelectTrigger className="h-9 mt-2"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -376,7 +376,7 @@ export default function AccountingReading() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Moeda</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Moeda</Label>
               <Select value={currencyFilter} onValueChange={setCurrencyFilter}>
                 <SelectTrigger className="h-9 mt-2"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -391,7 +391,7 @@ export default function AccountingReading() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Início do Exercício</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Início do Exercício</Label>
               <Select value={exercicioStartMonth} onValueChange={setExercicioStartMonth}>
                 <SelectTrigger className="h-9 mt-2"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -403,7 +403,7 @@ export default function AccountingReading() {
         </div>
 
         {analysis && (
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Exercício corrente: {analysis.exercicioStart.split("-").reverse().join("/")} até {baseDate.split("-").reverse().join("/")}.
             Use Janeiro para ano civil, ou outro mês para configurar um ano-safra (ex.: Abril, Agosto etc.).
           </p>
@@ -411,7 +411,7 @@ export default function AccountingReading() {
 
         {!analysis && entityFilter === "all" ? (
           <div className="flex items-center justify-center min-h-64">
-            <p className="text-slate-500">Nenhum contrato aprovado encontrado para os filtros selecionados.</p>
+            <p className="text-slate-600">Nenhum contrato aprovado encontrado para os filtros selecionados.</p>
           </div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -433,7 +433,7 @@ export default function AccountingReading() {
             {/* SUB-ABA 1: POSIÇÃO CONTÁBIL */}
             <TabsContent value="posicao" className="mt-4 space-y-6">
               {!analysis ? (
-                <p className="text-sm text-slate-500 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
+                <p className="text-sm text-slate-600 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
               ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <KPICard
@@ -464,7 +464,7 @@ export default function AccountingReading() {
             {/* SUB-ABA 2: COMPETÊNCIA */}
             <TabsContent value="competencia" className="mt-4 space-y-6">
               {!analysis ? (
-                <p className="text-sm text-slate-500 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
+                <p className="text-sm text-slate-600 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
               ) : (
               <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -503,7 +503,7 @@ export default function AccountingReading() {
                   <CardTitle className="text-base font-semibold text-slate-800">
                     Movimentação Contábil do Mês
                   </CardTitle>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-600">
                     Conciliação do saldo inicial ao final — {analysis.monthLabel}/{analysis.rollForward.year}
                   </p>
                 </CardHeader>
@@ -532,7 +532,7 @@ export default function AccountingReading() {
                       </tbody>
                     </table>
                   </div>
-                  <p className="text-xs text-slate-400 mt-3">
+                  <p className="text-xs text-slate-500 mt-3">
                     Apropriações somam juros e variação cambial reconhecidos no mês (regime de competência) e
                     eventuais novas captações; Pagamentos são amortizações e juros efetivamente pagos em caixa.
                     Saldo Inicial + Apropriações − Pagamentos = Saldo Final, em cada coluna.
@@ -546,7 +546,7 @@ export default function AccountingReading() {
             {/* SUB-ABA 3: FLUXO E NOTA EXPLICATIVA */}
             <TabsContent value="fluxo" className="mt-4">
               {!analysis ? (
-                <p className="text-sm text-slate-500 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
+                <p className="text-sm text-slate-600 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
               ) : (
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="pb-3">
@@ -587,7 +587,7 @@ export default function AccountingReading() {
                 </CardHeader>
                 <CardContent>
                   {flowRows.length === 0 ? (
-                    <p className="text-sm text-slate-500 py-6 text-center">
+                    <p className="text-sm text-slate-600 py-6 text-center">
                       {analysis.paymentFlow.rows.length === 0
                         ? "Nenhum pagamento futuro previsto a partir da data-base selecionada."
                         : "Nenhum pagamento futuro para a categoria selecionada."}
@@ -632,7 +632,7 @@ export default function AccountingReading() {
                     </div>
 
                     <div className="mt-6">
-                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
+                      <p className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-2">
                         Subtotal por Categoria
                       </p>
                       <div className="overflow-x-auto -mx-2">
@@ -688,7 +688,7 @@ export default function AccountingReading() {
                     </div>
                     </>
                   )}
-                  <p className="text-xs text-slate-400 mt-3">
+                  <p className="text-xs text-slate-500 mt-3">
                     Nota explicativa: valores projetados a partir do cronograma vigente de cada contrato aprovado,
                     a partir da data-base selecionada. "Garantia" combina os eixos Real (Alienação Fiduciária,
                     Hipoteca, Penhor, Cessão de Recebíveis) e Pessoal/Fidejussória (Aval, Fiança); contratos sem

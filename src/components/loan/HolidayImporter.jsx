@@ -188,7 +188,7 @@ export default function HolidayImporter() {
         </div>
 
         {loading ? (
-          <div className="text-center py-8 text-slate-400">
+          <div className="text-center py-8 text-slate-500">
             <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
             Carregando...
           </div>

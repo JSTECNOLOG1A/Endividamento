@@ -92,15 +92,15 @@ function Actions({ item, onEdit, onDelete, onRelated, relatedTitle }) {
           size="icon"
           onClick={() => onRelated(item)}
           title={relatedTitle || "Contas"}
-          className="h-8 w-8 text-slate-400 hover:text-violet-600"
+          className="h-8 w-8 text-slate-500 hover:text-violet-600"
         >
           <Wallet className="w-3.5 h-3.5" />
         </Button>
       ) : null}
-      <Button variant="ghost" size="icon" onClick={() => onEdit(item)} className="h-8 w-8 text-slate-400 hover:text-blue-600">
+      <Button variant="ghost" size="icon" onClick={() => onEdit(item)} className="h-8 w-8 text-slate-500 hover:text-blue-600">
         <Edit2 className="w-3.5 h-3.5" />
       </Button>
-      <Button variant="ghost" size="icon" onClick={() => onDelete(item.id)} className="h-8 w-8 text-slate-400 hover:text-red-500">
+      <Button variant="ghost" size="icon" onClick={() => onDelete(item.id)} className="h-8 w-8 text-slate-500 hover:text-red-500">
         <Trash2 className="w-3.5 h-3.5" />
       </Button>
     </div>
@@ -113,7 +113,7 @@ function Cells({ item, type, onEdit, onDelete, onRelated, relatedTitle }) {
       <>
         <TableCell className="font-medium text-slate-800">{dash(item.group_name)}</TableCell>
         <TableCell className="text-xs whitespace-nowrap">{dash(item.cnpj_group)}</TableCell>
-        <TableCell className="text-slate-500 max-w-xs truncate">{dash(item.description)}</TableCell>
+        <TableCell className="text-slate-600 max-w-xs truncate">{dash(item.description)}</TableCell>
         <TableCell><StatusBadge status={item.status} /></TableCell>
         <TableCell className="text-right"><Actions item={item} onEdit={onEdit} onDelete={onDelete} onRelated={onRelated} relatedTitle={relatedTitle} /></TableCell>
       </>
@@ -154,11 +154,11 @@ function Cells({ item, type, onEdit, onDelete, onRelated, relatedTitle }) {
       <>
         <TableCell className="min-w-[180px]">
           <div className="font-medium text-slate-800">{dash(item.entity_name)}</div>
-          <div className="text-[11px] text-slate-400">{dash(item.empresa)}</div>
+          <div className="text-[11px] text-slate-500">{dash(item.empresa)}</div>
         </TableCell>
         <TableCell className="min-w-[160px]">
           <div className="font-medium text-slate-800">{dash(item.bank_name)}</div>
-          <div className="text-[11px] text-slate-400">{dash(item.bank_code)}</div>
+          <div className="text-[11px] text-slate-500">{dash(item.bank_code)}</div>
         </TableCell>
         <TableCell className="text-xs whitespace-nowrap">{dash(item.agencia)}</TableCell>
         <TableCell className="text-xs whitespace-nowrap">{conta}</TableCell>
@@ -174,7 +174,7 @@ function Cells({ item, type, onEdit, onDelete, onRelated, relatedTitle }) {
       <>
         <TableCell className="min-w-[180px]">
           <div className="font-medium text-slate-800">{dash(item.entity_name)}</div>
-          <div className="text-[11px] text-slate-400">{dash(item.empresa)}</div>
+          <div className="text-[11px] text-slate-500">{dash(item.empresa)}</div>
         </TableCell>
         <TableCell className="text-xs whitespace-nowrap">{dash(item.codigo)}</TableCell>
         <TableCell className="font-medium text-slate-800 min-w-[220px]">{dash(item.descricao)}</TableCell>
@@ -230,7 +230,7 @@ export default function GovernanceList({ items, type, onEdit, onDelete, onSelect
           <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center mx-auto mb-3">
             <EmptyIcon className="w-6 h-6 text-slate-300" />
           </div>
-          <p className="text-sm text-slate-500">Nenhum registro</p>
+          <p className="text-sm text-slate-600">Nenhum registro</p>
         </CardContent>
       </Card>
     );

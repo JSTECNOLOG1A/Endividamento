@@ -17,7 +17,7 @@ export default function Login({ onSubmit, error, loading }) {
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 bg-white border border-slate-200 rounded-xl p-6">
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Endividamento</h1>
-          <p className="text-sm text-slate-500 mt-1">Entre com a conta local para acessar o sistema.</p>
+          <p className="text-sm text-slate-600 mt-1">Entre com a conta local para acessar o sistema.</p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="email">E-mail</Label>

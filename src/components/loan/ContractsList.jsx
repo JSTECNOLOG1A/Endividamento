@@ -130,8 +130,8 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
       <Card className="border-slate-200 border-dashed">
         <CardContent className="p-12 text-center">
           <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Nenhum contrato encontrado</p>
-          <p className="text-xs text-slate-400 mt-1">Ajuste os filtros ou crie uma nova simulação</p>
+          <p className="text-sm text-slate-600">Nenhum contrato encontrado</p>
+          <p className="text-xs text-slate-500 mt-1">Ajuste os filtros ou crie uma nova simulação</p>
         </CardContent>
       </Card>
     );

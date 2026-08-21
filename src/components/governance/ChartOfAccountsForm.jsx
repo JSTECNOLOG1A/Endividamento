@@ -43,7 +43,7 @@ export default function ChartOfAccountsForm({ onSubmit, onCancel, initialData })
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Código *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Código *</Label>
               <Input
                 value={form.account_code || ""}
                 onChange={(e) => setForm({ ...form, account_code: e.target.value })}
@@ -53,7 +53,7 @@ export default function ChartOfAccountsForm({ onSubmit, onCancel, initialData })
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nome *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nome *</Label>
               <Input
                 value={form.account_name || ""}
                 onChange={(e) => setForm({ ...form, account_name: e.target.value })}
@@ -65,7 +65,7 @@ export default function ChartOfAccountsForm({ onSubmit, onCancel, initialData })
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Classe</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Classe</Label>
               <Select value={form.account_class} onValueChange={(v) => setForm({ ...form, account_class: v })}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -78,7 +78,7 @@ export default function ChartOfAccountsForm({ onSubmit, onCancel, initialData })
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Tipo</Label>
               <Select value={form.account_type} onValueChange={(v) => setForm({ ...form, account_type: v })}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -88,7 +88,7 @@ export default function ChartOfAccountsForm({ onSubmit, onCancel, initialData })
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Natureza</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Natureza</Label>
               <Select value={form.account_nature} onValueChange={(v) => setForm({ ...form, account_nature: v })}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -99,7 +99,7 @@ export default function ChartOfAccountsForm({ onSubmit, onCancel, initialData })
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</Label>
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Status</Label>
             <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>

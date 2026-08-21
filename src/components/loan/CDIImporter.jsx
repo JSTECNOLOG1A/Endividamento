@@ -322,7 +322,7 @@ export default function CDIImporter() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-1.5 max-w-[220px]">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo de Taxa</Label>
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Tipo de Taxa</Label>
             <Select value={rateType} onValueChange={setRateType}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -342,11 +342,11 @@ export default function CDIImporter() {
               </Label>
               <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
-                  <Label className="text-[11px] text-slate-500">Data inicial</Label>
+                  <Label className="text-[11px] text-slate-600">Data inicial</Label>
                   <Input type="date" value={bacenStart} onChange={(e) => setBacenStart(e.target.value)} className="h-9 w-[9.5rem]" disabled={importingBacen} />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px] text-slate-500">Data final</Label>
+                  <Label className="text-[11px] text-slate-600">Data final</Label>
                   <Input type="date" value={bacenEnd} onChange={(e) => setBacenEnd(e.target.value)} className="h-9 w-[9.5rem]" disabled={importingBacen} />
                 </div>
                 <Button type="button" onClick={handleImportFromBACEN} disabled={importingBacen} className="h-9 gap-1.5">
@@ -354,7 +354,7 @@ export default function CDIImporter() {
                   {importingBacen ? "Buscando..." : `Buscar ${rateType} no BACEN`}
                 </Button>
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-500">
                 Busca a série oficial do Banco Central (api.bcb.gov.br) e importa só as datas que ainda não estão
                 no banco.
               </p>
@@ -374,7 +374,7 @@ export default function CDIImporter() {
                   disabled={importing}
                 />
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-500">
                 Layout: Data (DD/MM/AAAA); Taxa (% a.a.) — separador vírgula ou ponto-e-vírgula. Suporta séries com
                 mais de 10.000 registros.
               </p>
@@ -436,7 +436,7 @@ export default function CDIImporter() {
                   className="h-8 text-xs w-36"
                   placeholder="De"
                 />
-                <span className="text-xs text-slate-400">até</span>
+                <span className="text-xs text-slate-500">até</span>
                 <Input
                   type="date"
                   value={filterEnd}
@@ -469,7 +469,7 @@ export default function CDIImporter() {
                       <TableCell className="text-xs text-right font-medium">
                         {r.annual_rate.toFixed(4)}%
                       </TableCell>
-                      <TableCell className="text-xs text-right text-slate-500">
+                      <TableCell className="text-xs text-right text-slate-600">
                         {(r.daily_factor || Math.pow(1 + r.annual_rate / 100, 1 / 252)).toFixed(8)}
                       </TableCell>
                       <TableCell>
@@ -483,7 +483,7 @@ export default function CDIImporter() {
 
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t bg-white">
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-slate-600">
                   {displayData.length.toLocaleString("pt-BR")} registros filtrados — Página {page + 1} de {totalPages}
                 </span>
                 <div className="flex items-center gap-1">

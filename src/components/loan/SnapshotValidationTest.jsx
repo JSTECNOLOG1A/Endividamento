@@ -183,7 +183,7 @@ export default function SnapshotValidationTest({ calculationResult }) {
     return (
       <Card className="border-slate-200">
         <CardContent className="p-6">
-          <p className="text-sm text-slate-500">Execute um cálculo primeiro para testar o snapshot</p>
+          <p className="text-sm text-slate-600">Execute um cálculo primeiro para testar o snapshot</p>
         </CardContent>
       </Card>
     );
@@ -257,7 +257,7 @@ export default function SnapshotValidationTest({ calculationResult }) {
                   {check.status === "WARN" && <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />}
                   <div className="flex-1">
                     <div className="font-medium text-slate-700">{check.name}</div>
-                    <div className="text-slate-500">{check.message}</div>
+                    <div className="text-slate-600">{check.message}</div>
                   </div>
                 </div>
               ))}

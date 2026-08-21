@@ -79,7 +79,7 @@ function InfoTip({ text, side = "right" }) {
     <TooltipProvider>
       <Tooltip delayDuration={200}>
         <TooltipTrigger asChild>
-          <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+          <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
         </TooltipTrigger>
         <TooltipContent side={side} className="max-w-xs">
           <p className="text-xs">{text}</p>
@@ -267,7 +267,7 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
           <div className="space-y-1">
             <Label className="text-xs">Valor total pago (conforme extrato bancário) *</Label>
             <Input className="h-9" value={form.valor_pago} onChange={(e) => handleValorPagoChange(e.target.value)} />
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-600">
               Previsto: {formatCurrency(scheduledPrincipal)} de principal + {formatCurrency(scheduledInterest)} de juros = {formatCurrency(scheduledPrincipal + scheduledInterest)}.
               {" "}Diferença:{" "}
               <span className={materiality.withinMargin ? "text-emerald-600 font-medium" : "text-red-600 font-semibold"}>
@@ -317,7 +317,7 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 flex items-center justify-between">
-            <span className="text-xs text-slate-500">Total pago (calculado a partir dos campos acima)</span>
+            <span className="text-xs text-slate-600">Total pago (calculado a partir dos campos acima)</span>
             <span className="font-semibold text-slate-900">{formatCurrency(totalPaid)}</span>
           </div>
 
@@ -726,7 +726,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
   if (!entityId) {
     return (
       <Card className="border-slate-200 shadow-sm">
-        <CardContent className="py-10 text-center text-sm text-slate-500">
+        <CardContent className="py-10 text-center text-sm text-slate-600">
           Selecione uma empresa específica no filtro acima — o fechamento contábil é sempre individual, por empresa.
         </CardContent>
       </Card>
@@ -744,11 +744,11 @@ export default function FechamentoContabil({ entityId, entityName }) {
           <div className="flex flex-wrap items-end gap-4 justify-between">
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1">
-                <Label className="text-xs text-slate-500 uppercase tracking-wider">Empresa</Label>
+                <Label className="text-xs text-slate-600 uppercase tracking-wider">Empresa</Label>
                 <p className="text-sm font-semibold text-slate-800 h-9 flex items-center">{entityName}</p>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-slate-500 uppercase tracking-wider">Competência</Label>
+                <Label className="text-xs text-slate-600 uppercase tracking-wider">Competência</Label>
                 <div className="flex gap-1.5">
                   <Select value={String(month)} onValueChange={(v) => { setMonth(Number(v)); setDataBase(lastDayOfMonth(year, Number(v))); }} disabled={isApproved}>
                     <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
@@ -761,7 +761,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 </div>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-slate-500 uppercase tracking-wider">
+                <Label className="text-xs text-slate-600 uppercase tracking-wider">
                   Data-base
                   <InfoTip text="Data usada para calcular o saldo e reclassificar principal/juros entre circulante e não circulante. Normalmente é o último dia da competência selecionada." />
                 </Label>
@@ -786,7 +786,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 {STATUS_LABELS[closing?.status] || "Não iniciado"}
               </Badge>
               {closing?.approved_by && (
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-500">
                   Aprovado por {closing.approved_by} em {closing.approved_at?.slice(0, 10).split("-").reverse().join("/")}
                 </p>
               )}
@@ -812,13 +812,13 @@ export default function FechamentoContabil({ entityId, entityName }) {
             <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-bold">1</span>
             Baixas de parcelas pagas
           </CardTitle>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-600">
             Registre os pagamentos efetivamente realizados até a data-base — usados para ajustar o saldo e gerar os lançamentos.
           </p>
         </CardHeader>
         <CardContent>
           {scheduleRowsInMonth.length === 0 ? (
-            <p className="text-sm text-slate-500 py-6 text-center">Nenhuma parcela prevista para esta competência.</p>
+            <p className="text-sm text-slate-600 py-6 text-center">Nenhuma parcela prevista para esta competência.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[820px]">
@@ -894,7 +894,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-bold">2</span>
                 Calcular o novo saldo
               </CardTitle>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-slate-600 mt-1">
                 Concilia abertura, apropriações e pagamentos reais do período — por evento, não por diferença de saldo.
               </p>
             </div>
@@ -914,19 +914,19 @@ export default function FechamentoContabil({ entityId, entityName }) {
             )}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               <div className="rounded-lg border border-slate-200 px-3 py-2">
-                <p className="text-xs text-slate-500">Saldo anterior</p>
+                <p className="text-xs text-slate-600">Saldo anterior</p>
                 <p className="font-semibold">{formatCurrency(calcResult.opening.principal + calcResult.opening.interest + calcResult.opening.fx)}</p>
               </div>
               <div className="rounded-lg border border-slate-200 px-3 py-2">
-                <p className="text-xs text-slate-500">Saldo final</p>
+                <p className="text-xs text-slate-600">Saldo final</p>
                 <p className="font-semibold">{formatCurrency(calcResult.closing.principal + calcResult.closing.interest + calcResult.closing.fx)}</p>
               </div>
               <div className="rounded-lg border border-slate-200 px-3 py-2">
-                <p className="text-xs text-slate-500">Contratos no lote</p>
+                <p className="text-xs text-slate-600">Contratos no lote</p>
                 <p className="font-semibold">{calcResult.perContract.length}</p>
               </div>
               <div className="rounded-lg border border-slate-200 px-3 py-2">
-                <p className="text-xs text-slate-500">Pendências</p>
+                <p className="text-xs text-slate-600">Pendências</p>
                 <p className={`font-semibold ${calcResult.hasBlockingDivergence ? "text-red-600" : "text-emerald-600"}`}>
                   {calcResult.pendingRecalculation.length}
                 </p>
@@ -963,7 +963,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-bold">3</span>
                 Checar e validar contabilidade
               </CardTitle>
-              <p className="text-xs text-slate-500 mt-1">Confira os lançamentos gerados e aprove o lote para finalizar o fechamento.</p>
+              <p className="text-xs text-slate-600 mt-1">Confira os lançamentos gerados e aprove o lote para finalizar o fechamento.</p>
             </div>
             <Button size="sm" variant="outline" className="gap-1.5" disabled={!calcResult || isApproved} onClick={handleBuildJournal}>
               <ClipboardCheck className="w-3.5 h-3.5" /> Gerar lançamentos

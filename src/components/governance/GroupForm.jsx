@@ -38,7 +38,7 @@ export default function GroupForm({ onSubmit, onCancel, initialData }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nome do Grupo *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nome do Grupo *</Label>
               <Input
                 value={form.group_name}
                 onChange={(e) => setForm({ ...form, group_name: e.target.value })}
@@ -48,7 +48,7 @@ export default function GroupForm({ onSubmit, onCancel, initialData }) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">CNPJ (Opcional)</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">CNPJ (Opcional)</Label>
               <Input
                 value={form.cnpj_group}
                 onChange={(e) => setForm({ ...form, cnpj_group: e.target.value })}
@@ -58,7 +58,7 @@ export default function GroupForm({ onSubmit, onCancel, initialData }) {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Descrição</Label>
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Descrição</Label>
             <Textarea
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -67,7 +67,7 @@ export default function GroupForm({ onSubmit, onCancel, initialData }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</Label>
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Status</Label>
             <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>

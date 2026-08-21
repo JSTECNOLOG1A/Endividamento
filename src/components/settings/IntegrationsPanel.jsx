@@ -211,13 +211,13 @@ export default function IntegrationsPanel() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-slate-500 py-8">
+                <TableCell colSpan={6} className="text-center text-slate-600 py-8">
                   Carregando conexões...
                 </TableCell>
               </TableRow>
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-slate-500 py-8">
+                <TableCell colSpan={6} className="text-center text-slate-600 py-8">
                   Nenhuma conexão de API cadastrada.
                 </TableCell>
               </TableRow>
@@ -269,7 +269,7 @@ export default function IntegrationsPanel() {
       </div>
 
       {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-slate-500">
+        <div className="flex items-center justify-between text-sm text-slate-600">
           <span>{pagination.total} conexões</span>
           <div className="flex gap-2">
             <Button
@@ -330,7 +330,7 @@ export default function IntegrationsPanel() {
               <Detail label="Timeout" value={`${details.timeoutSeconds}s`} />
               <Detail label="Grupo / Empresa / Filial" value={[details.grupoEmpresas, details.empresa, details.filial].filter(Boolean).join(" · ") || "—"} />
               <div>
-                <p className="text-slate-500 mb-1">Endpoints</p>
+                <p className="text-slate-600 mb-1">Endpoints</p>
                 {details.endpoints?.length ? (
                   <ul className="space-y-1">
                     {details.endpoints.map((endpoint) => (
@@ -382,7 +382,7 @@ export default function IntegrationsPanel() {
 function Detail({ label, value }) {
   return (
     <div className="flex justify-between gap-4">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-slate-600">{label}</span>
       <span className="font-medium text-slate-900 text-right break-all">{value || "—"}</span>
     </div>
   );

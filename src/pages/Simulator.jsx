@@ -789,7 +789,7 @@ export default function Simulator() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Calculadora</h1>
-                <p className="text-sm text-slate-500 mt-0.5">Configure os parâmetros do empréstimo</p>
+                <p className="text-sm text-slate-600 mt-0.5">Configure os parâmetros do empréstimo</p>
               </div>
               {result && (
                 <Button variant="ghost" size="sm" onClick={handleReset} className="text-xs gap-1.5">
@@ -890,7 +890,7 @@ export default function Simulator() {
                   </svg>
                 </div>
                 <h3 className="text-lg font-semibold text-slate-700">Nenhum cálculo realizado</h3>
-                <p className="text-sm text-slate-400 mt-1">Preencha os parâmetros e clique em "Calcular"</p>
+                <p className="text-sm text-slate-500 mt-1">Preencha os parâmetros e clique em "Calcular"</p>
               </div>
             </div>
           )}

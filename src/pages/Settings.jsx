@@ -22,7 +22,7 @@ export default function Settings() {
     <div className="w-full px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Configurações</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Conta, sessão, integrações, agendamentos e log de atividades</p>
+        <p className="text-sm text-slate-600 mt-0.5">Conta, sessão, integrações, agendamentos e log de atividades</p>
       </div>
 
       <Tabs defaultValue="integracoes">
@@ -86,15 +86,15 @@ export default function Settings() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Nome</span>
+                  <span className="text-slate-600">Nome</span>
                   <span className="font-medium text-slate-900">{user?.full_name || "—"}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">E-mail</span>
+                  <span className="text-slate-600">E-mail</span>
                   <span className="font-medium text-slate-900">{user?.email || "—"}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Perfil</span>
+                  <span className="text-slate-600">Perfil</span>
                   <span className="font-medium text-slate-900">
                     {ROLE_LABELS[user?.role] || user?.role || "—"}
                   </span>

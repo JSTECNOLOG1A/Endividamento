@@ -14,7 +14,7 @@ export const SORT_CELL_CLASS = "whitespace-nowrap px-4 py-3.5 text-sm text-slate
 export const SORT_CELL_CLASS_RIGHT = `${SORT_CELL_CLASS} text-right`;
 
 export function SortIcon({ active, dir }) {
-  if (!active) return <ArrowUpDown className="w-3 h-3 ml-1 inline-block text-slate-400" />;
+  if (!active) return <ArrowUpDown className="w-3 h-3 ml-1 inline-block text-slate-500" />;
   return dir === "asc" ? (
     <ArrowUp className="w-3 h-3 ml-1 inline-block text-slate-700" />
   ) : (

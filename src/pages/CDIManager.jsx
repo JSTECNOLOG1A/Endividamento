@@ -9,7 +9,7 @@ export default function CDIManager() {
     <div className="w-full px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Indexadores e Feriados</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Importação de séries históricas (CDI, SELIC, PTAX USD) e feriados nacionais</p>
+        <p className="text-sm text-slate-600 mt-0.5">Importação de séries históricas (CDI, SELIC, PTAX USD) e feriados nacionais</p>
       </div>
       
       <Tabs defaultValue="cdi-selic">

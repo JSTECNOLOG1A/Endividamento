@@ -27,7 +27,7 @@ function Field({ label, error, hint, className = "", children }) {
     <div className={className}>
       <Label className="text-slate-700">{label}</Label>
       <div className="mt-1.5">{children}</div>
-      {hint && !error ? <p className="text-xs text-slate-400 mt-1">{hint}</p> : null}
+      {hint && !error ? <p className="text-xs text-slate-500 mt-1">{hint}</p> : null}
       {error ? <p className="text-xs text-red-600 mt-1">{error}</p> : null}
     </div>
   );
@@ -198,7 +198,7 @@ export default function IntegrationForm({
             <Building2 className="w-4 h-4" />
             Contexto Protheus
           </div>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-600">
             O grupo define a tabela física (ex.: SED010, SA6010, CT1010). Empresa e filial da conexão são o ambiente de autenticação.
             Cadastros com controle por filial são lidos de todas as empresas e filiais do grupo.
             O plano de contas (CT1) no grupo 01 é compartilhado: a leitura ignora filial.
@@ -309,7 +309,7 @@ export default function IntegrationForm({
           )}
         </div>
         <div className="flex items-center justify-between gap-4 pt-1">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-600">
             O teste não grava títulos. POST de títulos usa corpo vazio só para ver se o caminho existe.
           </p>
           <Button
@@ -331,7 +331,7 @@ export default function IntegrationForm({
           Endpoints
         </div>
         {formData.endpoints.length === 0 && (
-          <p className="text-sm text-slate-500">Nenhum endpoint. Adicione os caminhos REST do cadastro.</p>
+          <p className="text-sm text-slate-600">Nenhum endpoint. Adicione os caminhos REST do cadastro.</p>
         )}
         {formData.endpoints.map((endpoint, index) => (
           <div key={endpoint.key} className="rounded-lg border border-slate-200 p-4 grid grid-cols-1 md:grid-cols-12 gap-3">

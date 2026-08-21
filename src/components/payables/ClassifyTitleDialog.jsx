@@ -120,7 +120,7 @@ export default function ClassifyTitleDialog({
               mono
             />
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Natureza (ED_CODIGO)</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Natureza (ED_CODIGO)</Label>
               <Select value={natureza || undefined} onValueChange={setNatureza}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Selecione o código da natureza" /></SelectTrigger>
                 <SelectContent>
@@ -145,12 +145,12 @@ export default function ClassifyTitleDialog({
                 mono
               />
               <div className="space-y-1">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Loja</Label>
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Loja</Label>
                 <Input value={partyLoja} onChange={(event) => setPartyLoja(event.target.value)} className="h-9" placeholder="01" />
               </div>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nome do {isReceber ? "cliente" : "fornecedor"}</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nome do {isReceber ? "cliente" : "fornecedor"}</Label>
               <Input value={partyNome} onChange={(event) => setPartyNome(event.target.value)} className="h-9" />
             </div>
             <label className="flex items-start gap-2 text-sm text-slate-700">

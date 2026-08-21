@@ -410,7 +410,7 @@ export default function UserManual() {
           <CardTitle className="text-xl font-bold text-slate-900">
             Manual de Uso — Endividamento
           </CardTitle>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-600 mt-1">
             Gere e baixe o manual completo em PDF para enviar aos usuários
           </p>
         </CardHeader>
@@ -453,7 +453,7 @@ export default function UserManual() {
             </Button>
           </div>
 
-          <p className="text-center text-xs text-slate-400">
+          <p className="text-center text-xs text-slate-500">
             O PDF será gerado localmente no seu navegador e baixado automaticamente.
           </p>
         </CardContent>

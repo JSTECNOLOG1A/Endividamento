@@ -74,7 +74,7 @@ function labelFor(options, value, fallback = "—") {
 function Field({ label, value, mono = false, span = 3 }) {
   return (
     <div className={`bg-white px-3 py-2 ${SPAN[span] || SPAN[3]}`}>
-      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{label}</p>
+      <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{label}</p>
       <p className={`text-sm text-slate-900 mt-0.5 ${mono ? "" : ""}`}>
         {value === "" || value === null || value === undefined ? "—" : value}
       </p>
@@ -85,9 +85,9 @@ function Field({ label, value, mono = false, span = 3 }) {
 function FeeField({ label, value, financed, span = 2 }) {
   return (
     <div className={`bg-white px-3 py-2 ${SPAN[span] || SPAN[2]}`}>
-      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{label}</p>
+      <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide">{label}</p>
       <p className="text-sm text-slate-900 mt-0.5">{formatCurrency(value)}</p>
-      <p className="text-[11px] text-slate-500 mt-0.5">{financed ? "Financiado (soma ao principal)" : "Não financiado"}</p>
+      <p className="text-[11px] text-slate-600 mt-0.5">{financed ? "Financiado (soma ao principal)" : "Não financiado"}</p>
     </div>
   );
 }

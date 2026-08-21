@@ -519,7 +519,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
         </div>
       )}
       {lastAutoSavedAt && !draftBanner && (
-        <p className="text-[11px] text-slate-400 -mb-2">
+        <p className="text-[11px] text-slate-500 -mb-2">
           Rascunho salvo automaticamente às {new Date(lastAutoSavedAt).toLocaleTimeString("pt-BR")}
         </p>
       )}
@@ -548,7 +548,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Grupo Econômico *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Grupo Econômico *</Label>
               <Combobox
                 value={form.group_id || ""}
                 onChange={(v) => update("group_id", v)}
@@ -558,7 +558,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Entidade Componente *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Entidade Componente *</Label>
               <Combobox
                 value={form.entity_id || ""}
                 onChange={(v) => v && update("entity_id", v)}
@@ -571,7 +571,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Banco Credor *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Banco Credor *</Label>
               <Combobox
                 value={form.bank_id || ""}
                 onChange={(v) => v && update("bank_id", v)}
@@ -581,13 +581,13 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nº Contrato *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nº Contrato *</Label>
               <Input value={form.contract_number} onChange={(e) => update("contract_number", e.target.value)} placeholder="000.000.000" className="h-9" required />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Categoria da Operação *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Categoria da Operação *</Label>
               <Select 
                 value={form.operation_category} 
                 onValueChange={(v) => {
@@ -602,7 +602,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo Específico *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Tipo Específico *</Label>
               <Select 
                 value={form.operation_type}
                 onValueChange={(v) => v && update("operation_type", v)}
@@ -621,12 +621,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Garantia Real
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-xs">
                       <p className="text-xs">Garantias focadas em bens e direitos (Alienação Fiduciária, Hipoteca, Penhor, Cessão de Recebíveis)</p>
@@ -643,12 +643,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Garantia Pessoal / Fidejussória
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-xs">
                       <p className="text-xs">Garantias focadas em pessoas (Aval, Fiança)</p>
@@ -686,7 +686,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           {/* Moeda e Defasagem PTAX - Primeiro Bloco */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Moeda (Opcional)</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Moeda (Opcional)</Label>
               <Select value={form.currency_id || ""} onValueChange={(v) => update("currency_id", v)}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="BRL (Padrão)" /></SelectTrigger>
                 <SelectContent>
@@ -697,12 +697,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             {form.currency_id && (
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                   Defasagem PTAX
                   <TooltipProvider>
                     <Tooltip delayDuration={200}>
                       <TooltipTrigger asChild>
-                        <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                        <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent side="right" className="max-w-xs">
                         <p className="text-xs">
@@ -730,12 +730,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                     Valor em Moeda Estrangeira * 
                     <TooltipProvider>
                       <Tooltip delayDuration={200}>
                         <TooltipTrigger asChild>
-                          <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                          <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent side="right" className="max-w-xs">
                           <p className="text-xs">Valor líquido captado na moeda estrangeira (fonte de verdade)</p>
@@ -761,12 +761,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                     Cotação do Fechamento *
                     <TooltipProvider>
                       <Tooltip delayDuration={200}>
                         <TooltipTrigger asChild>
-                          <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                          <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent side="right" className="max-w-xs">
                           <p className="text-xs">Taxa fixada no fechamento da operação com o banco (pode incluir spread)</p>
@@ -808,7 +808,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </div>
               
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                   Valor Convertido (R$) - Calculado Automaticamente
                 </Label>
                 <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm text-slate-600">
@@ -822,7 +822,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                     return "—";
                   })()}
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600">
                   Este valor será usado como "Valor da Operação" (R$)
                 </p>
               </div>
@@ -834,7 +834,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           {/* Valor da Operação e Sinal */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Valor da Operação (R$) *
                 {form.currency_id && (
                   <span className="ml-1 text-xs text-blue-600 font-normal">(Calculado automaticamente)</span>
@@ -850,13 +850,13 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 required 
               />
               {form.currency_id && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600">
                   Este campo é somente leitura quando operação em moeda estrangeira
                 </p>
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">(-) Sinal do Negócio (R$)</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">(-) Sinal do Negócio (R$)</Label>
               <CurrencyInput type="currency" value={form.signal_value} onChange={(e) => update("signal_value", e.target.value)} className="h-9" />
             </div>
           </div>
@@ -864,12 +864,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-3">
               <div className="space-y-1.5">
-                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                 <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                    IOF (R$)
                    <TooltipProvider>
                      <Tooltip delayDuration={200}>
                        <TooltipTrigger asChild>
-                         <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                         <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                        </TooltipTrigger>
                        <TooltipContent side="right" className="max-w-xs">
                          <p className="text-xs">
@@ -889,12 +889,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                 <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                    Valor do Encargo por Concessão de Garantia (ECG) (R$)
                    <TooltipProvider>
                      <Tooltip delayDuration={200}>
                        <TooltipTrigger asChild>
-                         <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                         <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                        </TooltipTrigger>
                        <TooltipContent side="right" className="max-w-xs">
                          <p className="text-xs">
@@ -914,12 +914,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                 <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                    Taxas Diversas (R$)
                    <TooltipProvider>
                      <Tooltip delayDuration={200}>
                        <TooltipTrigger asChild>
-                         <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                         <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                        </TooltipTrigger>
                        <TooltipContent side="right" className="max-w-xs">
                          <p className="text-xs">
@@ -940,12 +940,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </div>
           <Separator />
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
               Data da Operação *
               <TooltipProvider>
                 <Tooltip delayDuration={200}>
                   <TooltipTrigger asChild>
-                    <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                    <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent side="right" className="max-w-xs">
                     <p className="text-xs">
@@ -961,11 +961,11 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <Separator />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa Fixa (% a.a.) *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Taxa Fixa (% a.a.) *</Label>
               <CurrencyInput type="percent" value={form.fixed_rate} onChange={(e) => update("fixed_rate", e.target.value)} placeholder="0,0000" className="h-9" required />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa Mensal Equivalente</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Taxa Mensal Equivalente</Label>
               <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm text-slate-600">
                 {form.fixed_rate && !isNaN(parseFloat(form.fixed_rate)) 
                   ? `${((Math.pow(1 + parseFloat(form.fixed_rate) / 100, 1/12) - 1) * 100).toFixed(4)}% a.m.`
@@ -975,7 +975,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Indexador</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Indexador</Label>
               <Select value={form.indexer} onValueChange={(v) => update("indexer", v)}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -987,14 +987,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             {form.indexer !== "NA" && (
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Spread (% a.a.)</Label>
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Spread (% a.a.)</Label>
                 <CurrencyInput type="percent" value={form.indexer_spread} onChange={(e) => update("indexer_spread", e.target.value)} className="h-9" />
               </div>
             )}
           </div>
           <Separator />
           <div className="space-y-3">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Sistema de Amortização</Label>
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Sistema de Amortização</Label>
             <TooltipProvider>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {SYSTEMS.map((s) => (
@@ -1018,7 +1018,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                           className="absolute top-3 right-3 p-1 rounded-full hover:bg-slate-200 transition-colors"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <Info className="w-4 h-4 text-slate-400 hover:text-blue-600" />
+                          <Info className="w-4 h-4 text-slate-500 hover:text-blue-600" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="right" className="max-w-xs">
@@ -1044,12 +1044,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Prazo Total (meses) *
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-xs">
                       <p className="text-xs">
@@ -1076,16 +1076,16 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 required
               />
               {(form.calculation_system === "BULLET" || form.calculation_system === "AMERICANO") && (
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-600 mt-1">
                   {form.calculation_system === "BULLET" ? "Define quando ocorre o pagamento único" : "Define quando cai a amortização completa"}
                 </p>
               )}
               {totalTermDurationHint && (
-                <p className="text-xs text-slate-500 mt-1">{totalTermDurationHint}</p>
+                <p className="text-xs text-slate-600 mt-1">{totalTermDurationHint}</p>
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Data Vencimento Final {(form.calculation_system === "AMERICANO" || form.calculation_system === "BULLET") && "(Pagamento Final)"}
               </Label>
               <Input 
@@ -1095,15 +1095,15 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 className="h-9" 
                 disabled={!fieldsStatus.totalTerm}
               />
-              <p className="text-xs text-slate-500">Calculado automaticamente, editável</p>
+              <p className="text-xs text-slate-600">Calculado automaticamente, editável</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Primeiro Vencimento
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-xs">
                       <p className="text-xs">
@@ -1128,12 +1128,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <Separator />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Carência Principal (meses)
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-xs">
                       <p className="text-xs">
@@ -1153,16 +1153,16 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 disabled={!fieldsStatus.principalGrace}
               />
               {!fieldsStatus.principalGrace && (
-                <p className="text-xs text-slate-500">Não aplicável neste sistema</p>
+                <p className="text-xs text-slate-600">Não aplicável neste sistema</p>
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Carência Juros (meses)
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-xs">
                       <p className="text-xs">
@@ -1183,19 +1183,19 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 disabled={!fieldsStatus.interestGrace}
               />
               {!fieldsStatus.interestGrace && (
-                <p className="text-xs text-slate-500">Não aplicável neste sistema</p>
+                <p className="text-xs text-slate-600">Não aplicável neste sistema</p>
               )}
             </div>
           </div>
           {(parseInt(form.interest_grace_months) > 0 && fieldsStatus.interestGrace) && (
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                   Comportamento dos Juros na Carência
                   <TooltipProvider>
                     <Tooltip delayDuration={200}>
                       <TooltipTrigger asChild>
-                        <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                        <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent side="right" className="max-w-xs">
                         <p className="text-xs">
@@ -1223,19 +1223,19 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                     <SelectItem value="CAPITALIZAR">
                       <div className="py-1">
                         <div className="font-semibold">Capitalizar (Anatocismo)</div>
-                        <div className="text-xs text-slate-500">Juros sobre juros - SD cresce</div>
+                        <div className="text-xs text-slate-600">Juros sobre juros - SD cresce</div>
                       </div>
                     </SelectItem>
                     <SelectItem value="INTEREST_ONLY">
                       <div className="py-1">
                         <div className="font-semibold">Pagar Juros (Interest Only)</div>
-                        <div className="text-xs text-slate-500">PMT = juros mensais, SD estático</div>
+                        <div className="text-xs text-slate-600">PMT = juros mensais, SD estático</div>
                       </div>
                     </SelectItem>
                     <SelectItem value="BALLOON" disabled={form.calculation_system === "PRICE"}>
                       <div className="py-1">
                         <div className="font-semibold">Balloon (Juros Simples)</div>
-                        <div className="text-xs text-slate-500">Acumula juros simples para pagar depois</div>
+                        <div className="text-xs text-slate-600">Acumula juros simples para pagar depois</div>
                       </div>
                     </SelectItem>
                   </SelectContent>
@@ -1249,12 +1249,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </div>
               {parseInt(form.principal_grace_months) > 0 && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                     Gatilho da Primeira Amortização
                     <TooltipProvider>
                       <Tooltip delayDuration={200}>
                         <TooltipTrigger asChild>
-                          <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                          <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent side="right" className="max-w-xs">
                           <p className="text-xs">
@@ -1271,24 +1271,24 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                       <SelectItem value="END_OF_GRACE">
                         <div className="py-1">
                           <div className="font-semibold">Fim da Carência</div>
-                          <div className="text-xs text-slate-500">1ª PMT = último dia da carência</div>
+                          <div className="text-xs text-slate-600">1ª PMT = último dia da carência</div>
                         </div>
                       </SelectItem>
                       <SelectItem value="GRACE_PLUS_FREQ">
                         <div className="py-1">
                           <div className="font-semibold">Carência + Periodicidade</div>
-                          <div className="text-xs text-slate-500">1ª PMT = carência + 1 frequência</div>
+                          <div className="text-xs text-slate-600">1ª PMT = carência + 1 frequência</div>
                         </div>
                       </SelectItem>
                       <SelectItem value="NEXT_MONTH">
                         <div className="py-1">
                           <div className="font-semibold">Mês Subsequente</div>
-                          <div className="text-xs text-slate-500">1ª PMT = carência + 1 mês fixo</div>
+                          <div className="text-xs text-slate-600">1ª PMT = carência + 1 mês fixo</div>
                         </div>
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-slate-500">Define quando cai a primeira parcela de amortização</p>
+                  <p className="text-xs text-slate-600">Define quando cai a primeira parcela de amortização</p>
                 </div>
               )}
             </div>
@@ -1296,7 +1296,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <Separator />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Periodicidade Amortização</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Periodicidade Amortização</Label>
               <Select 
                 value={form.principal_periodicity} 
                 onValueChange={(v) => update("principal_periodicity", v)}
@@ -1308,7 +1308,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 </SelectContent>
               </Select>
               {!fieldsStatus.principalPeriodicity && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600">
                   {form.calculation_system === "PRICE" && "Travado como Mensal (PRICE)"}
                   {form.calculation_system === "AMERICANO" && "Amortização só ao final"}
                   {form.calculation_system === "BULLET" && "Pagamento único final"}
@@ -1316,7 +1316,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Periodicidade Juros</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Periodicidade Juros</Label>
               <Select 
                 value={form.interest_periodicity} 
                 onValueChange={(v) => update("interest_periodicity", v)}
@@ -1328,7 +1328,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 </SelectContent>
               </Select>
               {!fieldsStatus.interestPeriodicity && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600">
                   {form.calculation_system === "SAC" && "Segue periodicidade da amortização"}
                   {form.calculation_system === "PRICE" && "Travado como Mensal (PRICE)"}
                   {form.calculation_system === "BULLET" && "Pagamento único final"}

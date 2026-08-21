@@ -81,7 +81,7 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1.5 md:col-span-2">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Entidade *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Entidade *</Label>
               {entities.length === 0 ? (
                 <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
                   Cadastre uma entidade componente e o código Protheus antes de criar a natureza.
@@ -97,13 +97,13 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
                 </Select>
               )}
               {selectedEntity ? (
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-500">
                   Empresa Protheus: {empresaCode || "informe o código da empresa na entidade"}
                 </p>
               ) : null}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Código *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Código *</Label>
               <Input
                 value={form.codigo || ""}
                 onChange={(e) => setForm({ ...form, codigo: e.target.value })}
@@ -114,7 +114,7 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</Label>
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Tipo</Label>
             <Select value={form.tipo_natureza} onValueChange={(v) => setForm({ ...form, tipo_natureza: v })}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -124,7 +124,7 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Descrição *</Label>
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Descrição *</Label>
             <Input
               value={form.descricao || ""}
               onChange={(e) => setForm({ ...form, descricao: e.target.value })}
@@ -135,7 +135,7 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Receita/Despesa</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Receita/Despesa</Label>
               <Input
                 value={form.tipo_conta || ""}
                 onChange={(e) => setForm({ ...form, tipo_conta: e.target.value })}
@@ -144,7 +144,7 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Centro de custo</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Centro de custo</Label>
               <Input
                 value={form.c_custo || ""}
                 onChange={(e) => setForm({ ...form, c_custo: e.target.value })}
@@ -153,7 +153,7 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Cód. despesa/faturamento</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Cód. despesa/faturamento</Label>
               <Input
                 value={form.c_des_fat || ""}
                 onChange={(e) => setForm({ ...form, c_des_fat: e.target.value })}
@@ -164,7 +164,7 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Status</Label>
               <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -183,7 +183,7 @@ export default function NatureForm({ entities = [], onSubmit, onCancel, initialD
               </label>
             </div>
           </div>
-          <p className="-mt-2 text-xs text-slate-400">Livro Caixa Digital do Produtor Rural (ED_LCDPR).</p>
+          <p className="-mt-2 text-xs text-slate-500">Livro Caixa Digital do Produtor Rural (ED_LCDPR).</p>
           <div className="flex gap-2 justify-end pt-2">
             <Button type="button" variant="outline" onClick={onCancel} className="gap-1.5">
               <X className="w-3.5 h-3.5" /> Cancelar

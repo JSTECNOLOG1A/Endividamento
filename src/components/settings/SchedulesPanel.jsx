@@ -251,7 +251,7 @@ export default function SchedulesPanel() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-600">
           Escolha a tarefa, crie o agendamento e defina o dia ou o intervalo. A conversão PR→TX consulta o Protheus, estorna o PR e integra de novo como TX.
         </p>
         <div className="flex flex-wrap gap-2">
@@ -269,9 +269,9 @@ export default function SchedulesPanel() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-500">Carregando agendamentos...</p>
+        <p className="text-sm text-slate-600">Carregando agendamentos...</p>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-slate-500 rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center">
+        <p className="text-sm text-slate-600 rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center">
           Nenhuma tarefa disponível.
         </p>
       ) : (
@@ -292,13 +292,13 @@ export default function SchedulesPanel() {
               <TableRow key={task.key} className="hover:bg-slate-50">
                 <TableCell>
                   <div className="font-medium text-slate-900">{task.label}</div>
-                  <div className="text-[11px] text-slate-400">{task.rotina}</div>
+                  <div className="text-[11px] text-slate-500">{task.rotina}</div>
                   {task.descricao ? (
-                    <div className="text-[11px] text-slate-500 mt-0.5 max-w-[280px]">{task.descricao}</div>
+                    <div className="text-[11px] text-slate-600 mt-0.5 max-w-[280px]">{task.descricao}</div>
                   ) : null}
                 </TableCell>
                 <TableCell className="text-sm text-slate-700">
-                  {job ? job.nome : <span className="text-slate-400">Não criada</span>}
+                  {job ? job.nome : <span className="text-slate-500">Não criada</span>}
                 </TableCell>
                 <TableCell className="text-sm text-slate-600">
                   {job ? scheduleLabel(job) : "—"}
@@ -326,7 +326,7 @@ export default function SchedulesPanel() {
                       ) : null}
                     </>
                   ) : (
-                    <span className="text-sm text-slate-400">—</span>
+                    <span className="text-sm text-slate-500">—</span>
                   )}
                 </TableCell>
                 <TableCell className="text-sm text-slate-600">
@@ -409,7 +409,7 @@ export default function SchedulesPanel() {
                   </SelectContent>
                 </Select>
                 {editorTask?.descricao ? (
-                  <p className="text-xs text-slate-500">{editorTask.descricao}</p>
+                  <p className="text-xs text-slate-600">{editorTask.descricao}</p>
                 ) : null}
               </div>
               <div className="space-y-1">
@@ -471,7 +471,7 @@ export default function SchedulesPanel() {
                       }))}
                     />
                   </div>
-                  <p className="col-span-2 text-xs text-slate-500">
+                  <p className="col-span-2 text-xs text-slate-600">
                     Horário de Brasília. Se o mês não tiver esse dia, a rotina roda no último dia.
                   </p>
                 </div>
@@ -499,7 +499,7 @@ export default function SchedulesPanel() {
               <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
                 <div>
                   <p className="text-sm font-medium text-slate-800">Ativo</p>
-                  <p className="text-xs text-slate-500">Pausado deixa de repetir até ser ligado de novo.</p>
+                  <p className="text-xs text-slate-600">Pausado deixa de repetir até ser ligado de novo.</p>
                 </div>
                 <Switch
                   checked={editor.form.ativo}

@@ -337,7 +337,7 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-slate-900">{drilldownGroup}</h2>
-            <p className="text-sm text-slate-500">Contratos detalhados do grupo</p>
+            <p className="text-sm text-slate-600">Contratos detalhados do grupo</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => setDrilldownGroup(null)}>
             ← Voltar
@@ -347,19 +347,19 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-slate-500 mb-1">Contratos</p>
+              <p className="text-xs text-slate-600 mb-1">Contratos</p>
               <p className="text-2xl font-bold">{groupData.contracts}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-slate-500 mb-1">Valor Original</p>
+              <p className="text-xs text-slate-600 mb-1">Valor Original</p>
               <p className="text-2xl font-bold">{formatCurrency(groupData.valorOriginal)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-slate-500 mb-1">Saldo Atual</p>
+              <p className="text-xs text-slate-600 mb-1">Saldo Atual</p>
               <p className="text-2xl font-bold text-blue-600">{formatCurrency(groupData.saldoAtual)}</p>
             </CardContent>
           </Card>
@@ -415,7 +415,7 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
         <CardContent className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
-              <label className="text-xs text-slate-500 mb-1 block">Data de Referência</label>
+              <label className="text-xs text-slate-600 mb-1 block">Data de Referência</label>
               <Input 
                 type="date" 
                 value={referenceDate} 
@@ -424,16 +424,16 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
               />
             </div>
             <div>
-              <label className="text-xs text-slate-500 mb-1 block">Status</label>
+              <label className="text-xs text-slate-600 mb-1 block">Status</label>
               <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center">
                 <Badge variant="default" className="text-xs">Aprovado</Badge>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-[11px] text-slate-500 mt-1">
                 Consolidação é um efeito contábil: sempre restrita a contratos aprovados.
               </p>
             </div>
             <div>
-              <label className="text-xs text-slate-500 mb-1 block">Banco</label>
+              <label className="text-xs text-slate-600 mb-1 block">Banco</label>
               <Select value={bankFilter} onValueChange={setBankFilter}>
                 <SelectTrigger className="h-9">
                   <SelectValue />
@@ -447,7 +447,7 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
               </Select>
             </div>
             <div>
-              <label className="text-xs text-slate-500 mb-1 block">Tipo de Operação</label>
+              <label className="text-xs text-slate-600 mb-1 block">Tipo de Operação</label>
               <Select value={operationFilter} onValueChange={setOperationFilter}>
                 <SelectTrigger className="h-9">
                   <SelectValue />
@@ -472,39 +472,39 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Valor Original</p>
+            <p className="text-xs text-slate-600 uppercase tracking-wider mb-1">Valor Original</p>
             <p className="text-xl font-bold text-slate-900">{formatCurrency(totalValorOriginal)}</p>
-            <p className="text-xs text-slate-400 mt-1">{totalContracts} contratos</p>
+            <p className="text-xs text-slate-500 mt-1">{totalContracts} contratos</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Saldo Atual</p>
+            <p className="text-xs text-slate-600 uppercase tracking-wider mb-1">Saldo Atual</p>
             <p className="text-xl font-bold text-blue-600">{formatCurrency(totalSaldoAtual)}</p>
-            <p className="text-xs text-slate-400 mt-1">em {format(new Date(referenceDate), "dd/MM/yyyy")}</p>
+            <p className="text-xs text-slate-500 mt-1">em {format(new Date(referenceDate), "dd/MM/yyyy")}</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Amortizado</p>
+            <p className="text-xs text-slate-600 uppercase tracking-wider mb-1">Amortizado</p>
             <p className="text-xl font-bold text-emerald-600">{formatCurrency(amortizadoTotal)}</p>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               {totalValorOriginal > 0 ? ((amortizadoTotal / totalValorOriginal) * 100).toFixed(1) : 0}% do total
             </p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Juros Futuros</p>
+            <p className="text-xs text-slate-600 uppercase tracking-wider mb-1">Juros Futuros</p>
             <p className="text-xl font-bold text-amber-600">{formatCurrency(totalJurosFuturos)}</p>
-            <p className="text-xs text-slate-400 mt-1">até o vencimento</p>
+            <p className="text-xs text-slate-500 mt-1">até o vencimento</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Devido</p>
+            <p className="text-xs text-slate-600 uppercase tracking-wider mb-1">Total Devido</p>
             <p className="text-xl font-bold text-red-600">{formatCurrency(totalSaldoAtual + totalJurosFuturos)}</p>
-            <p className="text-xs text-slate-400 mt-1">saldo + juros</p>
+            <p className="text-xs text-slate-500 mt-1">saldo + juros</p>
           </CardContent>
         </Card>
       </div>

@@ -421,7 +421,7 @@ export default function AccountsPayable() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contas a pagar</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-sm text-slate-600 mt-0.5">
             Títulos gerados na aprovação do contrato. Duplo clique na linha abre o título. Status e saldo vêm do Protheus.
           </p>
         </div>
@@ -431,7 +431,7 @@ export default function AccountsPayable() {
             Consultar títulos
           </Button>
           {rows.length > 0 && (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-600">
               {rows.length} {rows.length === 1 ? "título" : "títulos"}
               <span className="mx-1.5 text-slate-300">•</span>
               Total {formatMoney(totals.valor)}
@@ -444,13 +444,13 @@ export default function AccountsPayable() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mb-4">
         <div className="space-y-1 md:col-span-2">
-          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Legenda</Label>
+          <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Legenda</Label>
           <div className="flex min-h-9 items-center">
             <ErpStatusLegend />
           </div>
         </div>
         <div className="space-y-1 xl:col-span-1">
-          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Busca</Label>
+          <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Busca</Label>
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -459,7 +459,7 @@ export default function AccountsPayable() {
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Entidade</Label>
+          <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Entidade</Label>
           <Select value={entityFilter} onValueChange={setEntityFilter}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -471,7 +471,7 @@ export default function AccountsPayable() {
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</Label>
+          <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Tipo</Label>
           <Select value={tipoFilter} onValueChange={setTipoFilter}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -483,7 +483,7 @@ export default function AccountsPayable() {
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status ERP</Label>
+          <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Status ERP</Label>
           <Select value={erpFilter} onValueChange={setErpFilter}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -537,7 +537,7 @@ export default function AccountsPayable() {
                   ? "Nenhum título neste filtro"
                   : "Nenhum título a pagar"}
             </p>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               {(titles || []).length > 0
                 ? "O título integrado fica em Status ERP = Integrado. Troque o filtro para Todos para ver a lista completa."
                 : "As parcelas entram aqui quando o contrato é aprovado."}
@@ -577,7 +577,7 @@ export default function AccountsPayable() {
                   <SortableTh sortField="saldo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Saldo</SortableTh>
                   <SortableTh sortField="natureza" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Natureza (código)</SortableTh>
                   <SortableTh sortField="historico" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Histórico</SortableTh>
-                  <th className="h-10 px-3 text-right align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500 sticky right-0 bg-slate-50 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.18)]">
+                  <th className="h-10 px-3 text-right align-middle text-[11px] font-medium uppercase tracking-wider text-slate-600 sticky right-0 bg-slate-50 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.18)]">
                     Ações
                   </th>
                 </tr>
@@ -636,7 +636,7 @@ export default function AccountsPayable() {
                         <div className="flex items-center justify-end gap-2">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-slate-500" disabled={busy}>
+                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-slate-600" disabled={busy}>
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>

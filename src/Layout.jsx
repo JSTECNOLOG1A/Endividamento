@@ -49,7 +49,7 @@ function navClass(active) {
   return `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
     active
       ? "bg-blue-50 text-blue-700 shadow-sm"
-      : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+      : "text-slate-600 hover:text-slate-700 hover:bg-slate-100"
   }`;
 }
 
@@ -60,7 +60,7 @@ export default function Layout({ children, currentPageName }) {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-white">
       <style>{`
         :root {
           --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
@@ -91,7 +91,7 @@ export default function Layout({ children, currentPageName }) {
               </div>
               <div>
                 <span className="text-sm font-bold text-slate-900 tracking-tight">Endividamento</span>
-                <span className="text-[10px] text-slate-400 font-medium ml-1.5 hidden sm:inline">BACEN</span>
+                <span className="text-[10px] text-slate-500 font-medium ml-1.5 hidden sm:inline">BACEN</span>
               </div>
             </Link>
 
@@ -161,7 +161,7 @@ export default function Layout({ children, currentPageName }) {
                       type="button"
                       onClick={() => setMobileFinanceOpen((open) => !open)}
                       className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium ${
-                        childActive ? "bg-blue-50 text-blue-700" : "text-slate-500 hover:bg-slate-50"
+                        childActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
                       }`}
                     >
                       <item.icon className="w-4 h-4" />
@@ -176,7 +176,7 @@ export default function Layout({ children, currentPageName }) {
                         className={`flex items-center gap-2 pl-9 pr-3 py-2 rounded-lg text-sm font-medium ${
                           currentPageName === child.page
                             ? "bg-blue-50 text-blue-700"
-                            : "text-slate-500 hover:bg-slate-50"
+                            : "text-slate-600 hover:bg-slate-50"
                         }`}
                       >
                         <child.icon className="w-4 h-4" />
@@ -196,7 +196,7 @@ export default function Layout({ children, currentPageName }) {
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium ${
                     isActive
                       ? "bg-blue-50 text-blue-700"
-                      : "text-slate-500 hover:bg-slate-50"
+                      : "text-slate-600 hover:bg-slate-50"
                   }`}
                 >
                   <item.icon className="w-4 h-4" />

@@ -75,7 +75,7 @@ const NATURE_IMPORT_SORT_COLUMNS = {
 function FilterSelect({ label, value, onValueChange, children }) {
   return (
     <div className="space-y-1 min-w-0">
-      <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</Label>
+      <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">{label}</Label>
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
         <SelectContent>{children}</SelectContent>
@@ -266,11 +266,11 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
         </DialogHeader>
 
         {loading ? (
-          <p className="text-sm text-slate-500 py-8 text-center">Consultando o ERP...</p>
+          <p className="text-sm text-slate-600 py-8 text-center">Consultando o ERP...</p>
         ) : (
           <div className="space-y-3 min-h-0 flex-1 flex flex-col">
             {(preview?.grupo_empresas || preview?.empresas?.length || preview?.tabela) ? (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-600">
                 {[
                   preview.grupo_empresas ? `Grupo ${preview.grupo_empresas}` : null,
                   preview.empresas?.length ? `Empresas ${preview.empresas.join(", ")}` : null,
@@ -338,7 +338,7 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
                 {allFilteredSelected ? "Nenhum" : "Todos"}
               </Button>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-600">
               {selectedKeys.size} de {items.length} selecionadas
               {hasActiveFilters ? ` · ${filtered.length} visíveis` : ""}
             </p>
@@ -369,7 +369,7 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
                 <TableBody>
                   {sortedFiltered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-slate-500 py-8">
+                      <TableCell colSpan={9} className="text-center text-slate-600 py-8">
                         Nenhuma natureza encontrada.
                       </TableCell>
                     </TableRow>
@@ -399,13 +399,13 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
                               {item.tipo_natureza === "sintetica" ? "Sintética" : "Analítica"}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-slate-500 whitespace-nowrap">{item.tipo_conta || "—"}</TableCell>
+                          <TableCell className="text-slate-600 whitespace-nowrap">{item.tipo_conta || "—"}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className={item.gera_lcdpr ? "border-sky-200 bg-sky-50 text-sky-800" : ""}>
                               {item.gera_lcdpr ? "Sim" : "Não"}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-slate-500 whitespace-nowrap">
+                          <TableCell className="text-slate-600 whitespace-nowrap">
                             {item.already_exists ? "Já cadastrada" : "Nova"}
                           </TableCell>
                         </TableRow>

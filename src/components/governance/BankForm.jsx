@@ -37,7 +37,7 @@ export default function BankForm({ onSubmit, onCancel, initialData }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Código (COMPE/SPB) *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Código (COMPE/SPB) *</Label>
               <Input
                 value={form.bank_code}
                 onChange={(e) => setForm({ ...form, bank_code: e.target.value })}
@@ -47,7 +47,7 @@ export default function BankForm({ onSubmit, onCancel, initialData }) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nome do Banco *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nome do Banco *</Label>
               <Input
                 value={form.bank_name}
                 onChange={(e) => setForm({ ...form, bank_name: e.target.value })}
@@ -59,7 +59,7 @@ export default function BankForm({ onSubmit, onCancel, initialData }) {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Tipo</Label>
               <Select value={form.bank_type} onValueChange={(v) => setForm({ ...form, bank_type: v })}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -70,7 +70,7 @@ export default function BankForm({ onSubmit, onCancel, initialData }) {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Status</Label>
               <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>

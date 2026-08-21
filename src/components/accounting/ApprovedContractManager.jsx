@@ -335,7 +335,7 @@ export default function ApprovedContractManager({ contract, onContractUpdate }) 
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label className="text-xs font-medium text-slate-500 uppercase">
+                <Label className="text-xs font-medium text-slate-600 uppercase">
                   Selecione o Mês
                 </Label>
                 <Input
@@ -350,13 +350,13 @@ export default function ApprovedContractManager({ contract, onContractUpdate }) 
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div className="bg-slate-50 p-3 rounded border border-slate-200">
-                      <p className="text-xs text-slate-500 uppercase font-medium">Juros Fixo</p>
+                      <p className="text-xs text-slate-600 uppercase font-medium">Juros Fixo</p>
                       <p className="font-bold text-slate-900">
                         R$ {monthlyEvents.reduce((s, r) => s + (r.jurosFixosMes || 0), 0).toFixed(2)}
                       </p>
                     </div>
                     <div className="bg-slate-50 p-3 rounded border border-slate-200">
-                      <p className="text-xs text-slate-500 uppercase font-medium">Juros Variável</p>
+                      <p className="text-xs text-slate-600 uppercase font-medium">Juros Variável</p>
                       <p className="font-bold text-slate-900">
                         R$ {monthlyEvents.reduce((s, r) => s + (r.jurosVariaveisMes || 0), 0).toFixed(2)}
                       </p>
@@ -434,7 +434,7 @@ export default function ApprovedContractManager({ contract, onContractUpdate }) 
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label className="text-xs font-medium text-slate-500 uppercase">
+                <Label className="text-xs font-medium text-slate-600 uppercase">
                   Data de Corte (Ex: 31/12)
                 </Label>
                 <Input
@@ -465,7 +465,7 @@ export default function ApprovedContractManager({ contract, onContractUpdate }) 
                       <p className="font-bold text-orange-900">R$ {prorataData.principalAccrued.toFixed(2)}</p>
                     </div>
                     <div className="bg-slate-50 p-3 rounded border border-slate-200">
-                      <p className="text-xs text-slate-500 uppercase font-medium">Total até {prorataData.cutoffDate}</p>
+                      <p className="text-xs text-slate-600 uppercase font-medium">Total até {prorataData.cutoffDate}</p>
                       <p className="font-bold text-slate-900">R$ {prorataData.totalAccrued.toFixed(2)}</p>
                     </div>
                   </div>
@@ -492,7 +492,7 @@ export default function ApprovedContractManager({ contract, onContractUpdate }) 
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="text-xs font-medium text-slate-500 uppercase">
+                  <Label className="text-xs font-medium text-slate-600 uppercase">
                     Data para Conciliação
                   </Label>
                   <Input
@@ -550,9 +550,9 @@ export default function ApprovedContractManager({ contract, onContractUpdate }) 
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       {conciliationResult.savedRate && (
                         <div className="bg-slate-50 p-3 rounded border border-slate-200">
-                          <p className="text-xs text-slate-500 uppercase font-medium">Taxa Salva</p>
+                          <p className="text-xs text-slate-600 uppercase font-medium">Taxa Salva</p>
                           <p className="font-bold text-slate-900">{conciliationResult.savedRate.rate.toFixed(4)}</p>
-                          <p className="text-xs text-slate-400">{conciliationResult.savedRate.date}</p>
+                          <p className="text-xs text-slate-500">{conciliationResult.savedRate.date}</p>
                         </div>
                       )}
                       <div className="bg-blue-50 p-3 rounded border border-blue-200">
