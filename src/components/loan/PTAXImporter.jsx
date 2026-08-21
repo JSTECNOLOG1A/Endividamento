@@ -8,15 +8,21 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
 import { Badge } from "@/components/ui/badge";
-import { FileUp, Database, ChevronLeft, ChevronRight, ArrowUpDown, AlertCircle, Trash2 } from "lucide-react";
+import { FileUp, Database, ChevronLeft, ChevronRight, AlertCircle, Trash2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const PAGE_SIZE = 50;
+
+// Colunas ordenáveis por clique no título (mesma configuração da tabela de
+// Contratos) — exchange_rate ordena como número, o resto como texto.
+const PTAX_SORT_COLUMNS = {
+  exchange_rate: { numeric: true },
+};
 
 // Layout desta tela é o mesmo de CDIImporter.jsx (Card > upload CSV + busca
 // automática no BACEN por período > Card de consulta com tabela paginada) —
@@ -29,7 +35,6 @@ export default function PTAXImporter() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
-  const [sortAsc, setSortAsc] = useState(false);
   const [filterStart, setFilterStart] = useState("");
   const [filterEnd, setFilterEnd] = useState("");
   const [bacenStart, setBacenStart] = useState("");
@@ -255,15 +260,15 @@ export default function PTAXImporter() {
     setImporting(false);
   }, [usdRates, queryClient]);
 
-  // Filter and sort
-  let displayData = [...usdRates];
-  if (filterStart) displayData = displayData.filter((r) => r.rate_date >= filterStart);
-  if (filterEnd) displayData = displayData.filter((r) => r.rate_date <= filterEnd);
-  if (sortAsc) {
-    displayData.sort((a, b) => a.rate_date.localeCompare(b.rate_date));
-  } else {
-    displayData.sort((a, b) => b.rate_date.localeCompare(a.rate_date));
-  }
+  // Filter (ordenação por coluna vem do useSortableRows abaixo — mesma
+  // configuração da tabela de Contratos). Ordem padrão sem coluna
+  // selecionada: data mais recente primeiro.
+  let filteredData = [...usdRates];
+  if (filterStart) filteredData = filteredData.filter((r) => r.rate_date >= filterStart);
+  if (filterEnd) filteredData = filteredData.filter((r) => r.rate_date <= filterEnd);
+  filteredData.sort((a, b) => b.rate_date.localeCompare(a.rate_date));
+
+  const { sortKey, sortDir, toggleSort, sortedRows: displayData } = useSortableRows(filteredData, PTAX_SORT_COLUMNS);
 
   const totalPages = Math.ceil(displayData.length / PAGE_SIZE);
   const pageData = displayData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -402,10 +407,6 @@ export default function PTAXImporter() {
                   className="h-8 text-xs w-36"
                   placeholder="Até"
                 />
-                <Button variant="ghost" size="sm" onClick={() => setSortAsc(!sortAsc)} className="h-8 gap-1 text-xs">
-                  <ArrowUpDown className="w-3 h-3" />
-                  {sortAsc ? "Cresc." : "Decresc."}
-                </Button>
               </div>
             </div>
           </CardHeader>
@@ -413,15 +414,15 @@ export default function PTAXImporter() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-slate-50">
-                    <TableHead className="text-xs font-bold text-slate-700">Data</TableHead>
-                    <TableHead className="text-xs font-bold text-slate-700 text-right">Cotação PTAX (R$)</TableHead>
-                    <TableHead className="text-xs font-bold text-slate-700">Status</TableHead>
+                  <TableRow className="hover:bg-transparent">
+                    <SortableHead sortField="rate_date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Data</SortableHead>
+                    <SortableHead sortField="exchange_rate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Cotação PTAX (R$)</SortableHead>
+                    <SortableHead sortField="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Status</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {pageData.map((r) => (
-                    <TableRow key={r.id} className="odd:bg-white even:bg-slate-50/50">
+                    <TableRow key={r.id} className="hover:bg-slate-50">
                       <TableCell className="text-xs">
                         {new Date(`${r.rate_date}T12:00:00`).toLocaleDateString("pt-BR")}
                       </TableCell>

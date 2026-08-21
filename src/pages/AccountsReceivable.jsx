@@ -26,6 +26,7 @@ import ClassifyTitleDialog from "../components/payables/ClassifyTitleDialog";
 import TitleViewDialog from "../components/payables/TitleViewDialog";
 import { erpStatusOf, ErpStatusBadge, ErpStatusLegend } from "@/lib/erpStatus";
 import { useProcessing } from "@/lib/ProcessingContext";
+import { useSortableRows, SortableTh } from "@/components/ui/sortable-table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -86,6 +87,26 @@ function canConsult(item) {
 function canSelect(item) {
   return canIntegrate(item) || canReverse(item);
 }
+
+// Mesma configuração de reordenação por clique no título da tabela de
+// Contratos. Checkbox e Ações ficam de fora (não fazem sentido ordenar).
+const RECEIVABLE_SORT_COLUMNS = {
+  erpStatus: { getValue: (row) => erpStatusOf(row) },
+  entity_name: {},
+  filial: {},
+  filial_origem: {},
+  cliente: { getValue: (row) => customerLabel(row) },
+  prefixo: {},
+  titulo_numero: {},
+  parcela: { numeric: true, getValue: (row) => Number(row.parcela) || 0 },
+  tipo: {},
+  emissao: { numeric: true, getValue: (row) => (row.emissao ? new Date(row.emissao).getTime() : 0) },
+  vencimento: { numeric: true, getValue: (row) => (row.vencimento ? new Date(row.vencimento).getTime() : 0) },
+  valor: { numeric: true },
+  saldo: { numeric: true },
+  natureza: {},
+  historico: {},
+};
 
 export default function AccountsReceivable() {
   const queryClient = useQueryClient();
@@ -185,6 +206,8 @@ export default function AccountsReceivable() {
       ),
     [rows]
   );
+
+  const { sortKey, sortDir, toggleSort, sortedRows } = useSortableRows(rows, RECEIVABLE_SORT_COLUMNS);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["receivable-titles"] });
 
@@ -539,28 +562,28 @@ export default function AccountsReceivable() {
                       aria-label="Selecionar títulos abertos"
                     />
                   </th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Status ERP</th>
-                  <th className="h-10 px-3 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Entidade</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Filial</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Fil. origem</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Cliente</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Prefixo</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Número</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Parc.</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Tipo</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Emissão</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Vencimento</th>
-                  <th className="h-10 px-2 text-right align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Valor</th>
-                  <th className="h-10 px-2 text-right align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Saldo</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Natureza (código)</th>
-                  <th className="h-10 px-3 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Histórico</th>
+                  <SortableTh sortField="erpStatus" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Status ERP</SortableTh>
+                  <SortableTh sortField="entity_name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Entidade</SortableTh>
+                  <SortableTh sortField="filial" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Filial</SortableTh>
+                  <SortableTh sortField="filial_origem" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Fil. origem</SortableTh>
+                  <SortableTh sortField="cliente" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Cliente</SortableTh>
+                  <SortableTh sortField="prefixo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Prefixo</SortableTh>
+                  <SortableTh sortField="titulo_numero" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Número</SortableTh>
+                  <SortableTh sortField="parcela" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Parc.</SortableTh>
+                  <SortableTh sortField="tipo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Tipo</SortableTh>
+                  <SortableTh sortField="emissao" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Emissão</SortableTh>
+                  <SortableTh sortField="vencimento" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Vencimento</SortableTh>
+                  <SortableTh sortField="valor" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Valor</SortableTh>
+                  <SortableTh sortField="saldo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Saldo</SortableTh>
+                  <SortableTh sortField="natureza" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Natureza (código)</SortableTh>
+                  <SortableTh sortField="historico" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Histórico</SortableTh>
                   <th className="h-10 px-3 text-right align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500 sticky right-0 bg-slate-50 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.18)]">
                     Ações
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((item) => {
+                {sortedRows.map((item) => {
                   const selectable = canSelect(item);
                   return (
                     <tr

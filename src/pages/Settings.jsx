@@ -78,7 +78,7 @@ export default function Settings() {
         ) : null}
 
         <TabsContent value="conta" className="mt-4">
-          <div className="max-w-3xl space-y-4">
+          <div className="space-y-4">
             <Card className="border-slate-200 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base text-slate-900">Conta</CardTitle>

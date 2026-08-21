@@ -36,6 +36,7 @@ import {
   getMonthlyRollForward,
 } from "./debtAnalytics";
 import { OPERATION_TYPES, OPERATION_CATEGORIES, operationCategoryLabel } from "@/lib/contractOptions";
+import { useSortableRows, SortableTh, SORT_HEAD_CLASS } from "@/components/ui/sortable-table";
 
 const MONTHS = [
   { value: "1", label: "Janeiro" },
@@ -279,9 +280,57 @@ export default function AccountingReading() {
     [flowCategorySubtotals]
   );
 
+  // Linha com o total já calculado, pra alimentar a ordenação por clique no
+  // título sem refazer a conta a cada render — mesma configuração de
+  // reordenação da tabela de Contratos. As colunas de ano são dinâmicas
+  // (dependem dos anos do fluxo), por isso o config é montado em runtime,
+  // mas com useMemo pra manter a referência estável entre renders.
+  const flowRowsWithTotal = useMemo(() => {
+    if (!analysis) return [];
+    return flowRows.map((row, idx) => {
+      const rowTotal =
+        analysis.paymentFlow.years.reduce(
+          (sum, y) => sum + valueForFlow(row.byYear[y] || { principal: 0, interest: 0 }, flowView),
+          0
+        ) + valueForFlow(row.catchAll, flowView);
+      return { row, rowTotal, _key: idx };
+    });
+  }, [analysis, flowRows, flowView]);
+
+  const flowSortColumns = useMemo(() => {
+    const cols = {
+      bank: { getValue: (r) => bankName(r.row.bankId) },
+      modalidade: { getValue: (r) => operationTypeLabel(r.row.operationType) },
+      garantia: { getValue: (r) => r.row.guarantee || "" },
+      catchAll: { numeric: true, getValue: (r) => valueForFlow(r.row.catchAll, flowView) },
+      total: { numeric: true, getValue: (r) => r.rowTotal },
+    };
+    (analysis?.paymentFlow?.years || []).forEach((y) => {
+      cols[`year_${y}`] = {
+        numeric: true,
+        getValue: (r) => valueForFlow(r.row.byYear[y] || { principal: 0, interest: 0 }, flowView),
+      };
+    });
+    return cols;
+  }, [analysis, flowView]);
+  const flowSort = useSortableRows(flowRowsWithTotal, flowSortColumns);
+
+  const categorySortColumns = useMemo(() => {
+    const cols = {
+      categoria: { getValue: (r) => r.label },
+      catchAll: { numeric: true, getValue: (r) => r.catchAll },
+      total: { numeric: true, getValue: (r) => r.total },
+    };
+    (analysis?.paymentFlow?.years || []).forEach((y) => {
+      cols[`year_${y}`] = { numeric: true, getValue: (r) => r.byYear[y] || 0 };
+    });
+    return cols;
+  }, [analysis]);
+  const categorySort = useSortableRows(flowCategorySubtotals, categorySortColumns);
+
   return (
     <div className="w-full px-4 sm:px-6 py-8">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="space-y-6">
         {/* Header */}
         <div>
           <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Módulo Contábil · Endividamento</p>
@@ -462,12 +511,17 @@ export default function AccountingReading() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm min-w-[600px]">
                       <thead>
+                        {/* Sem reordenação por clique: é uma conciliação
+                            (Saldo Inicial + Apropriações − Pagamentos = Saldo
+                            Final) onde a ordem das linhas é o próprio
+                            significado da tabela — só o estilo visual do
+                            cabeçalho é padronizado com o resto do app. */}
                         <tr className="border-b border-slate-200">
-                          <th className="text-left font-medium text-slate-500 uppercase text-xs px-3 py-2">Movimento</th>
-                          <th className="text-right font-medium text-slate-500 uppercase text-xs px-3 py-2">Principal</th>
-                          <th className="text-right font-medium text-slate-500 uppercase text-xs px-3 py-2">Juros</th>
-                          <th className="text-right font-medium text-slate-500 uppercase text-xs px-3 py-2">Variação Cambial</th>
-                          <th className="text-right font-medium text-slate-700 uppercase text-xs px-3 py-2">Total</th>
+                          <th className={SORT_HEAD_CLASS}>Movimento</th>
+                          <th className={`${SORT_HEAD_CLASS} text-right`}>Principal</th>
+                          <th className={`${SORT_HEAD_CLASS} text-right`}>Juros</th>
+                          <th className={`${SORT_HEAD_CLASS} text-right`}>Variação Cambial</th>
+                          <th className={`${SORT_HEAD_CLASS} text-right`}>Total</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -544,43 +598,35 @@ export default function AccountingReading() {
                       <table className="w-full text-sm min-w-[900px]">
                         <thead>
                           <tr className="border-b border-slate-200">
-                            <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Banco</th>
-                            <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Modalidade</th>
-                            <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Garantia</th>
+                            <SortableTh sortField="bank" sortKey={flowSort.sortKey} sortDir={flowSort.sortDir} onSort={flowSort.toggleSort}>Banco</SortableTh>
+                            <SortableTh sortField="modalidade" sortKey={flowSort.sortKey} sortDir={flowSort.sortDir} onSort={flowSort.toggleSort}>Modalidade</SortableTh>
+                            <SortableTh sortField="garantia" sortKey={flowSort.sortKey} sortDir={flowSort.sortDir} onSort={flowSort.toggleSort}>Garantia</SortableTh>
                             {analysis.paymentFlow.years.map((y) => (
-                              <th key={y} className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">{y}</th>
+                              <SortableTh key={y} sortField={`year_${y}`} sortKey={flowSort.sortKey} sortDir={flowSort.sortDir} onSort={flowSort.toggleSort} right>{y}</SortableTh>
                             ))}
-                            <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">{analysis.paymentFlow.catchAllLabel}</th>
-                            <th className="text-right font-medium text-slate-700 uppercase text-xs px-2 py-2">Total</th>
+                            <SortableTh sortField="catchAll" sortKey={flowSort.sortKey} sortDir={flowSort.sortDir} onSort={flowSort.toggleSort} right>{analysis.paymentFlow.catchAllLabel}</SortableTh>
+                            <SortableTh sortField="total" sortKey={flowSort.sortKey} sortDir={flowSort.sortDir} onSort={flowSort.toggleSort} right>Total</SortableTh>
                           </tr>
                         </thead>
                         <tbody>
-                          {flowRows.map((row, idx) => {
-                            const rowTotal =
-                              analysis.paymentFlow.years.reduce(
-                                (sum, y) => sum + valueForFlow(row.byYear[y] || { principal: 0, interest: 0 }, flowView),
-                                0
-                              ) + valueForFlow(row.catchAll, flowView);
-
-                            return (
-                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                                <td className="px-2 py-2 text-slate-700">{bankName(row.bankId)}</td>
-                                <td className="px-2 py-2 text-slate-700">{operationTypeLabel(row.operationType)}</td>
-                                <td className="px-2 py-2 text-slate-700">{row.guarantee}</td>
-                                {analysis.paymentFlow.years.map((y) => (
-                                  <td key={y} className="px-2 py-2 text-right text-slate-700">
-                                    {formatCurrency(valueForFlow(row.byYear[y] || { principal: 0, interest: 0 }, flowView))}
-                                  </td>
-                                ))}
-                                <td className="px-2 py-2 text-right text-slate-700">
-                                  {formatCurrency(valueForFlow(row.catchAll, flowView))}
+                          {flowSort.sortedRows.map(({ row, rowTotal, _key }) => (
+                            <tr key={_key} className="border-b border-slate-100 hover:bg-slate-50">
+                              <td className="px-2 py-2 text-slate-700">{bankName(row.bankId)}</td>
+                              <td className="px-2 py-2 text-slate-700">{operationTypeLabel(row.operationType)}</td>
+                              <td className="px-2 py-2 text-slate-700">{row.guarantee}</td>
+                              {analysis.paymentFlow.years.map((y) => (
+                                <td key={y} className="px-2 py-2 text-right text-slate-700">
+                                  {formatCurrency(valueForFlow(row.byYear[y] || { principal: 0, interest: 0 }, flowView))}
                                 </td>
-                                <td className="px-2 py-2 text-right font-semibold text-slate-900">
-                                  {formatCurrency(rowTotal)}
-                                </td>
-                              </tr>
-                            );
-                          })}
+                              ))}
+                              <td className="px-2 py-2 text-right text-slate-700">
+                                {formatCurrency(valueForFlow(row.catchAll, flowView))}
+                              </td>
+                              <td className="px-2 py-2 text-right font-semibold text-slate-900">
+                                {formatCurrency(rowTotal)}
+                              </td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>
@@ -593,16 +639,16 @@ export default function AccountingReading() {
                         <table className="w-full text-sm min-w-[700px]">
                           <thead>
                             <tr className="border-b border-slate-200">
-                              <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Categoria</th>
+                              <SortableTh sortField="categoria" sortKey={categorySort.sortKey} sortDir={categorySort.sortDir} onSort={categorySort.toggleSort}>Categoria</SortableTh>
                               {analysis.paymentFlow.years.map((y) => (
-                                <th key={y} className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">{y}</th>
+                                <SortableTh key={y} sortField={`year_${y}`} sortKey={categorySort.sortKey} sortDir={categorySort.sortDir} onSort={categorySort.toggleSort} right>{y}</SortableTh>
                               ))}
-                              <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">{analysis.paymentFlow.catchAllLabel}</th>
-                              <th className="text-right font-medium text-slate-700 uppercase text-xs px-2 py-2">Total</th>
+                              <SortableTh sortField="catchAll" sortKey={categorySort.sortKey} sortDir={categorySort.sortDir} onSort={categorySort.toggleSort} right>{analysis.paymentFlow.catchAllLabel}</SortableTh>
+                              <SortableTh sortField="total" sortKey={categorySort.sortKey} sortDir={categorySort.sortDir} onSort={categorySort.toggleSort} right>Total</SortableTh>
                             </tr>
                           </thead>
                           <tbody>
-                            {flowCategorySubtotals.map((g) => (
+                            {categorySort.sortedRows.map((g) => (
                               <tr key={g.category} className="border-b border-slate-100">
                                 <td className="px-2 py-2 text-slate-700 font-medium">{g.label}</td>
                                 {analysis.paymentFlow.years.map((y) => (

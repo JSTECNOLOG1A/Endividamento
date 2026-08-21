@@ -36,6 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SORT_HEAD_CLASS } from "@/components/ui/sortable-table";
 import IntegrationForm from "./IntegrationForm";
 import {
   AUTH_TYPE_LABELS,
@@ -194,13 +195,17 @@ export default function IntegrationsPanel() {
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
         <Table>
           <TableHeader>
+            {/* Sem reordenação por clique: a lista é paginada no servidor
+                (só a página atual fica carregada no cliente) — ordenar
+                mudaria a página visível, não a lista inteira, e enganaria o
+                usuário. Só o estilo visual do cabeçalho é padronizado. */}
             <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>ERP</TableHead>
-              <TableHead>URL base</TableHead>
-              <TableHead>Endpoints</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Nome</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>ERP</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>URL base</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Endpoints</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Status</TableHead>
+              <TableHead className={`${SORT_HEAD_CLASS} text-right`}>Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -218,7 +223,7 @@ export default function IntegrationsPanel() {
               </TableRow>
             ) : (
               items.map((item) => (
-                <TableRow key={item.id}>
+                <TableRow key={item.id} className="hover:bg-slate-50">
                   <TableCell className="font-medium text-slate-900">{item.nome}</TableCell>
                   <TableCell>{item.erpNome || "—"}</TableCell>
                   <TableCell className="max-w-[220px] truncate" title={item.baseUrl}>

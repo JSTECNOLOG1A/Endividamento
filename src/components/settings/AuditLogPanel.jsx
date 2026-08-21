@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SORT_HEAD_CLASS } from "@/components/ui/sortable-table";
 
 const PAGE_SIZE = 50;
 
@@ -297,15 +298,15 @@ export default function AuditLogPanel() {
       <div className="rounded-md border border-slate-200">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="whitespace-nowrap">Data/hora</TableHead>
-              <TableHead>Usuário</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Rotina</TableHead>
-              <TableHead>Registro</TableHead>
-              <TableHead>Ação</TableHead>
-              <TableHead>De</TableHead>
-              <TableHead>Para</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className={SORT_HEAD_CLASS}>Data/hora</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Usuário</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Tipo</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Rotina</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Registro</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Ação</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>De</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Para</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -324,7 +325,7 @@ export default function AuditLogPanel() {
             {items.map((row) => (
               <TableRow
                 key={row.id}
-                className="cursor-pointer"
+                className="cursor-pointer hover:bg-slate-50"
                 onClick={() => setSelected(row)}
               >
                 <TableCell className="whitespace-nowrap text-xs text-slate-600">{formatDateTime(row.occurredAt)}</TableCell>
@@ -385,10 +386,10 @@ export default function AuditLogPanel() {
                   <div className="rounded-md border border-slate-200">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Título</TableHead>
-                          <TableHead>Tipo</TableHead>
-                          <TableHead>Resultado</TableHead>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className={SORT_HEAD_CLASS}>Título</TableHead>
+                          <TableHead className={SORT_HEAD_CLASS}>Tipo</TableHead>
+                          <TableHead className={SORT_HEAD_CLASS}>Resultado</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -413,10 +414,10 @@ export default function AuditLogPanel() {
                 <div className="rounded-md border border-slate-200">
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>Campo</TableHead>
-                        <TableHead>De</TableHead>
-                        <TableHead>Para</TableHead>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className={SORT_HEAD_CLASS}>Campo</TableHead>
+                        <TableHead className={SORT_HEAD_CLASS}>De</TableHead>
+                        <TableHead className={SORT_HEAD_CLASS}>Para</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

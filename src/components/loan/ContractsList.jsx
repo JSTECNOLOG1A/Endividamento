@@ -16,7 +16,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FileText, Trash2, Copy, ChevronRight, MoreHorizontal, Download, Mail, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { FileText, Trash2, Copy, ChevronRight, MoreHorizontal, Download, Mail } from "lucide-react";
+import { useSortableRows, SortableHead, SORT_HEAD_CLASS, SORT_CELL_CLASS, SORT_CELL_CLASS_RIGHT } from "@/components/ui/sortable-table";
 import { statusLabel, statusBadgeClass, EDITABLE_STATUSES } from "@/lib/contractStatus";
 import { combineGuaranteeLabel, operationCategoryLabel } from "@/lib/contractOptions";
 import { computeContractCET } from "@/lib/cetFromSchedule";
@@ -82,46 +83,23 @@ function deriveRow(contract, today, groups, entities, banks) {
 // resolvido em `rows` (ver deriveRow acima). `numeric: true` ordena como
 // número em vez de string.
 const SORTABLE_COLUMNS = {
-  groupName: { numeric: false },
-  entityName: { numeric: false },
-  bankName: { numeric: false },
-  contract_number: { numeric: false, fromContract: true },
-  categoryLabel: { numeric: false },
-  guaranteeLabel: { numeric: false },
-  operation_value: { numeric: true, fromContract: true },
-  fixed_rate: { numeric: true, fromContract: true },
+  groupName: {},
+  entityName: {},
+  bankName: {},
+  contract_number: { getValue: (row) => row.contract.contract_number },
+  categoryLabel: {},
+  guaranteeLabel: {},
+  operation_value: { numeric: true, getValue: (row) => row.contract.operation_value },
+  fixed_rate: { numeric: true, getValue: (row) => row.contract.fixed_rate },
   cet: { numeric: true },
   shortTerm: { numeric: true },
   longTerm: { numeric: true },
-  status: { numeric: false, fromContract: true },
+  status: { getValue: (row) => row.contract.status },
 };
-
-function SortIcon({ active, dir }) {
-  if (!active) return <ArrowUpDown className="w-3 h-3 ml-1 inline-block text-slate-400" />;
-  return dir === "asc"
-    ? <ArrowUp className="w-3 h-3 ml-1 inline-block text-slate-700" />
-    : <ArrowDown className="w-3 h-3 ml-1 inline-block text-slate-700" />;
-}
 
 export default function ContractsList({ contracts, banks, groups, entities, onView, onEdit, onDelete, onDuplicate, isLoading }) {
   const today = React.useMemo(() => new Date().toISOString().split("T")[0], []);
   const [emailTarget, setEmailTarget] = React.useState(null);
-  // Ordenação por coluna: clique no título alterna asc → desc → sem ordenação
-  // (volta à ordem original da lista recebida via props).
-  const [sortKey, setSortKey] = React.useState(null);
-  const [sortDir, setSortDir] = React.useState("asc");
-
-  const toggleSort = (key) => {
-    if (sortKey !== key) {
-      setSortKey(key);
-      setSortDir("asc");
-    } else if (sortDir === "asc") {
-      setSortDir("desc");
-    } else {
-      setSortKey(null);
-      setSortDir("asc");
-    }
-  };
 
   // Deriva CET, Circulante/Não Circulante e os rótulos uma vez por lista (não
   // a cada re-render) — envolve reprocessar o cronograma inteiro de cada
@@ -130,22 +108,10 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
     return (contracts || []).map((c) => ({ contract: c, ...deriveRow(c, today, groups, entities, banks) }));
   }, [contracts, today, groups, entities, banks]);
 
-  const sortedRows = React.useMemo(() => {
-    if (!sortKey) return rows;
-    const config = SORTABLE_COLUMNS[sortKey];
-    const getValue = (row) => (config?.fromContract ? row.contract[sortKey] : row[sortKey]);
-    const sorted = [...rows].sort((a, b) => {
-      const va = getValue(a);
-      const vb = getValue(b);
-      if (config?.numeric) {
-        const na = Number(va) || 0;
-        const nb = Number(vb) || 0;
-        return na - nb;
-      }
-      return String(va ?? "").localeCompare(String(vb ?? ""), "pt-BR");
-    });
-    return sortDir === "desc" ? sorted.reverse() : sorted;
-  }, [rows, sortKey, sortDir]);
+  // Ordenação por coluna (clique no título alterna asc → desc → sem
+  // ordenação) — mesma configuração usada em toda a ferramenta, ver
+  // src/components/ui/sortable-table.jsx.
+  const { sortKey, sortDir, toggleSort, sortedRows } = useSortableRows(rows, SORTABLE_COLUMNS);
 
   if (isLoading) {
     return (
@@ -174,27 +140,10 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
   // Cabeçalho e células em uma linha só (sem quebra de texto) — a tabela é
   // larga de propósito; ela rola horizontalmente só em telas realmente
   // estreitas, em vez de forçar rótulos e valores a quebrar em 2 linhas.
-  const headClass = "text-xs font-bold text-slate-700 uppercase tracking-wide whitespace-nowrap px-4 py-3 bg-slate-50 border-b-2 border-slate-200";
-  // Uma única classe de célula para TODOS os campos — mesma fonte (sans, sem
-  //), mesmo tamanho e mesma cor, em vez de misturar nos
-  // números com a fonte padrão no texto (o que dava a sensação de fontes
-  // diferentes lado a lado). Alinhamento à direita continua só um detalhe de
-  // layout (cellClassRight), não muda fonte/cor.
-  const cellClass = "whitespace-nowrap px-4 py-3.5 text-sm text-slate-700";
-  const cellClassRight = `${cellClass} text-right`;
-
-  // Título de coluna clicável — ordena por esse campo, com seta indicando a
-  // direção atual. `sortField` é a chave em SORTABLE_COLUMNS; se omitida, a
-  // coluna não é ordenável (ex.: a última, de ações).
-  const SortableHead = ({ sortField, right, children }) => (
-    <TableHead
-      className={`${headClass}${right ? " text-right" : ""}${sortField ? " cursor-pointer select-none hover:bg-slate-100" : ""}`}
-      onClick={sortField ? () => toggleSort(sortField) : undefined}
-    >
-      {children}
-      {sortField && <SortIcon active={sortKey === sortField} dir={sortDir} />}
-    </TableHead>
-  );
+  // Classes e componente de título ordenável vêm de sortable-table.jsx —
+  // mesma configuração visual em toda a ferramenta.
+  const cellClass = SORT_CELL_CLASS;
+  const cellClassRight = SORT_CELL_CLASS_RIGHT;
 
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
@@ -202,19 +151,19 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <SortableHead sortField="groupName">Grupo Econômico</SortableHead>
-              <SortableHead sortField="entityName">Entidade Componente</SortableHead>
-              <SortableHead sortField="bankName">Banco</SortableHead>
-              <SortableHead sortField="contract_number">Nº Contrato</SortableHead>
-              <SortableHead sortField="categoryLabel">Categoria da Operação</SortableHead>
-              <SortableHead sortField="guaranteeLabel">Garantia</SortableHead>
-              <SortableHead sortField="operation_value" right>Valor da Operação</SortableHead>
-              <SortableHead sortField="fixed_rate" right>Juros a.a.</SortableHead>
-              <SortableHead sortField="cet" right>CET a.a.</SortableHead>
-              <SortableHead sortField="shortTerm" right>Circulante</SortableHead>
-              <SortableHead sortField="longTerm" right>Não Circulante</SortableHead>
-              <SortableHead sortField="status">Status</SortableHead>
-              <TableHead className={headClass} />
+              <SortableHead sortField="groupName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Grupo Econômico</SortableHead>
+              <SortableHead sortField="entityName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Entidade Componente</SortableHead>
+              <SortableHead sortField="bankName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Banco</SortableHead>
+              <SortableHead sortField="contract_number" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Nº Contrato</SortableHead>
+              <SortableHead sortField="categoryLabel" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Categoria da Operação</SortableHead>
+              <SortableHead sortField="guaranteeLabel" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Garantia</SortableHead>
+              <SortableHead sortField="operation_value" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Valor da Operação</SortableHead>
+              <SortableHead sortField="fixed_rate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Juros a.a.</SortableHead>
+              <SortableHead sortField="cet" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>CET a.a.</SortableHead>
+              <SortableHead sortField="shortTerm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Circulante</SortableHead>
+              <SortableHead sortField="longTerm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Não Circulante</SortableHead>
+              <SortableHead sortField="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Status</SortableHead>
+              <TableHead className={SORT_HEAD_CLASS} />
             </TableRow>
           </TableHeader>
           <TableBody>

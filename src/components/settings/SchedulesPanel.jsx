@@ -36,10 +36,10 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
 import {
   DAY_OPTIONS,
   INTERVAL_OPTIONS,
@@ -65,6 +65,26 @@ function formatDateTime(value) {
 function selectedTask(tasks, key) {
   return tasks.find((item) => item.key === key) || null;
 }
+
+// Colunas ordenáveis por clique no título (mesma configuração da tabela de
+// Contratos) — cada linha é { task, job }, por isso usam getValue em vez de
+// ler `row[key]` direto.
+const SCHEDULE_SORT_COLUMNS = {
+  taskLabel: { getValue: (row) => row.task.label },
+  jobNome: { getValue: (row) => row.job?.nome || "" },
+  repeticao: { getValue: (row) => (row.job ? scheduleLabel(row.job) : "") },
+  status: {
+    getValue: (row) => (row.job ? (row.job.executando ? "Executando" : row.job.ativo ? "Ativo" : "Pausado") : "Pendente"),
+  },
+  ultimaExecucaoEm: {
+    numeric: true,
+    getValue: (row) => (row.job?.ultimaExecucaoEm ? new Date(row.job.ultimaExecucaoEm).getTime() : 0),
+  },
+  proximaExecucaoEm: {
+    numeric: true,
+    getValue: (row) => (row.job?.ativo && row.job?.proximaExecucaoEm ? new Date(row.job.proximaExecucaoEm).getTime() : 0),
+  },
+};
 
 export default function SchedulesPanel() {
   const { withProcessing } = useProcessing();
@@ -105,6 +125,9 @@ export default function SchedulesPanel() {
     [tasks, jobByTask]
   );
   const missingTasks = rows.filter((row) => !row.job).map((row) => row.task);
+  // Ordenação por coluna (clique no título) — mesma configuração da tabela
+  // de Contratos, ver src/components/ui/sortable-table.jsx.
+  const { sortKey, sortDir, toggleSort, sortedRows } = useSortableRows(rows, SCHEDULE_SORT_COLUMNS);
 
   const openCreate = (task) => {
     const chosen = task || missingTasks[0] || tasks[0];
@@ -254,19 +277,19 @@ export default function SchedulesPanel() {
       ) : (
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Tarefa</TableHead>
-              <TableHead>Agendamento</TableHead>
-              <TableHead>Repetição</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Última execução</TableHead>
-              <TableHead>Próxima</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <SortableHead sortField="taskLabel" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Tarefa</SortableHead>
+              <SortableHead sortField="jobNome" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Agendamento</SortableHead>
+              <SortableHead sortField="repeticao" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Repetição</SortableHead>
+              <SortableHead sortField="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Status</SortableHead>
+              <SortableHead sortField="ultimaExecucaoEm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Última execução</SortableHead>
+              <SortableHead sortField="proximaExecucaoEm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Próxima</SortableHead>
+              <SortableHead right>Ações</SortableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map(({ task, job }) => (
-              <TableRow key={task.key}>
+            {sortedRows.map(({ task, job }) => (
+              <TableRow key={task.key} className="hover:bg-slate-50">
                 <TableCell>
                   <div className="font-medium text-slate-900">{task.label}</div>
                   <div className="text-[11px] text-slate-400">{task.rotina}</div>

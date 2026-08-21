@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/table";
 import { base44 } from "@/api/base44Client";
 import { normalizeEmpresaCode } from "@/lib/empresaCode";
+import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
 
 const EMPRESA_ALL = "__all__";
 const TIPO_ALL = "__all__";
@@ -57,6 +58,19 @@ function vinculoLabel(item) {
   if (item.ambiguous) return "Ambíguo";
   return "Sem vínculo";
 }
+
+// Mesma configuração de reordenação por clique no título da tabela de
+// Contratos. Checkbox fica de fora (não faz sentido ordenar).
+const NATURE_IMPORT_SORT_COLUMNS = {
+  entidade: { getValue: (item) => vinculoLabel(item) },
+  empresa: { getValue: (item) => empresaLabel(item.empresa) },
+  codigo: { getValue: (item) => item.codigo || "" },
+  descricao: { getValue: (item) => item.descricao || "" },
+  tipo: { getValue: (item) => (item.tipo_natureza === "sintetica" ? "Sintética" : "Analítica") },
+  tipoConta: { getValue: (item) => item.tipo_conta || "" },
+  lcdpr: { getValue: (item) => (item.gera_lcdpr ? "Sim" : "Não") },
+  situacao: { getValue: (item) => (item.already_exists ? "Já cadastrada" : "Nova") },
+};
 
 function FilterSelect({ label, value, onValueChange, children }) {
   return (
@@ -172,6 +186,8 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
       return true;
     });
   }, [items, search, empresaFilter, vinculoFilter, lcdprFilter, tipoNaturezaFilter, tipoContaFilter, situacaoFilter]);
+
+  const { sortKey, sortDir, toggleSort, sortedRows: sortedFiltered } = useSortableRows(filtered, NATURE_IMPORT_SORT_COLUMNS);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((item) => selectedKeys.has(rowKey(item)));
   const someFilteredSelected = filtered.some((item) => selectedKeys.has(rowKey(item)));
@@ -340,25 +356,25 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
                         onChange={toggleFiltered}
                       />
                     </TableHead>
-                    <TableHead>Entidade</TableHead>
-                    <TableHead>Empresa</TableHead>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Receita/Despesa</TableHead>
-                    <TableHead>LCDPR</TableHead>
-                    <TableHead>Situação</TableHead>
+                    <SortableHead sortField="entidade" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Entidade</SortableHead>
+                    <SortableHead sortField="empresa" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Empresa</SortableHead>
+                    <SortableHead sortField="codigo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Código</SortableHead>
+                    <SortableHead sortField="descricao" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Descrição</SortableHead>
+                    <SortableHead sortField="tipo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Tipo</SortableHead>
+                    <SortableHead sortField="tipoConta" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Receita/Despesa</SortableHead>
+                    <SortableHead sortField="lcdpr" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>LCDPR</SortableHead>
+                    <SortableHead sortField="situacao" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Situação</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.length === 0 ? (
+                  {sortedFiltered.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center text-slate-500 py-8">
                         Nenhuma natureza encontrada.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map((item) => {
+                    sortedFiltered.map((item) => {
                       const key = rowKey(item);
                       return (
                         <TableRow key={key} className="cursor-pointer" onClick={() => toggleKey(key)}>

@@ -4,7 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Upload, Calendar, Loader2, Trash2, RefreshCw } from "lucide-react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
+import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
+
+// Ordena como data (não string) — holiday_date é "YYYY-MM-DD", que já
+// ordenaria certo como texto, mas fica explícito e resiste a outros formatos.
+const HOLIDAY_SORT_COLUMNS = {
+  holiday_date: { numeric: true, getValue: (row) => new Date(row.holiday_date).getTime() },
+};
 
 export default function HolidayImporter() {
   const [holidays, setHolidays] = React.useState([]);
@@ -12,7 +19,6 @@ export default function HolidayImporter() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState(null);
   const [page, setPage] = React.useState(0);
-  const [sortOrder, setSortOrder] = React.useState("desc");
   const fileInputRef = React.useRef(null);
 
   const pageSize = 50;
@@ -25,7 +31,7 @@ export default function HolidayImporter() {
     setLoading(true);
     setError(null);
     try {
-      const data = await base44.entities.Holiday.list(sortOrder === "desc" ? "-holiday_date" : "holiday_date", 1000);
+      const data = await base44.entities.Holiday.list("-holiday_date", 1000);
       setHolidays(data);
     } catch (err) {
       setError("Erro ao carregar feriados: " + err.message);
@@ -130,16 +136,10 @@ export default function HolidayImporter() {
     }
   };
 
-  const toggleSort = () => {
-    setSortOrder(prev => prev === "desc" ? "asc" : "desc");
-    setPage(0);
-  };
-
-  const sortedHolidays = [...holidays].sort((a, b) => {
-    const dateA = new Date(a.holiday_date);
-    const dateB = new Date(b.holiday_date);
-    return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
-  });
+  // Ordenação por clique no título (mesma configuração da tabela de
+  // Contratos) — ordem padrão sem coluna selecionada: mais recente primeiro.
+  const defaultSorted = [...holidays].sort((a, b) => new Date(b.holiday_date) - new Date(a.holiday_date));
+  const { sortKey, sortDir, toggleSort, sortedRows: sortedHolidays } = useSortableRows(defaultSorted, HOLIDAY_SORT_COLUMNS);
 
   const paginatedHolidays = sortedHolidays.slice(page * pageSize, (page + 1) * pageSize);
   const totalPages = Math.ceil(sortedHolidays.length / pageSize);
@@ -196,23 +196,20 @@ export default function HolidayImporter() {
           <>
             <div className="flex items-center justify-between text-sm text-slate-600">
               <span>{sortedHolidays.length} feriados cadastrados</span>
-              <Button variant="ghost" size="sm" onClick={toggleSort}>
-                Ordenar: {sortOrder === "desc" ? "Mais recente" : "Mais antigo"}
-              </Button>
             </div>
 
             <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Dia da Semana</TableHead>
-                    <TableHead>Feriado</TableHead>
+                  <TableRow className="hover:bg-transparent">
+                    <SortableHead sortField="holiday_date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Data</SortableHead>
+                    <SortableHead sortField="day_of_week" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Dia da Semana</SortableHead>
+                    <SortableHead sortField="holiday_name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Feriado</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedHolidays.map((holiday) => (
-                    <TableRow key={holiday.id}>
+                    <TableRow key={holiday.id} className="hover:bg-slate-50">
                       <TableCell className="text-sm">
                         {new Date(holiday.holiday_date + "T12:00:00").toLocaleDateString("pt-BR")}
                       </TableCell>

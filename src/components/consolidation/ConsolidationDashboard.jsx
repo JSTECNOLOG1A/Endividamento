@@ -8,10 +8,10 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, Area, AreaChart } from "recharts";
 import { TrendingUp, PieChart as PieChartIcon, Activity, Calendar, Download, Eye } from "lucide-react";
 import { format, parseISO, isBefore, isAfter, addMonths } from "date-fns";
@@ -76,6 +76,34 @@ function getUpcomingPayments(contract, referenceDate, months = 12) {
     return [];
   }
 }
+
+// Config de ordenação das 4 tabelas abaixo — constantes fora do componente
+// (referência estável entre renders), mesmo padrão de ContractsList.jsx.
+const DRILLDOWN_SORT_COLUMNS = {
+  operation_value: { numeric: true },
+  saldoDevedor: { numeric: true },
+  pctAmortizado: { numeric: true },
+  jurosFuturos: { numeric: true },
+};
+const GROUP_SORT_COLUMNS = {
+  contracts: { numeric: true },
+  valorOriginal: { numeric: true },
+  saldoAtual: { numeric: true },
+  pctAmortizado: { numeric: true },
+  jurosFuturos: { numeric: true },
+};
+const BANK_SORT_COLUMNS = {
+  contracts: { numeric: true },
+  valorOriginal: { numeric: true },
+  saldoAtual: { numeric: true },
+  concentration: { numeric: true },
+};
+const OP_SORT_COLUMNS = {
+  contracts: { numeric: true },
+  valorOriginal: { numeric: true },
+  saldoAtual: { numeric: true },
+  percentage: { numeric: true },
+};
 
 export default function ConsolidationDashboard({ contracts, groups, entities, banks }) {
   const today = format(new Date(), "yyyy-MM-dd");
@@ -208,6 +236,46 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
   const totalContracts = filteredContracts.length;
   const amortizadoTotal = totalValorOriginal - totalSaldoAtual;
 
+  // Linhas das 4 tabelas abaixo, já com o campo derivado (% amortizado /
+  // concentração) calculado e a ordenação padrão (por saldo atual, maior pra
+  // menor) aplicada — a reordenação por clique no título (useSortableRows)
+  // substitui essa ordem só quando o usuário clica em algum título; os hooks
+  // ficam aqui em cima, antes do "return" do drill-down, pra respeitar a
+  // regra de hooks do React (sempre chamados na mesma ordem, mesmo branch).
+  const drilldownGroupData = drilldownGroup ? consolidation.byGroup.find((g) => g.name === drilldownGroup) : null;
+  const drilldownRows = useMemo(() => {
+    return (drilldownGroupData?.contractsList || []).map((c, idx) => ({
+      ...c,
+      _key: c.id ?? idx,
+      pctAmortizado: c.operation_value > 0 ? ((c.operation_value - c.saldoDevedor) / c.operation_value) * 100 : 0,
+    }));
+  }, [drilldownGroupData]);
+  const drilldownSort = useSortableRows(drilldownRows, DRILLDOWN_SORT_COLUMNS);
+
+  const groupRows = useMemo(() => {
+    return [...consolidation.byGroup]
+      .sort((a, b) => b.saldoAtual - a.saldoAtual)
+      .map((g) => ({
+        ...g,
+        pctAmortizado: g.valorOriginal > 0 ? ((g.valorOriginal - g.saldoAtual) / g.valorOriginal) * 100 : 0,
+      }));
+  }, [consolidation]);
+  const groupSort = useSortableRows(groupRows, GROUP_SORT_COLUMNS);
+
+  const bankRows = useMemo(() => {
+    return [...consolidation.byBank]
+      .sort((a, b) => b.saldoAtual - a.saldoAtual)
+      .map((b) => ({ ...b, concentration: totalSaldoAtual > 0 ? (b.saldoAtual / totalSaldoAtual) * 100 : 0 }));
+  }, [consolidation, totalSaldoAtual]);
+  const bankSort = useSortableRows(bankRows, BANK_SORT_COLUMNS);
+
+  const opRows = useMemo(() => {
+    return [...consolidation.byOperationType]
+      .sort((a, b) => b.saldoAtual - a.saldoAtual)
+      .map((o) => ({ ...o, percentage: totalSaldoAtual > 0 ? (o.saldoAtual / totalSaldoAtual) * 100 : 0 }));
+  }, [consolidation, totalSaldoAtual]);
+  const opSort = useSortableRows(opRows, OP_SORT_COLUMNS);
+
   const COLORS = ["#2563eb", "#7c3aed", "#db2777", "#ea580c", "#0891b2", "#059669"];
 
   const CustomTooltip = ({ active, payload }) => {
@@ -263,7 +331,7 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
   };
 
   if (drilldownGroup) {
-    const groupData = consolidation.byGroup.find(g => g.name === drilldownGroup);
+    const groupData = drilldownGroupData;
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -305,37 +373,32 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-slate-50">
-                    <TableHead className="text-xs">Banco</TableHead>
-                    <TableHead className="text-xs">Contrato</TableHead>
-                    <TableHead className="text-xs">Tipo</TableHead>
-                    <TableHead className="text-xs text-right">Valor Original</TableHead>
-                    <TableHead className="text-xs text-right">Saldo Atual</TableHead>
-                    <TableHead className="text-xs text-right">% Amortizado</TableHead>
-                    <TableHead className="text-xs text-right">Juros Futuros</TableHead>
+                  <TableRow className="hover:bg-transparent">
+                    <SortableHead sortField="bankName" sortKey={drilldownSort.sortKey} sortDir={drilldownSort.sortDir} onSort={drilldownSort.toggleSort}>Banco</SortableHead>
+                    <SortableHead sortField="contract_number" sortKey={drilldownSort.sortKey} sortDir={drilldownSort.sortDir} onSort={drilldownSort.toggleSort}>Contrato</SortableHead>
+                    <SortableHead sortField="operation_type" sortKey={drilldownSort.sortKey} sortDir={drilldownSort.sortDir} onSort={drilldownSort.toggleSort}>Tipo</SortableHead>
+                    <SortableHead sortField="operation_value" sortKey={drilldownSort.sortKey} sortDir={drilldownSort.sortDir} onSort={drilldownSort.toggleSort} right>Valor Original</SortableHead>
+                    <SortableHead sortField="saldoDevedor" sortKey={drilldownSort.sortKey} sortDir={drilldownSort.sortDir} onSort={drilldownSort.toggleSort} right>Saldo Atual</SortableHead>
+                    <SortableHead sortField="pctAmortizado" sortKey={drilldownSort.sortKey} sortDir={drilldownSort.sortDir} onSort={drilldownSort.toggleSort} right>% Amortizado</SortableHead>
+                    <SortableHead sortField="jurosFuturos" sortKey={drilldownSort.sortKey} sortDir={drilldownSort.sortDir} onSort={drilldownSort.toggleSort} right>Juros Futuros</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {groupData.contractsList.map((c, idx) => {
-                    const pctAmortizado = c.operation_value > 0 
-                      ? ((c.operation_value - c.saldoDevedor) / c.operation_value) * 100 
-                      : 0;
-                    return (
-                      <TableRow key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                        <TableCell className="text-xs">{c.bankName}</TableCell>
-                        <TableCell className="text-xs">{c.contract_number}</TableCell>
-                        <TableCell className="text-xs">{c.operation_type}</TableCell>
-                        <TableCell className="text-xs text-right">{formatCurrency(c.operation_value)}</TableCell>
-                        <TableCell className="text-xs text-right text-blue-600">{formatCurrency(c.saldoDevedor)}</TableCell>
-                        <TableCell className="text-xs text-right">
-                          <Badge variant={pctAmortizado > 70 ? "default" : "secondary"} className="text-xs">
-                            {pctAmortizado.toFixed(1)}%
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-right text-amber-600">{formatCurrency(c.jurosFuturos)}</TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {drilldownSort.sortedRows.map((c) => (
+                    <TableRow key={c._key} className="hover:bg-slate-50">
+                      <TableCell className="text-xs">{c.bankName}</TableCell>
+                      <TableCell className="text-xs">{c.contract_number}</TableCell>
+                      <TableCell className="text-xs">{c.operation_type}</TableCell>
+                      <TableCell className="text-xs text-right">{formatCurrency(c.operation_value)}</TableCell>
+                      <TableCell className="text-xs text-right text-blue-600">{formatCurrency(c.saldoDevedor)}</TableCell>
+                      <TableCell className="text-xs text-right">
+                        <Badge variant={c.pctAmortizado > 70 ? "default" : "secondary"} className="text-xs">
+                          {c.pctAmortizado.toFixed(1)}%
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-right text-amber-600">{formatCurrency(c.jurosFuturos)}</TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </div>
@@ -526,48 +589,41 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50">
-                  <TableHead className="text-xs font-semibold">Grupo</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Contratos</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Valor Original</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Saldo Atual</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">% Amortizado</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Juros Futuros</TableHead>
-                  <TableHead className="text-xs font-semibold"></TableHead>
+                <TableRow className="hover:bg-transparent">
+                  <SortableHead sortField="name" sortKey={groupSort.sortKey} sortDir={groupSort.sortDir} onSort={groupSort.toggleSort}>Grupo</SortableHead>
+                  <SortableHead sortField="contracts" sortKey={groupSort.sortKey} sortDir={groupSort.sortDir} onSort={groupSort.toggleSort} right>Contratos</SortableHead>
+                  <SortableHead sortField="valorOriginal" sortKey={groupSort.sortKey} sortDir={groupSort.sortDir} onSort={groupSort.toggleSort} right>Valor Original</SortableHead>
+                  <SortableHead sortField="saldoAtual" sortKey={groupSort.sortKey} sortDir={groupSort.sortDir} onSort={groupSort.toggleSort} right>Saldo Atual</SortableHead>
+                  <SortableHead sortField="pctAmortizado" sortKey={groupSort.sortKey} sortDir={groupSort.sortDir} onSort={groupSort.toggleSort} right>% Amortizado</SortableHead>
+                  <SortableHead sortField="jurosFuturos" sortKey={groupSort.sortKey} sortDir={groupSort.sortDir} onSort={groupSort.toggleSort} right>Juros Futuros</SortableHead>
+                  <SortableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {consolidation.byGroup
-                  .sort((a, b) => b.saldoAtual - a.saldoAtual)
-                  .map((group, idx) => {
-                    const pctAmortizado = group.valorOriginal > 0 
-                      ? ((group.valorOriginal - group.saldoAtual) / group.valorOriginal) * 100 
-                      : 0;
-                    return (
-                      <TableRow key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                        <TableCell className="text-sm font-medium text-slate-700">{group.name}</TableCell>
-                        <TableCell className="text-xs text-right">{group.contracts}</TableCell>
-                        <TableCell className="text-sm text-right">{formatCurrency(group.valorOriginal)}</TableCell>
-                        <TableCell className="text-sm text-right text-blue-600 font-semibold">{formatCurrency(group.saldoAtual)}</TableCell>
-                        <TableCell className="text-xs text-right">
-                          <Badge variant={pctAmortizado > 50 ? "default" : "secondary"}>
-                            {pctAmortizado.toFixed(1)}%
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-right text-amber-600">{formatCurrency(group.jurosFuturos)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-7 w-7"
-                            onClick={() => setDrilldownGroup(group.name)}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                {groupSort.sortedRows.map((group) => (
+                  <TableRow key={group.name} className="hover:bg-slate-50">
+                    <TableCell className="text-sm font-medium text-slate-700">{group.name}</TableCell>
+                    <TableCell className="text-xs text-right">{group.contracts}</TableCell>
+                    <TableCell className="text-sm text-right">{formatCurrency(group.valorOriginal)}</TableCell>
+                    <TableCell className="text-sm text-right text-blue-600 font-semibold">{formatCurrency(group.saldoAtual)}</TableCell>
+                    <TableCell className="text-xs text-right">
+                      <Badge variant={group.pctAmortizado > 50 ? "default" : "secondary"}>
+                        {group.pctAmortizado.toFixed(1)}%
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-right text-amber-600">{formatCurrency(group.jurosFuturos)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setDrilldownGroup(group.name)}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
@@ -586,40 +642,35 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50">
-                  <TableHead className="text-xs font-semibold">Banco</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Contratos</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Valor Original</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Saldo Atual</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">% Concentração</TableHead>
+                <TableRow className="hover:bg-transparent">
+                  <SortableHead sortField="name" sortKey={bankSort.sortKey} sortDir={bankSort.sortDir} onSort={bankSort.toggleSort}>Banco</SortableHead>
+                  <SortableHead sortField="contracts" sortKey={bankSort.sortKey} sortDir={bankSort.sortDir} onSort={bankSort.toggleSort} right>Contratos</SortableHead>
+                  <SortableHead sortField="valorOriginal" sortKey={bankSort.sortKey} sortDir={bankSort.sortDir} onSort={bankSort.toggleSort} right>Valor Original</SortableHead>
+                  <SortableHead sortField="saldoAtual" sortKey={bankSort.sortKey} sortDir={bankSort.sortDir} onSort={bankSort.toggleSort} right>Saldo Atual</SortableHead>
+                  <SortableHead sortField="concentration" sortKey={bankSort.sortKey} sortDir={bankSort.sortDir} onSort={bankSort.toggleSort} right>% Concentração</SortableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {consolidation.byBank
-                  .sort((a, b) => b.saldoAtual - a.saldoAtual)
-                  .map((bank, idx) => {
-                    const concentration = totalSaldoAtual > 0 ? (bank.saldoAtual / totalSaldoAtual) * 100 : 0;
-                    return (
-                      <TableRow key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                        <TableCell className="text-sm font-medium text-slate-700">{bank.name}</TableCell>
-                        <TableCell className="text-xs text-right">{bank.contracts}</TableCell>
-                        <TableCell className="text-sm text-right">{formatCurrency(bank.valorOriginal)}</TableCell>
-                        <TableCell className="text-sm text-right text-blue-600 font-semibold">
-                          {formatCurrency(bank.saldoAtual)}
-                        </TableCell>
-                        <TableCell className="text-xs text-right">
-                          <Badge
-                            variant={concentration > 30 ? "default" : concentration > 15 ? "secondary" : "outline"}
-                            className={`text-xs ${
-                              concentration > 30 ? "bg-red-100 text-red-800 border-red-200" : concentration > 15 ? "bg-amber-100 text-amber-800 border-amber-200" : ""
-                            }`}
-                          >
-                            {concentration.toFixed(1)}%
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                {bankSort.sortedRows.map((bank) => (
+                  <TableRow key={bank.name} className="hover:bg-slate-50">
+                    <TableCell className="text-sm font-medium text-slate-700">{bank.name}</TableCell>
+                    <TableCell className="text-xs text-right">{bank.contracts}</TableCell>
+                    <TableCell className="text-sm text-right">{formatCurrency(bank.valorOriginal)}</TableCell>
+                    <TableCell className="text-sm text-right text-blue-600 font-semibold">
+                      {formatCurrency(bank.saldoAtual)}
+                    </TableCell>
+                    <TableCell className="text-xs text-right">
+                      <Badge
+                        variant={bank.concentration > 30 ? "default" : bank.concentration > 15 ? "secondary" : "outline"}
+                        className={`text-xs ${
+                          bank.concentration > 30 ? "bg-red-100 text-red-800 border-red-200" : bank.concentration > 15 ? "bg-amber-100 text-amber-800 border-amber-200" : ""
+                        }`}
+                      >
+                        {bank.concentration.toFixed(1)}%
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
@@ -638,33 +689,28 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50">
-                  <TableHead className="text-xs font-semibold">Tipo</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Contratos</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Valor Original</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Saldo Atual</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">% do Total</TableHead>
+                <TableRow className="hover:bg-transparent">
+                  <SortableHead sortField="name" sortKey={opSort.sortKey} sortDir={opSort.sortDir} onSort={opSort.toggleSort}>Tipo</SortableHead>
+                  <SortableHead sortField="contracts" sortKey={opSort.sortKey} sortDir={opSort.sortDir} onSort={opSort.toggleSort} right>Contratos</SortableHead>
+                  <SortableHead sortField="valorOriginal" sortKey={opSort.sortKey} sortDir={opSort.sortDir} onSort={opSort.toggleSort} right>Valor Original</SortableHead>
+                  <SortableHead sortField="saldoAtual" sortKey={opSort.sortKey} sortDir={opSort.sortDir} onSort={opSort.toggleSort} right>Saldo Atual</SortableHead>
+                  <SortableHead sortField="percentage" sortKey={opSort.sortKey} sortDir={opSort.sortDir} onSort={opSort.toggleSort} right>% do Total</SortableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {consolidation.byOperationType
-                  .sort((a, b) => b.saldoAtual - a.saldoAtual)
-                  .map((op, idx) => {
-                    const percentage = totalSaldoAtual > 0 ? (op.saldoAtual / totalSaldoAtual) * 100 : 0;
-                    return (
-                      <TableRow key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                        <TableCell className="text-sm font-medium text-slate-700">{op.name}</TableCell>
-                        <TableCell className="text-xs text-right">{op.contracts}</TableCell>
-                        <TableCell className="text-sm text-right">{formatCurrency(op.valorOriginal)}</TableCell>
-                        <TableCell className="text-sm text-right text-blue-600 font-semibold">
-                          {formatCurrency(op.saldoAtual)}
-                        </TableCell>
-                        <TableCell className="text-xs text-right">
-                          <Badge variant="outline">{percentage.toFixed(1)}%</Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                {opSort.sortedRows.map((op) => (
+                  <TableRow key={op.name} className="hover:bg-slate-50">
+                    <TableCell className="text-sm font-medium text-slate-700">{op.name}</TableCell>
+                    <TableCell className="text-xs text-right">{op.contracts}</TableCell>
+                    <TableCell className="text-sm text-right">{formatCurrency(op.valorOriginal)}</TableCell>
+                    <TableCell className="text-sm text-right text-blue-600 font-semibold">
+                      {formatCurrency(op.saldoAtual)}
+                    </TableCell>
+                    <TableCell className="text-xs text-right">
+                      <Badge variant="outline">{op.percentage.toFixed(1)}%</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>

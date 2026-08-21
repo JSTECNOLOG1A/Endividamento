@@ -6,10 +6,10 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
 import { Trash2, Edit2, Users, Building, Tags, BookOpen, Wallet } from "lucide-react";
 
 const CLASS_LABELS = {
@@ -65,6 +65,23 @@ function columnsFor(type) {
   }
   return ["Registro", "Ações"];
 }
+
+// Campo ordenável correspondente a cada coluna de columnsFor() (mesma
+// posição, mesmo comprimento) — null = coluna não ordenável (ex.: "Ações").
+// Os itens já são as entidades "cruas" (group/entity/bank/...), então o
+// hook lê `item[campo]` direto, sem precisar de getValue customizado.
+function sortFieldsFor(type) {
+  if (type === "group") return ["group_name", "cnpj_group", "description", "status", null];
+  if (type === "entity") return ["entity_name", "codigo_empresa", "document_number", "entity_type", "status", null];
+  if (type === "bank") return ["bank_code", "bank_name", "bank_type", "status", null];
+  if (type === "bankAccount") return ["entity_name", "bank_name", "agencia", "conta", "nome", "origem", "status", null];
+  if (type === "nature") return ["entity_name", "codigo", "descricao", "tipo_natureza", "tipo_conta", "gera_lcdpr", "origem", "status", null];
+  if (type === "chart") return ["account_code", "account_name", "account_class", "account_type", "account_nature", "origem", "status", null];
+  return [null, null];
+}
+
+// Únicos campos que não devem ordenar como texto (boolean → 0/1).
+const NUMERIC_SORT_FIELDS = { gera_lcdpr: { numeric: true } };
 
 function Actions({ item, onEdit, onDelete, onRelated, relatedTitle }) {
   return (
@@ -201,6 +218,10 @@ function Cells({ item, type, onEdit, onDelete, onRelated, relatedTitle }) {
 export default function GovernanceList({ items, type, onEdit, onDelete, onSelect, selectedId, onRelated, relatedTitle }) {
   const EmptyIcon = type === "group" ? Building : type === "nature" ? Tags : type === "chart" ? BookOpen : type === "bankAccount" ? Wallet : Users;
   const columns = columnsFor(type);
+  const sortFields = sortFieldsFor(type);
+  // Reordenação por clique no título — mesma configuração da tabela de
+  // Contratos (ver src/components/ui/sortable-table.jsx).
+  const { sortKey, sortDir, toggleSort, sortedRows } = useSortableRows(items, NUMERIC_SORT_FIELDS);
 
   if (!items || items.length === 0) {
     return (
@@ -219,22 +240,26 @@ export default function GovernanceList({ items, type, onEdit, onDelete, onSelect
     <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
       <Table>
         <TableHeader>
-          <TableRow className="bg-slate-50 hover:bg-slate-50">
-            {columns.map((column) => (
-              <TableHead
+          <TableRow className="hover:bg-transparent">
+            {columns.map((column, idx) => (
+              <SortableHead
                 key={column}
-                className={`text-xs uppercase tracking-wider text-slate-500 ${column === "Ações" ? "text-right" : ""}`}
+                sortField={sortFields[idx]}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={toggleSort}
+                right={column === "Ações"}
               >
                 {column}
-              </TableHead>
+              </SortableHead>
             ))}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {items.map((item) => (
+          {sortedRows.map((item) => (
             <TableRow
               key={item.id}
-              className={`${onSelect ? "cursor-pointer" : ""} ${selectedId && selectedId === item.id ? "bg-violet-50 hover:bg-violet-50" : ""}`}
+              className={`${onSelect ? "cursor-pointer" : ""} hover:bg-slate-50 ${selectedId && selectedId === item.id ? "bg-violet-50 hover:bg-violet-50" : ""}`}
               onClick={() => onSelect?.(item)}
             >
               <Cells item={item} type={type} onEdit={onEdit} onDelete={onDelete} onRelated={onRelated} relatedTitle={relatedTitle} />

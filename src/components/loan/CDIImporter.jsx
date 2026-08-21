@@ -7,10 +7,10 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
 import {
   Select,
   SelectContent,
@@ -19,12 +19,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Database, ChevronLeft, ChevronRight, ArrowUpDown, Search, FileUp, AlertCircle, Trash2 } from "lucide-react";
+import { Database, ChevronLeft, ChevronRight, Search, FileUp, AlertCircle, Trash2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const PAGE_SIZE = 50;
+
+// Colunas ordenáveis por clique no título (mesma configuração da tabela de
+// Contratos) — rate_date e rate_type ordenam como texto (data ISO já ordena
+// certo como string), taxa e fator diário como número.
+const CDI_SORT_COLUMNS = {
+  annual_rate: { numeric: true },
+  daily_factor: { numeric: true },
+};
 
 export default function CDIImporter() {
   const [rates, setRates] = useState([]);
@@ -32,7 +40,6 @@ export default function CDIImporter() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
-  const [sortAsc, setSortAsc] = useState(false);
   const [filterStart, setFilterStart] = useState("");
   const [filterEnd, setFilterEnd] = useState("");
   const [rateType, setRateType] = useState("CDI");
@@ -290,15 +297,15 @@ export default function CDIImporter() {
     setImporting(false);
   }, [rateType]);
 
-  // Filter and sort
-  let displayData = [...rates];
-  if (filterStart) displayData = displayData.filter((r) => r.rate_date >= filterStart);
-  if (filterEnd) displayData = displayData.filter((r) => r.rate_date <= filterEnd);
-  if (sortAsc) {
-    displayData.sort((a, b) => a.rate_date.localeCompare(b.rate_date));
-  } else {
-    displayData.sort((a, b) => b.rate_date.localeCompare(a.rate_date));
-  }
+  // Filter (ordenação por coluna vem do useSortableRows abaixo — mesma
+  // configuração da tabela de Contratos). Ordem padrão sem coluna
+  // selecionada: data mais recente primeiro.
+  let filteredData = [...rates];
+  if (filterStart) filteredData = filteredData.filter((r) => r.rate_date >= filterStart);
+  if (filterEnd) filteredData = filteredData.filter((r) => r.rate_date <= filterEnd);
+  filteredData.sort((a, b) => b.rate_date.localeCompare(a.rate_date));
+
+  const { sortKey, sortDir, toggleSort, sortedRows: displayData } = useSortableRows(filteredData, CDI_SORT_COLUMNS);
 
   const totalPages = Math.ceil(displayData.length / PAGE_SIZE);
   const pageData = displayData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -434,10 +441,6 @@ export default function CDIImporter() {
                   className="h-8 text-xs w-36"
                   placeholder="Até"
                 />
-                <Button variant="ghost" size="sm" onClick={() => setSortAsc(!sortAsc)} className="h-8 gap-1 text-xs">
-                  <ArrowUpDown className="w-3 h-3" />
-                  {sortAsc ? "Cresc." : "Decresc."}
-                </Button>
               </div>
             </div>
           </CardHeader>
@@ -445,16 +448,16 @@ export default function CDIImporter() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-slate-50">
-                    <TableHead className="text-xs font-bold text-slate-700">Data</TableHead>
-                    <TableHead className="text-xs font-bold text-slate-700 text-right">Taxa (% a.a.)</TableHead>
-                    <TableHead className="text-xs font-bold text-slate-700 text-right">Fator Diário</TableHead>
-                    <TableHead className="text-xs font-bold text-slate-700">Tipo</TableHead>
+                  <TableRow className="hover:bg-transparent">
+                    <SortableHead sortField="rate_date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Data</SortableHead>
+                    <SortableHead sortField="annual_rate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Taxa (% a.a.)</SortableHead>
+                    <SortableHead sortField="daily_factor" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Fator Diário</SortableHead>
+                    <SortableHead sortField="rate_type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Tipo</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pageData.map((r, idx) => (
-                    <TableRow key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                  {pageData.map((r) => (
+                    <TableRow key={r.rate_date + r.rate_type} className="hover:bg-slate-50">
                       <TableCell className="text-xs">
                         {r.rate_date.includes("-")
                           ? format(new Date(r.rate_date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })

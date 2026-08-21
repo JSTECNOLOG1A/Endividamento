@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { base44 } from "@/api/base44Client";
+import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
 
 const ALL = "__all__";
 
@@ -42,6 +43,17 @@ const CLASS_LABELS = {
 function rowKey(item) {
   return String(item.account_code || "").trim();
 }
+
+// Mesma configuração de reordenação por clique no título da tabela de
+// Contratos. Checkbox fica de fora (não faz sentido ordenar).
+const CHART_IMPORT_SORT_COLUMNS = {
+  codigo: { getValue: (item) => item.account_code || "" },
+  nome: { getValue: (item) => item.account_name || "" },
+  classe: { getValue: (item) => CLASS_LABELS[item.account_class] || item.account_class || "" },
+  tipo: { getValue: (item) => (item.account_type === "sintetica" ? "Sintética" : "Analítica") },
+  natureza: { getValue: (item) => (item.account_nature === "credora" ? "Credora" : "Devedora") },
+  situacao: { getValue: (item) => (item.already_exists ? "Já cadastrada" : "Nova") },
+};
 
 function FilterSelect({ label, value, onValueChange, children }) {
   return (
@@ -115,6 +127,8 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
       return true;
     });
   }, [items, search, classFilter, tipoFilter, naturezaFilter, situacaoFilter]);
+
+  const { sortKey, sortDir, toggleSort, sortedRows: sortedFiltered } = useSortableRows(filtered, CHART_IMPORT_SORT_COLUMNS);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((item) => selectedKeys.has(rowKey(item)));
   const someFilteredSelected = filtered.some((item) => selectedKeys.has(rowKey(item)));
@@ -248,23 +262,23 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
                         onChange={toggleFiltered}
                       />
                     </TableHead>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Classe</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Natureza</TableHead>
-                    <TableHead>Situação</TableHead>
+                    <SortableHead sortField="codigo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Código</SortableHead>
+                    <SortableHead sortField="nome" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Nome</SortableHead>
+                    <SortableHead sortField="classe" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Classe</SortableHead>
+                    <SortableHead sortField="tipo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Tipo</SortableHead>
+                    <SortableHead sortField="natureza" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Natureza</SortableHead>
+                    <SortableHead sortField="situacao" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Situação</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.length === 0 ? (
+                  {sortedFiltered.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-slate-500 py-8">
                         Nenhuma conta encontrada.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map((item) => {
+                    sortedFiltered.map((item) => {
                       const key = rowKey(item);
                       return (
                         <TableRow key={key} className="cursor-pointer" onClick={() => toggleKey(key)}>

@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/table";
 import { base44 } from "@/api/base44Client";
 import { normalizeEmpresaCode } from "@/lib/empresaCode";
+import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
 
 const ALL = "__all__";
 
@@ -65,6 +66,23 @@ function bancoLabel(item) {
 function bankIsRegistered(item) {
   return Boolean(item.bank_id);
 }
+
+function situacaoLabel(item) {
+  const canImport = Boolean(item.entity_id && item.bank_id);
+  return item.already_exists ? "Já cadastrada" : canImport ? "Nova" : "Sem vínculo";
+}
+
+// Mesma configuração de reordenação por clique no título da tabela de
+// Contratos. Checkbox fica de fora (não faz sentido ordenar).
+const BANK_IMPORT_SORT_COLUMNS = {
+  entidade: { getValue: (item) => vinculoLabel(item) },
+  empresa: { getValue: (item) => empresaLabel(item.empresa) },
+  banco: { getValue: (item) => bancoLabel(item) },
+  agencia: { getValue: (item) => item.agencia || "" },
+  conta: { getValue: (item) => `${item.conta || ""}${item.digito ? `-${item.digito}` : ""}` },
+  nome: { getValue: (item) => item.nome || "" },
+  situacao: { getValue: (item) => situacaoLabel(item) },
+};
 
 function FilterSelect({ label, value, onValueChange, children }) {
   return (
@@ -175,6 +193,8 @@ export default function BankAccountImportModal({ open, onOpenChange, entities = 
       return true;
     });
   }, [items, search, empresaFilter, vinculoFilter, bancoFilter, situacaoFilter]);
+
+  const { sortKey, sortDir, toggleSort, sortedRows: sortedFiltered } = useSortableRows(filtered, BANK_IMPORT_SORT_COLUMNS);
 
   const importableFiltered = useMemo(
     () => filtered.filter(bankIsRegistered),
@@ -356,24 +376,24 @@ export default function BankAccountImportModal({ open, onOpenChange, entities = 
                         onChange={toggleFiltered}
                       />
                     </TableHead>
-                    <TableHead>Entidade</TableHead>
-                    <TableHead>Empresa</TableHead>
-                    <TableHead>Banco</TableHead>
-                    <TableHead>Agência</TableHead>
-                    <TableHead>Conta</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Situação</TableHead>
+                    <SortableHead sortField="entidade" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Entidade</SortableHead>
+                    <SortableHead sortField="empresa" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Empresa</SortableHead>
+                    <SortableHead sortField="banco" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Banco</SortableHead>
+                    <SortableHead sortField="agencia" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Agência</SortableHead>
+                    <SortableHead sortField="conta" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Conta</SortableHead>
+                    <SortableHead sortField="nome" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Nome</SortableHead>
+                    <SortableHead sortField="situacao" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Situação</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.length === 0 ? (
+                  {sortedFiltered.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center text-slate-500 py-8">
                         Nenhuma conta encontrada.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map((item) => {
+                    sortedFiltered.map((item) => {
                       const key = rowKey(item);
                       const canImport = Boolean(item.entity_id && item.bank_id);
                       const registered = bankIsRegistered(item);

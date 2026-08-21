@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { CheckCircle2, AlertTriangle, Lock, RotateCcw, Calculator, ClipboardCheck, Settings2, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useSortableRows, SortableTh } from "@/components/ui/sortable-table";
 import AccountingMatrixConfig from "./AccountingMatrixConfig";
 import {
   EVENT_TYPE_LABELS,
@@ -99,6 +100,33 @@ function lastDayOfMonth(year, month) {
 function competenciaDate(year, month) {
   return `${year}-${String(month).padStart(2, "0")}-01`;
 }
+
+// Mesma configuração de reordenação por clique no título da tabela de
+// Contratos, aplicada às 3 tabelas do fechamento contábil (Passo 1/2/3).
+const STEP1_SORT_COLUMNS = {
+  contrato: { getValue: (r) => r.contract.contract_number },
+  vencimento: { numeric: true, getValue: (r) => (r.row.dataVencimento ? new Date(r.row.dataVencimento).getTime() : 0) },
+  principal: { numeric: true, getValue: (r) => r.row.amortizacao || 0 },
+  juros: { numeric: true, getValue: (r) => r.row.jurosPagos || 0 },
+  totalPago: { numeric: true, getValue: (r) => (r.settlement && !r.isEstornado ? r.settlement.total_paid || 0 : -1) },
+  situacao: {
+    getValue: (r) =>
+      !r.settlement || r.isEstornado ? "0-pendente" : r.settlement.triggers_recalculation ? "1-recalculo" : "2-liquidada",
+  },
+};
+
+const STEP2_SORT_COLUMNS = {
+  evento: { getValue: (r) => r.label },
+  valor: { numeric: true, getValue: (r) => r.amount },
+};
+
+const STEP3_SORT_COLUMNS = {
+  data: { numeric: true, getValue: (r) => (r.entry_date ? new Date(r.entry_date).getTime() : 0) },
+  evento: { getValue: (r) => r.eventLabel },
+  conta: { getValue: (r) => r.accountLabel },
+  debito: { numeric: true, getValue: (r) => (r.side === "debito" ? r.amount || 0 : -1) },
+  credito: { numeric: true, getValue: (r) => (r.side === "credito" ? r.amount || 0 : -1) },
+};
 
 function extractScheduleRows(contract) {
   if (!contract.schedule_data) return [];
@@ -448,6 +476,48 @@ export default function FechamentoContabil({ entityId, entityName }) {
     return map;
   }, [settlements]);
 
+  // Linhas com os dados derivados (settlement/situação) já resolvidos, pra
+  // alimentar a ordenação por clique no título sem recalcular a cada render
+  // — mesma configuração visual e de reordenação da tabela de Contratos.
+  // Hooks precisam ficar antes do "if (!entityId) return" logo abaixo.
+  const step1Rows = useMemo(
+    () =>
+      scheduleRowsInMonth.map(({ contract, row }) => {
+        const settlement = settlementByKey.get(`${contract.id}|${row.parcela}`);
+        const isEstornado = settlement?.status === "estornado";
+        return { contract, row, settlement, isEstornado, _key: `${contract.id}-${row.parcela}` };
+      }),
+    [scheduleRowsInMonth, settlementByKey]
+  );
+  const step1Sort = useSortableRows(step1Rows, STEP1_SORT_COLUMNS);
+
+  const step2Rows = useMemo(
+    () =>
+      calcResult
+        ? Object.entries(calcResult.eventTotals).map(([type, amount]) => ({
+            type,
+            amount,
+            label: EVENT_TYPE_LABELS[type] || type,
+          }))
+        : [],
+    [calcResult]
+  );
+  const step2Sort = useSortableRows(step2Rows, STEP2_SORT_COLUMNS);
+
+  const step3Rows = useMemo(
+    () =>
+      journalResult
+        ? journalResult.entries.map((e, i) => ({
+            ...e,
+            _key: i,
+            eventLabel: EVENT_TYPE_LABELS[e.event_type] || e.event_type,
+            accountLabel: accountName(e.account_id),
+          }))
+        : [],
+    [journalResult, chartOfAccounts]
+  );
+  const step3Sort = useSortableRows(step3Rows, STEP3_SORT_COLUMNS);
+
   const handleOpenSettlement = async (contract, row) => {
     const activeClosing = closing || (await ensureClosing());
     if (!activeClosing) return;
@@ -754,21 +824,19 @@ export default function FechamentoContabil({ entityId, entityName }) {
               <table className="w-full text-sm min-w-[820px]">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Contrato</th>
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Vencimento</th>
-                    <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">Principal previsto</th>
-                    <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">Juros previsto</th>
-                    <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">Total pago</th>
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Situação</th>
+                    <SortableTh sortField="contrato" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort}>Contrato</SortableTh>
+                    <SortableTh sortField="vencimento" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort}>Vencimento</SortableTh>
+                    <SortableTh sortField="principal" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort} right>Principal previsto</SortableTh>
+                    <SortableTh sortField="juros" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort} right>Juros previsto</SortableTh>
+                    <SortableTh sortField="totalPago" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort} right>Total pago</SortableTh>
+                    <SortableTh sortField="situacao" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort}>Situação</SortableTh>
                     <th className="px-2 py-2" />
                   </tr>
                 </thead>
                 <tbody>
-                  {scheduleRowsInMonth.map(({ contract, row }) => {
-                    const settlement = settlementByKey.get(`${contract.id}|${row.parcela}`);
-                    const isEstornado = settlement?.status === "estornado";
+                  {step1Sort.sortedRows.map(({ contract, row, settlement, isEstornado, _key }) => {
                     return (
-                      <tr key={`${contract.id}-${row.parcela}`} className="border-b border-slate-100 hover:bg-slate-50">
+                      <tr key={_key} className="border-b border-slate-100 hover:bg-slate-50">
                         <td className="px-2 py-2 text-slate-700">{contract.contract_number}</td>
                         <td className="px-2 py-2 text-slate-700">{row.dataVencimento?.split("-").reverse().join("/")}</td>
                         <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(row.amortizacao)}</td>
@@ -868,14 +936,14 @@ export default function FechamentoContabil({ entityId, entityName }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Evento</th>
-                    <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">Valor</th>
+                    <SortableTh sortField="evento" sortKey={step2Sort.sortKey} sortDir={step2Sort.sortDir} onSort={step2Sort.toggleSort}>Evento</SortableTh>
+                    <SortableTh sortField="valor" sortKey={step2Sort.sortKey} sortDir={step2Sort.sortDir} onSort={step2Sort.toggleSort} right>Valor</SortableTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(calcResult.eventTotals).map(([type, amount]) => (
+                  {step2Sort.sortedRows.map(({ type, amount, label }) => (
                     <tr key={type} className="border-b border-slate-100">
-                      <td className="px-2 py-2 text-slate-700">{EVENT_TYPE_LABELS[type] || type}</td>
+                      <td className="px-2 py-2 text-slate-700">{label}</td>
                       <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(amount)}</td>
                     </tr>
                   ))}
@@ -908,19 +976,19 @@ export default function FechamentoContabil({ entityId, entityName }) {
               <table className="w-full text-sm min-w-[700px]">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Data</th>
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Evento</th>
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Conta</th>
-                    <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">Débito</th>
-                    <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">Crédito</th>
+                    <SortableTh sortField="data" sortKey={step3Sort.sortKey} sortDir={step3Sort.sortDir} onSort={step3Sort.toggleSort}>Data</SortableTh>
+                    <SortableTh sortField="evento" sortKey={step3Sort.sortKey} sortDir={step3Sort.sortDir} onSort={step3Sort.toggleSort}>Evento</SortableTh>
+                    <SortableTh sortField="conta" sortKey={step3Sort.sortKey} sortDir={step3Sort.sortDir} onSort={step3Sort.toggleSort}>Conta</SortableTh>
+                    <SortableTh sortField="debito" sortKey={step3Sort.sortKey} sortDir={step3Sort.sortDir} onSort={step3Sort.toggleSort} right>Débito</SortableTh>
+                    <SortableTh sortField="credito" sortKey={step3Sort.sortKey} sortDir={step3Sort.sortDir} onSort={step3Sort.toggleSort} right>Crédito</SortableTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {journalResult.entries.map((e, i) => (
-                    <tr key={i} className="border-b border-slate-100">
+                  {step3Sort.sortedRows.map((e) => (
+                    <tr key={e._key} className="border-b border-slate-100">
                       <td className="px-2 py-2 text-slate-700">{e.entry_date?.split("-").reverse().join("/")}</td>
-                      <td className="px-2 py-2 text-slate-700">{EVENT_TYPE_LABELS[e.event_type] || e.event_type}</td>
-                      <td className="px-2 py-2 text-slate-700">{accountName(e.account_id)}</td>
+                      <td className="px-2 py-2 text-slate-700">{e.eventLabel}</td>
+                      <td className="px-2 py-2 text-slate-700">{e.accountLabel}</td>
                       <td className="px-2 py-2 text-right text-slate-700">{e.side === "debito" ? formatCurrency(e.amount) : ""}</td>
                       <td className="px-2 py-2 text-right text-slate-700">{e.side === "credito" ? formatCurrency(e.amount) : ""}</td>
                     </tr>

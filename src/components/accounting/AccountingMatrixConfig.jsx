@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Settings2, Save } from "lucide-react";
 import { SETTLEMENT_EVENT_TYPES, EVENT_TYPE_LABELS } from "@/lib/accountingClosing";
 import { OPERATION_CATEGORIES } from "@/lib/contractOptions";
+import { SORT_HEAD_CLASS } from "@/components/ui/sortable-table";
 
 const EVENT_TYPES_ORDERED = Object.values(SETTLEMENT_EVENT_TYPES);
 
@@ -124,11 +125,16 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
         <div className="max-h-[70vh] overflow-y-auto pr-1">
           <table className="w-full text-sm">
             <thead>
+              {/* Sem reordenação por clique: é um formulário de configuração
+                  (cada linha é um tipo de evento contábil com Selects de
+                  débito/crédito editáveis) numa ordem fixa e proposital —
+                  não é uma lista de dados navegável. Só o estilo visual do
+                  cabeçalho é padronizado com o resto do app. */}
               <tr className="border-b border-slate-200 sticky top-0 bg-white">
-                <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Evento</th>
-                <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Conta de débito</th>
-                <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Conta de crédito</th>
-                <th className="px-2 py-2" />
+                <th className={SORT_HEAD_CLASS}>Evento</th>
+                <th className={SORT_HEAD_CLASS}>Conta de débito</th>
+                <th className={SORT_HEAD_CLASS}>Conta de crédito</th>
+                <th className="px-2 py-2 bg-slate-50" />
               </tr>
             </thead>
             <tbody>
