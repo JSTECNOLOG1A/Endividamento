@@ -283,54 +283,56 @@ export default function PTAXImporter() {
             Importação de PTAX — Dólar (USD)
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Arquivo CSV do Bacen (PTAX USD)</Label>
-            <Input
-              type="file"
-              accept=".csv,.txt"
-              onChange={handleFileChange}
-              className="h-9"
-              disabled={importing}
-            />
-          </div>
-
-          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-            <p className="text-xs text-slate-500">
-              <strong>Layout:</strong> DDMMYYYY TAB 220 TAB A TAB USD TAB taxa_compra TAB taxa_venda TAB 1 TAB 1 —
-              também aceita separador por ; ou | . Exemplo: <code className="bg-slate-100 px-1 rounded">02012026	220	A	USD	5,4366	5,4372	1	1</code>
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <Button type="button" onClick={handleImport} disabled={!file || importing || loadingCurrencies} className="h-9">
-              <FileUp className="w-4 h-4 mr-2" />
-              {importing ? "Importando..." : "Importar PTAX USD"}
-            </Button>
-          </div>
-
-          <div className="pt-2 border-t border-slate-100">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
-              Ou importar automaticamente do BACEN
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Data Inicial</Label>
-                <Input type="date" value={bacenStart} onChange={(e) => setBacenStart(e.target.value)} className="h-9" disabled={importingBacen} />
+        <CardContent className="space-y-3">
+          {/* Lado a lado: automático (BACEN) primeiro, CSV manual depois —
+              mesma ordem de prioridade em PTAXImporter e CDIImporter. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 md:divide-x md:divide-slate-200">
+            <div className="space-y-2 md:pr-6">
+              <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5 text-blue-600" />
+                Importar automaticamente do BACEN
+              </Label>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-slate-500">Data inicial</Label>
+                  <Input type="date" value={bacenStart} onChange={(e) => setBacenStart(e.target.value)} className="h-9 w-[9.5rem]" disabled={importingBacen} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-slate-500">Data final</Label>
+                  <Input type="date" value={bacenEnd} onChange={(e) => setBacenEnd(e.target.value)} className="h-9 w-[9.5rem]" disabled={importingBacen} />
+                </div>
+                <Button type="button" onClick={handleImportFromBACEN} disabled={importingBacen} className="h-9 gap-1.5">
+                  <Database className="w-3.5 h-3.5" />
+                  {importingBacen ? "Buscando..." : "Buscar PTAX no BACEN"}
+                </Button>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Data Final</Label>
-                <Input type="date" value={bacenEnd} onChange={(e) => setBacenEnd(e.target.value)} className="h-9" disabled={importingBacen} />
-              </div>
-              <Button type="button" onClick={handleImportFromBACEN} disabled={importingBacen} className="h-9 gap-1.5">
-                <Database className="w-3.5 h-3.5" />
-                {importingBacen ? "Buscando..." : "Buscar PTAX no BACEN"}
-              </Button>
+              <p className="text-[11px] text-slate-400">
+                Busca a série oficial do Banco Central (PTAX venda, olinda.bcb.gov.br) e importa só as datas que
+                ainda não estão no cadastro.
+              </p>
             </div>
-            <p className="text-xs text-slate-400 mt-2">
-              Busca a série oficial do Banco Central (PTAX venda, olinda.bcb.gov.br) pro período informado e importa
-              só as datas que ainda não estão no cadastro.
-            </p>
+
+            <div className="space-y-2 md:pl-6">
+              <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                <FileUp className="w-3.5 h-3.5 text-blue-600" />
+                Ou importe um arquivo CSV
+              </Label>
+              <div className="flex flex-wrap items-end gap-2">
+                <Input
+                  type="file"
+                  accept=".csv,.txt"
+                  onChange={handleFileChange}
+                  className="h-9 flex-1 min-w-[180px]"
+                  disabled={importing}
+                />
+                <Button type="button" onClick={handleImport} disabled={!file || importing || loadingCurrencies} className="h-9">
+                  {importing ? "Importando..." : "Importar"}
+                </Button>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Layout: DDMMYYYY 220 A USD taxa_compra taxa_venda 1 1 — aceita separador TAB, ; ou |.
+              </p>
+            </div>
           </div>
 
           {error && (

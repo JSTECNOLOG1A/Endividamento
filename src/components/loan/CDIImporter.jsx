@@ -320,62 +320,65 @@ export default function CDIImporter() {
             Importação de Séries — CDI / SELIC
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo de Taxa</Label>
-              <Select value={rateType} onValueChange={setRateType}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="CDI">CDI</SelectItem>
-                  <SelectItem value="SELIC">SELIC</SelectItem>
-                </SelectContent>
-              </Select>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5 max-w-[220px]">
+            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo de Taxa</Label>
+            <Select value={rateType} onValueChange={setRateType}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CDI">CDI</SelectItem>
+                <SelectItem value="SELIC">SELIC</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Lado a lado: automático (BACEN) primeiro, CSV manual depois —
+              mesma ordem de prioridade em CDIImporter e PTAXImporter. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 md:divide-x md:divide-slate-200">
+            <div className="space-y-2 md:pr-6">
+              <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5 text-blue-600" />
+                Importar automaticamente do BACEN
+              </Label>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-slate-500">Data inicial</Label>
+                  <Input type="date" value={bacenStart} onChange={(e) => setBacenStart(e.target.value)} className="h-9 w-[9.5rem]" disabled={importingBacen} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-slate-500">Data final</Label>
+                  <Input type="date" value={bacenEnd} onChange={(e) => setBacenEnd(e.target.value)} className="h-9 w-[9.5rem]" disabled={importingBacen} />
+                </div>
+                <Button type="button" onClick={handleImportFromBACEN} disabled={importingBacen} className="h-9 gap-1.5">
+                  <Database className="w-3.5 h-3.5" />
+                  {importingBacen ? "Buscando..." : `Buscar ${rateType} no BACEN`}
+                </Button>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Busca a série oficial do Banco Central (api.bcb.gov.br) e importa só as datas que ainda não estão
+                no banco.
+              </p>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Arquivo CSV</Label>
-              <div className="relative">
+
+            <div className="space-y-2 md:pl-6">
+              <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                <FileUp className="w-3.5 h-3.5 text-blue-600" />
+                Ou envie um arquivo CSV
+              </Label>
+              <div className="flex flex-wrap items-end gap-2">
                 <Input
                   type="file"
                   accept=".csv,.txt"
                   onChange={handleFileUpload}
-                  className="h-9"
+                  className="h-9 flex-1 min-w-[180px]"
                   disabled={importing}
                 />
               </div>
+              <p className="text-[11px] text-slate-400">
+                Layout: Data (DD/MM/AAAA); Taxa (% a.a.) — separador vírgula ou ponto-e-vírgula. Suporta séries com
+                mais de 10.000 registros.
+              </p>
             </div>
-
-          </div>
-
-          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-            <p className="text-xs text-slate-500">
-              <strong>Layout:</strong> Data (DD/MM/AAAA); Taxa (% a.a.) — Separador: vírgula ou ponto-e-vírgula.
-              Suporta séries com mais de 10.000 registros.
-            </p>
-          </div>
-
-          <div className="pt-2 border-t border-slate-100">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
-              Ou importar automaticamente do BACEN
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Data Inicial</Label>
-                <Input type="date" value={bacenStart} onChange={(e) => setBacenStart(e.target.value)} className="h-9" disabled={importingBacen} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Data Final</Label>
-                <Input type="date" value={bacenEnd} onChange={(e) => setBacenEnd(e.target.value)} className="h-9" disabled={importingBacen} />
-              </div>
-              <Button type="button" onClick={handleImportFromBACEN} disabled={importingBacen} className="h-9 gap-1.5">
-                <Database className="w-3.5 h-3.5" />
-                {importingBacen ? "Buscando..." : `Buscar ${rateType} no BACEN`}
-              </Button>
-            </div>
-            <p className="text-xs text-slate-400 mt-2">
-              Busca a série oficial do Banco Central (api.bcb.gov.br) pro período informado e importa só as datas
-              que ainda não estão no banco.
-            </p>
           </div>
 
           {error && (
