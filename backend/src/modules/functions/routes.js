@@ -15,7 +15,7 @@ import { syncReceivableTitlesFromApprovedContracts } from "../receivables/genera
 import { classifyReceivableTitles } from "../receivables/classify.js";
 import { integrateReceivableTitles, reverseReceivableTitles, refreshReceivableTitlesFromErp } from "../receivables/erpIntegrate.js";
 import { sendDocumentByEmail } from "../documents/sendByEmail.js";
-import { getPTAXFromBACEN, getRatesFromBACEN } from "./bacen.js";
+import { getPTAXFromBACEN, getPTAXRangeFromBACEN, getRatesFromBACEN } from "./bacen.js";
 
 async function validateAllApprovedContracts(payload = {}) {
   const { group_ids = null, entity_ids = null, limit = 1000 } = payload;
@@ -101,6 +101,7 @@ const FUNCTION_AUDIT = {
 
 const handlers = {
   getPTAXFromBACEN,
+  getPTAXRangeFromBACEN,
   getRatesFromBACEN,
   validateAllApprovedContracts,
   calculateAmortizationSchedule,

@@ -78,6 +78,49 @@ export async function getPTAXFromBACEN(payload = {}) {
   return { success: true, official: foundRate, targetDate, lag };
 }
 
+// Busca TODAS as cotações PTAX (venda) publicadas num período — usada pelo
+// bloco "Ou importar automaticamente do BACEN" da tela de PTAX, no mesmo
+// molde do que já existe pra CDI/SELIC logo abaixo (período → lista de
+// datas → importa só o que ainda não está no cadastro de Moedas). Diferente
+// de getPTAXFromBACEN acima (que devolve só a cotação mais próxima de UMA
+// data, usada no "Conciliar PTAX" de um contrato), aqui devolvemos a série
+// inteira do intervalo pedido.
+export async function getPTAXRangeFromBACEN(payload = {}) {
+  const { startDate, endDate } = payload;
+  if (!startDate || !endDate) {
+    const err = new Error("startDate e endDate são obrigatórios (YYYY-MM-DD)");
+    err.status = 400;
+    throw err;
+  }
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const url =
+    "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/" +
+    "CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)" +
+    `?@dataInicial='${formatOlindaDate(start)}'` +
+    `&@dataFinalCotacao='${formatOlindaDate(end)}'` +
+    `&$top=2000&$format=json`;
+  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!response.ok) {
+    const err = new Error(`BACEN API retornou ${response.status}`);
+    err.status = 502;
+    throw err;
+  }
+  const data = await response.json();
+  const values = Array.isArray(data.value) ? data.value : [];
+  const byDate = new Map();
+  for (const item of values) {
+    const parsed = parseOlindaItem(item);
+    if (parsed.rate_date && Number.isFinite(parsed.ptax_rate)) {
+      byDate.set(parsed.rate_date, parsed.ptax_rate);
+    }
+  }
+  const rates = [...byDate.entries()]
+    .map(([rate_date, ptax_rate]) => ({ rate_date, ptax_rate }))
+    .sort((a, b) => a.rate_date.localeCompare(b.rate_date));
+  return { success: true, count: rates.length, rates };
+}
+
 const BCB_DAILY_SERIES = { CDI: 12, SELIC: 11 };
 
 function formatBCBDate(date) {

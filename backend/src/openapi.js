@@ -35,7 +35,7 @@ export const openApiDocument = {
     "/contracts": { get: { summary: "Contratos (alias REST)" } },
     "/functions/{name}": {
       post: {
-        summary: "Funções: calculateAmortizationSchedule, getPTAXFromBACEN, getRatesFromBACEN, validateAllApprovedContracts",
+        summary: "Funções: calculateAmortizationSchedule, getPTAXFromBACEN, getPTAXRangeFromBACEN, getRatesFromBACEN, validateAllApprovedContracts",
       },
     },
     "/integrations": {
