@@ -551,7 +551,13 @@ export default function Simulator() {
       alert("Apenas arquivos PDF são permitidos");
       return;
     }
-    
+
+    const MAX_PDF_SIZE = 50 * 1024 * 1024; // mantido em sincronia com o limite do multer no backend (backend/src/app.js)
+    if (file.size > MAX_PDF_SIZE) {
+      alert(`Arquivo muito grande (${(file.size / (1024 * 1024)).toFixed(1)}MB). Tamanho máximo: 50MB. Tente compactar o PDF antes de anexar.`);
+      return;
+    }
+
     setIsUploadingPdf(true);
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
