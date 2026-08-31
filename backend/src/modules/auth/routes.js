@@ -63,8 +63,13 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      error.status = 400;
-      error.message = "Payload de login inválido";
+      // `message` é getter-only em ZodError (zod >=3.25) — atribuir direto
+      // lança TypeError e derruba a resposta para 500 em vez do 400 esperado.
+      const validationError = new Error("Payload de login inválido");
+      validationError.status = 400;
+      validationError.code = "VALIDATION";
+      next(validationError);
+      return;
     }
     next(error);
   }
