@@ -16,8 +16,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FileText, Trash2, Copy, ChevronRight, MoreHorizontal, Download, Mail } from "lucide-react";
-import { useSortableRows, SortableHead, SORT_HEAD_CLASS, SORT_CELL_CLASS, SORT_CELL_CLASS_RIGHT } from "@/components/ui/sortable-table";
+import { FileText, Trash2, Copy, MoreHorizontal, Download, Mail } from "lucide-react";
+import { useSortableRows, SortIcon } from "@/components/ui/sortable-table";
 import { statusLabel, statusBadgeClass, EDITABLE_STATUSES } from "@/lib/contractStatus";
 import { combineGuaranteeLabel, operationCategoryLabel } from "@/lib/contractOptions";
 import { computeContractCET } from "@/lib/cetFromSchedule";
@@ -97,6 +97,33 @@ const SORTABLE_COLUMNS = {
   status: { getValue: (row) => row.contract.status },
 };
 
+// Cabeçalho de coluna ordenável — versão LOCAL desta tabela (não a de
+// sortable-table.jsx): padding e fonte mais compactos, porque essa tabela
+// tem muitas colunas e precisa caber na largura da tela sem rolar.
+const HEAD_CLASS = "text-[11px] font-bold text-slate-700 uppercase tracking-wide whitespace-nowrap px-2 py-2 bg-slate-50 border-b-2 border-slate-200";
+const CELL_CLASS = "whitespace-nowrap px-2 py-1.5 text-[11px] text-slate-700";
+const CELL_CLASS_RIGHT = `${CELL_CLASS} text-right`;
+// Colunas de texto livre (nomes, categoria, garantia) são as que mais
+// alargam a tabela — os rótulos completos ("Financiamentos
+// (Investimento/CAPEX)", "Alienação Fiduciária + Aval") não cabem numa
+// largura razoável. Trunca com reticências (continua em 1 linha só) e
+// mostra o texto inteiro no tooltip nativo (`title`).
+function truncateClass(maxWidth) {
+  return `${CELL_CLASS} truncate ${maxWidth}`;
+}
+
+function CompactHead({ sortField, sortKey, sortDir, onSort, right, className = "", children }) {
+  return (
+    <TableHead
+      className={`${HEAD_CLASS}${right ? " text-right" : ""}${sortField ? " cursor-pointer select-none hover:bg-slate-100" : ""} ${className}`}
+      onClick={sortField ? () => onSort(sortField) : undefined}
+    >
+      {children}
+      {sortField && <SortIcon active={sortKey === sortField} dir={sortDir} />}
+    </TableHead>
+  );
+}
+
 export default function ContractsList({ contracts, banks, groups, entities, onView, onEdit, onDelete, onDuplicate, isLoading }) {
   const today = React.useMemo(() => new Date().toISOString().split("T")[0], []);
   const [emailTarget, setEmailTarget] = React.useState(null);
@@ -137,13 +164,8 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
     );
   }
 
-  // Cabeçalho e células em uma linha só (sem quebra de texto) — a tabela é
-  // larga de propósito; ela rola horizontalmente só em telas realmente
-  // estreitas, em vez de forçar rótulos e valores a quebrar em 2 linhas.
-  // Classes e componente de título ordenável vêm de sortable-table.jsx —
-  // mesma configuração visual em toda a ferramenta.
-  const cellClass = SORT_CELL_CLASS;
-  const cellClassRight = SORT_CELL_CLASS_RIGHT;
+  const cellClass = CELL_CLASS;
+  const cellClassRight = CELL_CLASS_RIGHT;
 
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
@@ -151,19 +173,19 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <SortableHead sortField="groupName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Grupo Econômico</SortableHead>
-              <SortableHead sortField="entityName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Entidade Componente</SortableHead>
-              <SortableHead sortField="bankName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Banco</SortableHead>
-              <SortableHead sortField="contract_number" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Nº Contrato</SortableHead>
-              <SortableHead sortField="categoryLabel" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Categoria da Operação</SortableHead>
-              <SortableHead sortField="guaranteeLabel" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Garantia</SortableHead>
-              <SortableHead sortField="operation_value" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Valor da Operação</SortableHead>
-              <SortableHead sortField="fixed_rate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Juros a.a.</SortableHead>
-              <SortableHead sortField="cet" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>CET a.a.</SortableHead>
-              <SortableHead sortField="shortTerm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Circulante</SortableHead>
-              <SortableHead sortField="longTerm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Não Circulante</SortableHead>
-              <SortableHead sortField="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Status</SortableHead>
-              <TableHead className={SORT_HEAD_CLASS} />
+              <CompactHead sortField="groupName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Grupo</CompactHead>
+              <CompactHead sortField="entityName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Entidade</CompactHead>
+              <CompactHead sortField="bankName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Banco</CompactHead>
+              <CompactHead sortField="contract_number" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Nº Contrato</CompactHead>
+              <CompactHead sortField="categoryLabel" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Categoria</CompactHead>
+              <CompactHead sortField="guaranteeLabel" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Garantia</CompactHead>
+              <CompactHead sortField="operation_value" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Valor</CompactHead>
+              <CompactHead sortField="fixed_rate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Juros a.a.</CompactHead>
+              <CompactHead sortField="cet" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>CET a.a.</CompactHead>
+              <CompactHead sortField="shortTerm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Circulante</CompactHead>
+              <CompactHead sortField="longTerm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Não Circ.</CompactHead>
+              <CompactHead sortField="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Status</CompactHead>
+              <TableHead className={HEAD_CLASS} />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -200,28 +222,28 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
                   }}
                   className="cursor-pointer hover:bg-slate-50"
                 >
-                  <TableCell className={cellClass}>{groupName}</TableCell>
-                  <TableCell className={cellClass}>{entityName}</TableCell>
-                  <TableCell className={cellClass}>{bankName}</TableCell>
+                  <TableCell className={truncateClass("max-w-[100px]")} title={groupName}>{groupName}</TableCell>
+                  <TableCell className={truncateClass("max-w-[120px]")} title={entityName}>{entityName}</TableCell>
+                  <TableCell className={truncateClass("max-w-[115px]")} title={bankName}>{bankName}</TableCell>
                   <TableCell className={cellClass}>{c.contract_number}</TableCell>
-                  <TableCell className={cellClass}>{categoryLabel}</TableCell>
-                  <TableCell className={cellClass}>{guaranteeLabel}</TableCell>
+                  <TableCell className={truncateClass("max-w-[125px]")} title={categoryLabel}>{categoryLabel}</TableCell>
+                  <TableCell className={truncateClass("max-w-[110px]")} title={guaranteeLabel}>{guaranteeLabel}</TableCell>
                   <TableCell className={cellClassRight}>{formatCurrency(c.operation_value)}</TableCell>
                   <TableCell className={cellClassRight}>{jurosLabel(c)}</TableCell>
                   <TableCell className={cellClassRight}>{formatPercent(cet, 2)}</TableCell>
                   <TableCell className={cellClassRight}>{formatCurrency(shortTerm)}</TableCell>
                   <TableCell className={cellClassRight}>{formatCurrency(longTerm)}</TableCell>
                   <TableCell className={cellClass}>
-                    <Badge className={`text-[10px] border ${statusBadgeClass(c.status)}`}>
+                    <Badge className={`text-[10px] border px-1.5 py-0 leading-4 ${statusBadgeClass(c.status)}`}>
                       {statusLabel(c.status)}
                     </Badge>
                   </TableCell>
-                  <TableCell className={cellClass}>
-                    <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                  <TableCell className={cellClassRight}>
+                    <div onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
-                            Ações <MoreHorizontal className="w-3.5 h-3.5" />
+                          <Button variant="outline" size="icon" className="h-6 w-6" title="Ações">
+                            <MoreHorizontal className="w-3.5 h-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -256,7 +278,6 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      <ChevronRight className="w-4 h-4 text-slate-300" />
                     </div>
                   </TableCell>
                 </TableRow>
