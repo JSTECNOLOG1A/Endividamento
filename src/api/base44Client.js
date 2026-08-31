@@ -94,6 +94,7 @@ export const base44 = {
     PayableTitle: entityApi("PayableTitle"),
     ReceivableTitle: entityApi("ReceivableTitle"),
     LoanContract: entityApi("LoanContract"),
+    AccountMovement: entityApi("AccountMovement"),
     CalculationSnapshot: entityApi("CalculationSnapshot"),
     CDIRate: entityApi("CDIRate"),
     Holiday: entityApi("Holiday"),

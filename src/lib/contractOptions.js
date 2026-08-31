@@ -62,6 +62,11 @@ export const SYSTEMS = [
     description: "Sistema Francês de Amortização: Prestações fixas durante todo o contrato. Nos primeiros períodos, a maior parte da prestação é composta por juros; gradualmente, a amortização do principal aumenta. Facilita o orçamento mensal por ter parcelas constantes."
   },
   {
+    value: "SACRE",
+    label: "SACRE — Amortização Crescente",
+    description: "Sistema híbrido SAC + PRICE (Caixa Econômica Federal): a prestação fica fixa por blocos de 12 meses (como no PRICE), mas é recalculada a cada aniversário com base no saldo devedor atual (como no SAC). Resultado: parcelas decrescem em degraus anuais, mais suaves que o SAC puro."
+  },
+  {
     value: "AMERICANO",
     label: "Americano — Juros Periódicos",
     description: "Sistema Americano: Pagamento de juros em cada período, com amortização total do principal apenas no vencimento final. Mantém prestações baixas durante o período, mas requer planejamento para pagamento do valor principal no final. Comum em operações estruturadas."
@@ -82,6 +87,9 @@ export const INDEXERS = [
   { value: "NA", label: "N/A (Prefixado)" },
   { value: "CDI", label: "CDI" },
   { value: "SELIC", label: "SELIC" },
+  { value: "IPCA", label: "IPCA" },
+  { value: "TJLP", label: "TJLP" },
+  { value: "TR", label: "TR" },
 ];
 
 export const EXCHANGE_LAGS = [

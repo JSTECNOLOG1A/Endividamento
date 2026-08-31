@@ -150,6 +150,12 @@ export const ENTITIES = {
       "discount_amount", "rounding_adjustment", "other_amount", "total_paid",
     ],
   },
+  AccountMovement: {
+    table: "account_movements",
+    columns: ["contract_id", "movement_date", "movement_type", "amount", "observacao"],
+    booleans: [],
+    numbers: ["amount"],
+  },
   AccountingEventMapping: {
     table: "accounting_event_mappings",
     columns: ["entity_id", "event_type", "operation_category", "debit_account_id", "credit_account_id", "status"],

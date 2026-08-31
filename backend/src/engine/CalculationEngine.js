@@ -51,6 +51,7 @@ export const ROUNDING_POLICY = {
 };
 
 import { SACStrategy } from "./strategies/SACStrategy.js";
+import { SACREStrategy } from "./strategies/SACREStrategy.js";
 import { PRICEStrategy } from "./strategies/PRICEStrategy.js";
 import { AMERICANOStrategy } from "./strategies/AMERICANOStrategy.js";
 import { BULLETStrategy } from "./strategies/BULLETStrategy.js";
@@ -123,6 +124,8 @@ async function generateCalculationHashStrict(inputs, engineVersion) {
     fixedRate: inputs.fixedRate,
     indexer: inputs.indexer || "NA",
     indexerSpread: inputs.indexerSpread || 0,
+    indexerMode: inputs.indexerMode || "SPREAD",
+    indexerPercentage: inputs.indexerPercentage || 100,
     operationDate: inputs.operationDate,
     principalGraceMonths: inputs.principalGraceMonths || 0,
     interestGraceMonths: inputs.interestGraceMonths || 0,
@@ -176,6 +179,8 @@ async function generateCalculationHash(inputs, engineVersion) {
     fixedRate: inputs.fixedRate,
     indexer: inputs.indexer || "NA",
     indexerSpread: inputs.indexerSpread || 0,
+    indexerMode: inputs.indexerMode || "SPREAD",
+    indexerPercentage: inputs.indexerPercentage || 100,
     operationDate: inputs.operationDate,
     principalGraceMonths: inputs.principalGraceMonths || 0,
     interestGraceMonths: inputs.interestGraceMonths || 0,
@@ -505,6 +510,13 @@ export async function calculateAmortizationSchedule(params) {
     fixedRate, // % a.a.
     indexer = "NA",
     indexerSpread = 0,
+    // NOVO: modo de combinação do indexador — "SPREAD" (padrão, ex.: "CDI + 3% a.a.",
+    // fator do indexador × (1+spread) — spread é uma taxa ANUAL independente) ou
+    // "PERCENTAGE" (ex.: "120% do CDI" — fórmula padrão ANBIMA: fator do indexador
+    // elevado a percentage/100; percentage=100 equivale ao indexador puro).
+    // Mutuamente exclusivos: em modo PERCENTAGE, indexerSpread é ignorado.
+    indexerMode = "SPREAD",
+    indexerPercentage = 100,
     operationDate: rawOperationDate,
     firstPaymentDate: rawFirstPaymentDate, // Dia de referência dos vencimentos
     first_payment_date: rawFirstPaymentDateSnake,
@@ -609,13 +621,19 @@ export async function calculateAmortizationSchedule(params) {
   const cdiByType = {
     CDI: effectiveCdiRates.filter(r => r.rate_type === "CDI"),
     SELIC: effectiveCdiRates.filter(r => r.rate_type === "SELIC"),
+    IPCA: effectiveCdiRates.filter(r => r.rate_type === "IPCA"),
+    TJLP: effectiveCdiRates.filter(r => r.rate_type === "TJLP"),
+    TR: effectiveCdiRates.filter(r => r.rate_type === "TR"),
   };
 
   // Inicializar factory de indexadores
   const indexerFactory = new IndexerFactory(
     cdiByType.CDI,
     cdiByType.SELIC,
-    [] // dollarRates podem ser adicionadas depois
+    [], // dollarRates podem ser adicionadas depois
+    cdiByType.IPCA,
+    cdiByType.TJLP,
+    cdiByType.TR
   );
 
   // 1️⃣ PRIMEIRO: Definir a taxa PTAX inicial (Momento Zero)
@@ -908,16 +926,15 @@ export async function calculateAmortizationSchedule(params) {
   
   if (calculationSystem === "SAC") {
     strategy = new SACStrategy(sdInicialUSD, principalInstallments);
+  } else if (calculationSystem === "SACRE") {
+    strategy = new SACREStrategy(sdInicialUSD, principalInstallments);
   } else if (calculationSystem === "PRICE") {
-    // PRICE: usar taxa mensal equivalente (pro rata mês, não pro rata dia)
-    const periodsPerYear = 12 / principalFreqMonths; // Ex: mensal=12, trimestral=4
-    let priceRate = Math.pow(1 + fixedRate / 100, 1 / periodsPerYear) - 1;
-    if (indexer !== "NA") {
-      const spreadPeriodRate = Math.pow(1 + indexerSpread / 100, 1 / periodsPerYear) - 1;
-      priceRate = (1 + priceRate) * (1 + spreadPeriodRate) - 1;
-    }
-    // PRICE valida BALLOON no construtor (vai lançar erro se incompatível)
-    strategy = new PRICEStrategy(sdInicialUSD, principalInstallments, priceRate, interestGraceMonths, effectiveGraceInterestBehavior);
+    // PRICE valida BALLOON no construtor (vai lançar erro se incompatível).
+    // A taxa de período é derivada dinamicamente pela própria strategy a partir do
+    // juros realmente calculado a cada linha (ver PRICEStrategy.js) — isso garante
+    // que a prestação se ajuste corretamente quando há indexador variável (CDI/SELIC)
+    // e continua idêntica ao Price clássico quando a taxa é prefixada.
+    strategy = new PRICEStrategy(sdInicialUSD, principalInstallments, interestGraceMonths, effectiveGraceInterestBehavior);
   } else if (calculationSystem === "AMERICANO") {
     strategy = new AMERICANOStrategy(sdInicialUSD);
   } else if (calculationSystem === "BULLET") {
@@ -993,18 +1010,14 @@ export async function calculateAmortizationSchedule(params) {
     const dias = daysBetween(prevDate, evt.date);
     const du = businessDaysBetween(prevDate, evt.date, holidays);
 
-    // Calcular juros sobre SD Inicial USD (já atualizado com capitalizações anteriores)
-    // PRICE: usar taxa mensal equivalente (mesmo período da PMT)
-    // Outros sistemas: usar dias corridos
-    let fixedInterestRate;
-    if (calculationSystem === "PRICE") {
-      // Taxa mensal equivalente (mesma usada no PMT)
-      const periodsPerYear = 12 / principalFreqMonths;
-      fixedInterestRate = Math.pow(1 + fixedRate / 100, 1 / periodsPerYear) - 1;
-    } else {
-      // Taxa baseada em dias corridos para outros sistemas
-      fixedInterestRate = fixedRateForPeriod(fixedRate, dias);
-    }
+    // Calcular juros sobre SD Inicial USD (já atualizado com capitalizações anteriores).
+    // Base por dias corridos para TODOS os sistemas (inclusive PRICE) — o motor sempre
+    // gera uma linha por mês para conciliação contábil, então uma "taxa do período"
+    // (ex.: trimestral) aplicada linha a linha superestimaria juros nos meses
+    // intermediários sem pagamento. PRICEStrategy deriva sua taxa de período a partir
+    // do juros já calculado aqui (ver PRICEStrategy.js), então uma base única e
+    // consistente com SAC/AMERICANO/BULLET/%RESIDUAL é obrigatória.
+    const fixedInterestRate = fixedRateForPeriod(fixedRate, dias);
     const jurosFixosMes = sdInicialUSD * fixedInterestRate;
 
     let jurosVariaveisMes = 0;
@@ -1013,14 +1026,22 @@ export async function calculateAmortizationSchedule(params) {
     if (indexer !== "NA") {
      // Delegar ao factory de indexadores
      const indexAccum = indexerFactory.getFactor(indexer, toISODateLocal(prevDate), toISODateLocal(evt.date), holidays);
-     const spreadRate = indexerFactorForPeriod(indexerSpread, du);
 
-     // REGRA 1 (Imutável): CAPITALIZAÇÃO COMPOSTA
-     // Indexador e spread SEMPRE multiplicam (não somam)
-     // Fórmula: (índice × (1 + spread)) - 1
-     // Justificativa: Em mercado financeiro, dois fatores capitalizam compostos
-     // Diferença em milhões: centavos se tornam milhares ao longo dos anos
-     indexerPeriodRate = (indexAccum.factor * (1 + spreadRate)) - 1;
+     if (indexerMode === "PERCENTAGE") {
+       // "% do indexador" (ex.: 120% do CDI) — fórmula padrão ANBIMA:
+       // fator acumulado do indexador elevado a (percentual/100). NÃO soma
+       // spread — é uma fórmula multiplicativa própria, mutuamente exclusiva
+       // com o modo SPREAD.
+       indexerPeriodRate = Math.pow(indexAccum.factor, indexerPercentage / 100) - 1;
+     } else {
+       const spreadRate = indexerFactorForPeriod(indexerSpread, du);
+       // REGRA 1 (Imutável): CAPITALIZAÇÃO COMPOSTA
+       // Indexador e spread SEMPRE multiplicam (não somam)
+       // Fórmula: (índice × (1 + spread)) - 1
+       // Justificativa: Em mercado financeiro, dois fatores capitalizam compostos
+       // Diferença em milhões: centavos se tornam milhares ao longo dos anos
+       indexerPeriodRate = (indexAccum.factor * (1 + spreadRate)) - 1;
+     }
      jurosVariaveisMes = sdInicialUSD * indexerPeriodRate;
 
      // Rastrear se há projeção para warning
@@ -1263,26 +1284,36 @@ export async function calculateAmortizationSchedule(params) {
 
   // 🔐 FASE 1.3: VALIDAÇÃO FINAL
   let totalAmortization = 0, totalAmortizationUSD = 0, maxNegativeValue = 0;
+  let totalCapitalizado = 0, totalCapitalizadoUSD = 0;
   for (let i = 0; i < schedule.length; i++) {
     const row = schedule[i];
     [row.sdInicial, row.sdFinal, row.prestacao, row.jurosFixosMes, row.jurosVariaveisMes, row.amortizacao].forEach(f => {
       if (!Number.isFinite(f)) throw new Error(`[FINANCIAL_INTEGRITY_ERROR] Parcela ${i + 1}: Campo inválido`);
     });
     totalAmortization += (row.amortizacao || 0);
-    if (isUSD && row.amortizacao_USD !== null) totalAmortizationUSD += (row.amortizacao_USD || 0);
+    totalCapitalizado += (row.jurosCapitalizadosBRL || 0);
+    if (isUSD && row.amortizacao_USD !== null) {
+      totalAmortizationUSD += (row.amortizacao_USD || 0);
+      totalCapitalizadoUSD += (row.jurosCapitalizados || 0);
+    }
     if (row.sdFinal < 0) maxNegativeValue = Math.min(maxNegativeValue, row.sdFinal);
     if (i < schedule.length - 1 && isUSD && Math.abs(row.sdFinal_USD - schedule[i + 1].sdInicial_USD) > 0.01) {
       throw new Error(`[FINANCIAL_INTEGRITY_ERROR] Quebra continuidade USD: Parcela ${row.parcela} → ${schedule[i + 1].parcela}`);
     }
   }
-  
-  // 🔐 CORREÇÃO CARÊNCIA CAPITALIZADA: Usar saldo pós-carência como base
-  const firstPrincipalRow = schedule.find(r => (isUSD ? r.amortizacao_USD : r.amortizacao) > 0);
+
+  // 🔐 VALIDAÇÃO GERAL: o total amortizado deve fechar contra o principal
+  // original MAIS toda a capitalização de juros ocorrida ao longo do
+  // contrato inteiro — não só antes da 1ª parcela. Isso cobre tanto
+  // carência explícita (principalGraceMonths > 0) quanto capitalização
+  // implícita entre parcelas quando a periodicidade é > 1 mês sem carência
+  // declarada (ex.: SAC/PRICE/%Residual trimestral: os meses "vazios" entre
+  // parcelas também podem capitalizar juros — padrão legítimo de mercado,
+  // não um bug). Identidade matemática (telescopagem): soma(amortização) =
+  // principal + soma(juros capitalizados em TODAS as linhas) - saldo_final,
+  // e saldo_final é sempre 0.
   const hasGrace = effectiveGraceInterestBehavior === "CAPITALIZAR" && principalGraceMonths > 0;
-  let principalValidacao = principal;
-  if (hasGrace && firstPrincipalRow) {
-    principalValidacao = isUSD ? firstPrincipalRow.sdInicial_USD : firstPrincipalRow.sdInicial;
-  }
+  const principalValidacao = isUSD ? (principal + totalCapitalizadoUSD) : (principal + totalCapitalizado);
   
   // 🔐 AJUSTE FINAL: Usar base correta (pós-carência se capitalizada)
   const lastRow = schedule[schedule.length - 1];
@@ -1321,7 +1352,7 @@ export async function calculateAmortizationSchedule(params) {
       hasGrace,
       principalGraceMonths,
       graceInterestBehavior: effectiveGraceInterestBehavior,
-      saldoPosCarencia: firstPrincipalRow ? Number(((isUSD ? firstPrincipalRow.sdInicial_USD : firstPrincipalRow.sdInicial) || 0).toFixed(2)) : null,
+      totalJurosCapitalizados: Number(((isUSD ? totalCapitalizadoUSD : totalCapitalizado) || 0).toFixed(2)),
       totalParcelas: schedule.length,
       calculationSystem,
       totalTermMonths,
@@ -1352,8 +1383,8 @@ export async function calculateAmortizationSchedule(params) {
   let lastRealRateDate = null;
   let projectedRatesUsed = false;
   
-  const isCdiOrSelic = indexer === "CDI" || indexer === "SELIC";
-  
+  const isCdiOrSelic = indexer === "CDI" || indexer === "SELIC" || indexer === "IPCA" || indexer === "TJLP" || indexer === "TR";
+
   if (!hasProjectedRates && isCdiOrSelic && schedule.length > 0) {
     // Obter última taxa real e data final do contrato
     const lastRateDate = effectiveCdiRates.length > 0 
@@ -1528,11 +1559,25 @@ export async function calculateAmortizationSchedule(params) {
       fixed_rate: fixedRate,
       indexer: indexer,
       indexer_spread: indexerSpread,
+      indexer_mode: indexerMode,
+      indexer_percentage: indexerPercentage,
       cdi_rates_used: indexer === "CDI" ? cdiByType.CDI.map(r => ({
         rate_date: r.rate_date,
         annual_rate: r.annual_rate
       })) : null,
       selic_rates_used: indexer === "SELIC" ? cdiByType.SELIC.map(r => ({
+        rate_date: r.rate_date,
+        annual_rate: r.annual_rate
+      })) : null,
+      ipca_rates_used: indexer === "IPCA" ? cdiByType.IPCA.map(r => ({
+        rate_date: r.rate_date,
+        annual_rate: r.annual_rate
+      })) : null,
+      tjlp_rates_used: indexer === "TJLP" ? cdiByType.TJLP.map(r => ({
+        rate_date: r.rate_date,
+        annual_rate: r.annual_rate
+      })) : null,
+      tr_rates_used: indexer === "TR" ? cdiByType.TR.map(r => ({
         rate_date: r.rate_date,
         annual_rate: r.annual_rate
       })) : null,
@@ -2065,12 +2110,14 @@ function getStrategyVersion(calculationSystem) {
   return versions[calculationSystem] || "1.0.0";
 }
 
-export { 
-  addMonths, 
-  nextBusinessDay, 
-  daysBetween, 
-  businessDaysBetween, 
-  roundTo, 
-  calculateCET, 
-  roundMoney
+export {
+  addMonths,
+  nextBusinessDay,
+  daysBetween,
+  businessDaysBetween,
+  roundTo,
+  calculateCET,
+  roundMoney,
+  fixedRateForPeriod,
+  indexerFactorForPeriod,
 };

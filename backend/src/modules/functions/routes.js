@@ -6,7 +6,7 @@ import { calculateAmortizationScheduleOnServer } from "../calculate/service.js";
 import { previewNatures, integrateNatures } from "../natures/integrate.js";
 import { previewBankAccounts, integrateBankAccounts } from "../bankAccounts/integrate.js";
 import { previewChartAccounts, integrateChartAccounts } from "../chartAccounts/integrate.js";
-import { syncPayableTitlesFromApprovedContracts } from "../payables/generate.js";
+import { syncPayableTitlesFromApprovedContracts, refreshPayableTitlesFxValue } from "../payables/generate.js";
 import { classifyPayableTitles } from "../payables/classify.js";
 import { integratePayableTitles, reversePayableTitles, refreshPayableTitlesFromErp } from "../payables/erpIntegrate.js";
 import { convertPayablePrToTx } from "../payables/convertPrToTx.js";
@@ -15,7 +15,8 @@ import { syncReceivableTitlesFromApprovedContracts } from "../receivables/genera
 import { classifyReceivableTitles } from "../receivables/classify.js";
 import { integrateReceivableTitles, reverseReceivableTitles, refreshReceivableTitlesFromErp } from "../receivables/erpIntegrate.js";
 import { sendDocumentByEmail } from "../documents/sendByEmail.js";
-import { getPTAXFromBACEN, getPTAXRangeFromBACEN, getRatesFromBACEN } from "./bacen.js";
+import { getPTAXFromBACEN, getPTAXRangeFromBACEN, getRatesFromBACEN, getIPCAFromBACEN, getTJLPFromBACEN, getTRFromBACEN } from "./bacen.js";
+import { calculateGuaranteedAccountStatement, renewGuaranteedAccount } from "./guaranteedAccount.js";
 
 async function validateAllApprovedContracts(payload = {}) {
   const { group_ids = null, entity_ids = null, limit = 1000 } = payload;
@@ -92,6 +93,7 @@ const FUNCTION_AUDIT = {
   integratePayableTitles: { action: "INTEGRATE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Integrar títulos a pagar" },
   reversePayableTitles: { action: "REVERSE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Estornar títulos a pagar" },
   refreshPayableTitlesFromErp: { action: "CONSULT", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Consultar títulos a pagar no ERP" },
+  refreshPayableTitlesFxValue: { action: "UPDATE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Reconverter títulos a pagar pela PTAX mais recente" },
   convertPayablePrToTx: { action: "UPDATE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Converter títulos PR em TX" },
   classifyReceivableTitles: { action: "CLASSIFY", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Classificar títulos a receber" },
   integrateReceivableTitles: { action: "INTEGRATE", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Integrar títulos a receber" },
@@ -103,6 +105,11 @@ const handlers = {
   getPTAXFromBACEN,
   getPTAXRangeFromBACEN,
   getRatesFromBACEN,
+  getIPCAFromBACEN,
+  getTJLPFromBACEN,
+  getTRFromBACEN,
+  calculateGuaranteedAccountStatement,
+  renewGuaranteedAccount: (payload, req) => renewGuaranteedAccount(payload, req.user?.email || "system"),
   validateAllApprovedContracts,
   calculateAmortizationSchedule,
   previewNatures: () => previewNatures(),
@@ -117,6 +124,7 @@ const handlers = {
   integratePayableTitles: (payload) => integratePayableTitles(payload || {}),
   reversePayableTitles: (payload) => reversePayableTitles(payload || {}),
   refreshPayableTitlesFromErp: (payload) => refreshPayableTitlesFromErp(payload || {}),
+  refreshPayableTitlesFxValue: (payload) => refreshPayableTitlesFxValue(payload || {}),
   convertPayablePrToTx: (payload) => convertPayablePrToTx(payload || {}),
   lookupPayableErp: (payload) => lookupPayableErp(payload || {}),
   classifyReceivableTitles: (payload) => classifyReceivableTitles(payload || {}),

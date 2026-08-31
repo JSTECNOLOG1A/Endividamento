@@ -183,6 +183,145 @@ export async function getRatesFromBACEN(payload = {}) {
   return { success: true, rate_type: rateType, count: rates.length, rates };
 }
 
+const IPCA_SERIES_ID = 433; // IBGE/BACEN SGS: IPCA - variação mensal (%)
+const TJLP_SERIES_ID = 256; // BACEN SGS: TJLP - % a.a., vigência trimestral (valor se repete dentro do trimestre)
+const TR_SERIES_ID = 226; // BACEN SGS: TR diária — cada cotação já é a taxa de todo o período seguinte (~1 mês)
+
+// Busca o IPCA direto do BACEN (SGS, série 433) — mesma fonte oficial usada
+// acima para CDI/SELIC/PTAX. Diferente de CDI/SELIC (taxa DIÁRIA de mercado),
+// o IPCA é publicado UMA VEZ POR MÊS pelo IBGE: cada ponto da série já é a
+// variação percentual do mês de referência inteiro, então — ao contrário do
+// getRatesFromBACEN acima — NÃO há conversão para taxa anualizada base 252
+// aqui; `annual_rate` guarda a variação MENSAL tal como publicada (ver
+// IPCAIndexer.js para como isso é consumido no motor de cálculo).
+export async function getIPCAFromBACEN(payload = {}) {
+  const { startDate, endDate } = payload;
+  if (!startDate || !endDate) {
+    const err = new Error("startDate e endDate são obrigatórios (YYYY-MM-DD)");
+    err.status = 400;
+    throw err;
+  }
+  const start = formatBCBDate(new Date(`${startDate}T00:00:00`));
+  const end = formatBCBDate(new Date(`${endDate}T00:00:00`));
+  const url =
+    `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${IPCA_SERIES_ID}/dados` +
+    `?formato=json&dataInicial=${start}&dataFinal=${end}`;
+  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!response.ok) {
+    const err = new Error(`BACEN API retornou ${response.status}`);
+    err.status = 502;
+    throw err;
+  }
+  const data = await response.json();
+  if (!Array.isArray(data)) {
+    const err = new Error("Resposta inesperada da API do BACEN");
+    err.status = 502;
+    throw err;
+  }
+  const rates = data
+    .map((item) => {
+      const [dd, mm, yyyy] = String(item.data || "").split("/");
+      const monthlyRate = parseFloat(String(item.valor).replace(",", "."));
+      if (!dd || !mm || !yyyy || !Number.isFinite(monthlyRate)) return null;
+      return {
+        // Normaliza para o 1º dia do mês de referência — é assim que
+        // IPCAIndexer.js busca a taxa por mês (rate_date = 1º dia do mês).
+        rate_date: `${yyyy}-${mm}-01`,
+        annual_rate: monthlyRate, // variação MENSAL (não anualizada — ver comentário acima)
+        rate_type: "IPCA",
+      };
+    })
+    .filter(Boolean);
+  return { success: true, rate_type: "IPCA", count: rates.length, rates };
+}
+
+// Busca a TJLP direto do BACEN (SGS, série 256) — publicada mensalmente pelo
+// CMN mas com vigência trimestral (o valor se repete nos 3 meses do
+// trimestre). `annual_rate` guarda a taxa ANUAL tal como publicada (ver
+// TJLPIndexer.js para como isso é consumido no motor de cálculo).
+export async function getTJLPFromBACEN(payload = {}) {
+  const { startDate, endDate } = payload;
+  if (!startDate || !endDate) {
+    const err = new Error("startDate e endDate são obrigatórios (YYYY-MM-DD)");
+    err.status = 400;
+    throw err;
+  }
+  const start = formatBCBDate(new Date(`${startDate}T00:00:00`));
+  const end = formatBCBDate(new Date(`${endDate}T00:00:00`));
+  const url =
+    `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${TJLP_SERIES_ID}/dados` +
+    `?formato=json&dataInicial=${start}&dataFinal=${end}`;
+  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!response.ok) {
+    const err = new Error(`BACEN API retornou ${response.status}`);
+    err.status = 502;
+    throw err;
+  }
+  const data = await response.json();
+  if (!Array.isArray(data)) {
+    const err = new Error("Resposta inesperada da API do BACEN");
+    err.status = 502;
+    throw err;
+  }
+  const rates = data
+    .map((item) => {
+      const [dd, mm, yyyy] = String(item.data || "").split("/");
+      const annualRate = parseFloat(String(item.valor).replace(",", "."));
+      if (!dd || !mm || !yyyy || !Number.isFinite(annualRate)) return null;
+      return {
+        rate_date: `${yyyy}-${mm}-01`,
+        annual_rate: annualRate,
+        rate_type: "TJLP",
+      };
+    })
+    .filter(Boolean);
+  return { success: true, rate_type: "TJLP", count: rates.length, rates };
+}
+
+// Busca a TR direto do BACEN (SGS, série 226) — publicada diariamente, mas
+// cada cotação já é a taxa do PERÍODO seguinte inteiro (~1 mês), pronta para
+// aplicar de uma vez (ver TRIndexer.js). A resposta desta série traz também
+// `dataFim`, que ignoramos aqui — só a data de início (`rate_date`) importa
+// para a busca por período no motor.
+export async function getTRFromBACEN(payload = {}) {
+  const { startDate, endDate } = payload;
+  if (!startDate || !endDate) {
+    const err = new Error("startDate e endDate são obrigatórios (YYYY-MM-DD)");
+    err.status = 400;
+    throw err;
+  }
+  const start = formatBCBDate(new Date(`${startDate}T00:00:00`));
+  const end = formatBCBDate(new Date(`${endDate}T00:00:00`));
+  const url =
+    `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${TR_SERIES_ID}/dados` +
+    `?formato=json&dataInicial=${start}&dataFinal=${end}`;
+  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!response.ok) {
+    const err = new Error(`BACEN API retornou ${response.status}`);
+    err.status = 502;
+    throw err;
+  }
+  const data = await response.json();
+  if (!Array.isArray(data)) {
+    const err = new Error("Resposta inesperada da API do BACEN");
+    err.status = 502;
+    throw err;
+  }
+  const rates = data
+    .map((item) => {
+      const [dd, mm, yyyy] = String(item.data || "").split("/");
+      const periodRate = parseFloat(String(item.valor).replace(",", "."));
+      if (!dd || !mm || !yyyy || !Number.isFinite(periodRate)) return null;
+      return {
+        rate_date: `${yyyy}-${mm}-${dd}`,
+        annual_rate: periodRate, // taxa do PERÍODO (~1 mês), não anual — ver comentário acima
+        rate_type: "TR",
+      };
+    })
+    .filter(Boolean);
+  return { success: true, rate_type: "TR", count: rates.length, rates };
+}
+
 function todayIsoInSaoPaulo() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
 }
@@ -238,6 +377,44 @@ export async function syncRatesToCdiRates() {
       await store.bulkCreate("CDIRate", newRates, "sistema-bacen");
     }
     summary[rateType] = { fetched: rates.length, inserted: newRates.length };
+  }
+  // IPCA é mensal (divulgado ~dia 10 do mês seguinte) — janela de 10 dias
+  // como CDI/SELIC arriscaria nunca capturar a publicação. 45 dias garante
+  // cobrir o mês corrente inteiro mesmo se o agendamento rodar perto do
+  // início do mês.
+  {
+    const ipcaStart = isoDaysAgo(today, 45);
+    const { rates } = await getIPCAFromBACEN({ startDate: ipcaStart, endDate: today });
+    const existing = await store.filter("CDIRate", { rate_type: "IPCA" }, "-rate_date", 10000);
+    const existingDates = new Set(existing.map((r) => r.rate_date));
+    const newRates = rates.filter((r) => !existingDates.has(r.rate_date));
+    if (newRates.length) {
+      await store.bulkCreate("CDIRate", newRates, "sistema-bacen");
+    }
+    summary.IPCA = { fetched: rates.length, inserted: newRates.length };
+  }
+  // TJLP: mesma janela de 45 dias do IPCA (publicação mensal)
+  {
+    const tjlpStart = isoDaysAgo(today, 45);
+    const { rates } = await getTJLPFromBACEN({ startDate: tjlpStart, endDate: today });
+    const existing = await store.filter("CDIRate", { rate_type: "TJLP" }, "-rate_date", 10000);
+    const existingDates = new Set(existing.map((r) => r.rate_date));
+    const newRates = rates.filter((r) => !existingDates.has(r.rate_date));
+    if (newRates.length) {
+      await store.bulkCreate("CDIRate", newRates, "sistema-bacen");
+    }
+    summary.TJLP = { fetched: rates.length, inserted: newRates.length };
+  }
+  // TR: publicação diária, mesma janela de 10 dias de CDI/SELIC
+  {
+    const { rates } = await getTRFromBACEN({ startDate, endDate: today });
+    const existing = await store.filter("CDIRate", { rate_type: "TR" }, "-rate_date", 10000);
+    const existingDates = new Set(existing.map((r) => r.rate_date));
+    const newRates = rates.filter((r) => !existingDates.has(r.rate_date));
+    if (newRates.length) {
+      await store.bulkCreate("CDIRate", newRates, "sistema-bacen");
+    }
+    summary.TR = { fetched: rates.length, inserted: newRates.length };
   }
   return { ok: true, summary };
 }

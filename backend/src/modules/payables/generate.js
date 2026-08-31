@@ -285,6 +285,86 @@ export async function backfillPayableFiliais() {
   );
 }
 
+// Reconverte pela PTAX mais recente o valor em BRL dos títulos A PAGAR ainda
+// abertos de contratos em moeda estrangeira. Por quê isso existe: o valor de
+// cada título é fixado (em BRL) no momento em que o cronograma foi calculado
+// e o título gerado — se o câmbio mudar depois disso e antes do vencimento,
+// nada atualiza esse valor sozinho (diferente da variação cambial por
+// competência do Fechamento Contábil, que já reavalia o saldo devedor a cada
+// fechamento mensal — ver src/lib/accountingClosing.js). Isso aqui é o lado
+// "quanto eu realmente pago hoje se for liquidar esse título" do problema.
+//
+// Escopo deliberadamente restrito a títulos 'aberto' e NÃO integrados ao
+// Protheus (integrado_erp = true fica intocado — mexer no valor local depois
+// de exportado geraria divergência com o que já está no ERP; mesma regra já
+// aplicada em titleAlteredInErp/erpIntegrate.js).
+export async function refreshPayableTitlesFxValue(payload = {}) {
+  const ids = Array.isArray(payload.ids) ? payload.ids.filter(Boolean) : null;
+
+  const ptaxResult = await pool.query(
+    `SELECT exchange_rate, rate_date FROM currencies WHERE currency_code = 'USD' ORDER BY rate_date DESC LIMIT 1`
+  );
+  const latestPtax = ptaxResult.rows[0];
+  if (!latestPtax || !(Number(latestPtax.exchange_rate) > 0)) {
+    return { updated: 0, scanned: 0, skipped: true, message: "Nenhuma cotação PTAX cadastrada em Moedas" };
+  }
+  const freshRate = Number(latestPtax.exchange_rate);
+
+  let sql = `
+    SELECT t.id, t.contract_id, t.parcela, t.prefixo, t.valor, c.schedule_data
+    FROM payable_titles t
+    JOIN loan_contracts c ON c.id = t.contract_id
+    WHERE t.status = 'aberto'
+      AND COALESCE(t.integrado_erp, false) = false
+      AND c.currency_id IS NOT NULL
+  `;
+  const params = [];
+  if (ids?.length) {
+    params.push(ids);
+    sql += ` AND t.id = ANY($1::text[])`;
+  }
+  const { rows } = await pool.query(sql, params);
+
+  let updated = 0;
+  const titulos = [];
+  for (const title of rows) {
+    const schedule = parseContractSchedule({ schedule_data: title.schedule_data });
+    const row = schedule.find((r) => parcelaCode(r?.parcela) === title.parcela);
+    if (!row) continue;
+
+    const isJuros = title.prefixo === "JUR";
+    const usdAmount = Number(isJuros ? row.jurosTotal_USD : row.amortizacao_USD);
+    if (!Number.isFinite(usdAmount) || usdAmount <= 0) continue;
+
+    const valorNovo = money(usdAmount * freshRate);
+    const valorAnterior = money(title.valor);
+    if (Math.abs(valorNovo - valorAnterior) < 0.01) continue;
+
+    await pool.query(
+      `UPDATE payable_titles SET valor = $2, saldo = $2, updated_date = now() WHERE id = $1`,
+      [title.id, valorNovo]
+    );
+    updated += 1;
+    titulos.push({
+      id: title.id,
+      contract_id: title.contract_id,
+      parcela: title.parcela,
+      prefixo: title.prefixo,
+      valor_anterior: valorAnterior,
+      valor_novo: valorNovo,
+    });
+  }
+
+  return {
+    updated,
+    scanned: rows.length,
+    skipped: false,
+    ptax_usada: freshRate,
+    ptax_data: dateOnly(latestPtax.rate_date),
+    titulos,
+  };
+}
+
 export async function syncPayableTitlesFromApprovedContracts() {
   await backfillPayableSuppliers();
   await backfillPayableFiliais();
