@@ -2,6 +2,20 @@ import * as store from "../entities/store.js";
 import { IndexerFactory } from "../../engine/indexers/IndexerFactory.js";
 import { fixedRateForPeriod, indexerFactorForPeriod, businessDaysBetween, daysBetween, roundMoney } from "../../engine/CalculationEngine.js";
 
+// IOF-Crédito (Decreto 6.306/2007) para pessoa jurídica:
+// - "diário": 0,0082% ao dia sobre o saldo devedor, limitado a 365 dias
+//   corridos de incidência por saldo (teto de ~3% a.a.) — cobrado dia a dia,
+//   igual ao juro, mas NÃO capitaliza no saldo (é imposto, não dívida com o
+//   banco; fica somado à parte, cobrado separadamente).
+// - "adicional": 0,38% fixo, cobrado uma única vez sobre cada saque (não
+//   tem "principal único" pra cobrar de uma vez, como num empréstimo a
+//   prazo — cada utilização do limite é tributada na hora). Não incide
+//   sobre saldo_abertura (rollover de renovação, já tributado no ciclo
+//   anterior).
+const IOF_DAILY_RATE = 0.000082;
+const IOF_DAILY_CAP_DAYS = 365;
+const IOF_ADICIONAL_RATE = 0.0038;
+
 // Conta garantida / capital de giro rotativo: produto sem cronograma de
 // amortização fixo — o saldo utilizado sobe (saque) e desce (pagamento)
 // livremente dentro da vigência (abertura → vencimento do LoanContract).
@@ -33,7 +47,9 @@ export async function calculateGuaranteedAccountStatement(payload = {}) {
     [],
     allRates.filter((r) => r.rate_type === "IPCA"),
     allRates.filter((r) => r.rate_type === "TJLP"),
-    allRates.filter((r) => r.rate_type === "TR")
+    allRates.filter((r) => r.rate_type === "TR"),
+    allRates.filter((r) => r.rate_type === "INPC"),
+    allRates.filter((r) => r.rate_type === "IGPM")
   );
 
   function periodRate(startDate, endDate) {
@@ -57,20 +73,36 @@ export async function calculateGuaranteedAccountStatement(payload = {}) {
     return rate;
   }
 
+  function iofDiarioRate(startDate, endDate) {
+    const dias = daysBetween(startDate, endDate);
+    if (dias <= 0) return 0;
+    return Math.min(dias, IOF_DAILY_CAP_DAYS) * IOF_DAILY_RATE;
+  }
+
   const limite = Number(contract.operation_value) || 0;
   let saldo = 0;
   let prevDate = contract.operation_date;
   let totalJuros = 0;
+  let totalIofDiario = 0;
+  let totalIofAdicional = 0;
   let maxSaldo = 0;
   const extrato = [];
 
   for (const mov of movements) {
     const rate = periodRate(prevDate, mov.movement_date);
+    const iofRate = iofDiarioRate(prevDate, mov.movement_date);
     const juros = saldo > 0 ? roundMoney(saldo * rate) : 0;
+    const iofDiario = saldo > 0 ? roundMoney(saldo * iofRate) : 0;
     saldo = roundMoney(saldo + juros); // juros não pagos capitalizam no saldo
     totalJuros += juros;
+    totalIofDiario += iofDiario;
 
     const amount = Number(mov.amount) || 0;
+    let iofAdicional = 0;
+    if (mov.movement_type === "saque") {
+      iofAdicional = roundMoney(amount * IOF_ADICIONAL_RATE);
+      totalIofAdicional += iofAdicional;
+    }
     if (mov.movement_type === "saque" || mov.movement_type === "saldo_abertura") {
       saldo = roundMoney(saldo + amount);
     } else if (mov.movement_type === "pagamento") {
@@ -84,25 +116,30 @@ export async function calculateGuaranteedAccountStatement(payload = {}) {
       type: mov.movement_type,
       amount,
       juros_periodo: juros,
+      iof_periodo: roundMoney(iofDiario + iofAdicional),
       saldo_apos: saldo,
       excedeu_limite: saldo > limite,
     });
     prevDate = mov.movement_date;
   }
 
-  // Juros do período final: do último lançamento até asOfDate (ou hoje,
-  // limitado ao vencimento — não faz sentido projetar juros além dele).
+  // Juros/IOF do período final: do último lançamento até asOfDate (ou hoje,
+  // limitado ao vencimento — não faz sentido projetar além dele).
   const today = new Date().toISOString().slice(0, 10);
   let asOfDate = rawAsOfDate || today;
   if (contract.final_maturity_date && asOfDate > contract.final_maturity_date) {
     asOfDate = contract.final_maturity_date;
   }
   let jurosPeriodoFinal = 0;
+  let iofPeriodoFinal = 0;
   if (saldo > 0 && asOfDate > prevDate) {
     const rate = periodRate(prevDate, asOfDate);
+    const iofRate = iofDiarioRate(prevDate, asOfDate);
     jurosPeriodoFinal = roundMoney(saldo * rate);
+    iofPeriodoFinal = roundMoney(saldo * iofRate);
     saldo = roundMoney(saldo + jurosPeriodoFinal);
     totalJuros += jurosPeriodoFinal;
+    totalIofDiario += iofPeriodoFinal;
     maxSaldo = Math.max(maxSaldo, saldo);
   }
 
@@ -115,6 +152,10 @@ export async function calculateGuaranteedAccountStatement(payload = {}) {
     excedeu_limite_alguma_vez: maxSaldo > limite,
     total_juros_acumulado: roundMoney(totalJuros),
     juros_periodo_final: jurosPeriodoFinal,
+    total_iof_diario: roundMoney(totalIofDiario),
+    total_iof_adicional: roundMoney(totalIofAdicional),
+    total_iof: roundMoney(totalIofDiario + totalIofAdicional),
+    iof_periodo_final: iofPeriodoFinal,
     as_of_date: asOfDate,
     vencimento: contract.final_maturity_date,
     extrato,

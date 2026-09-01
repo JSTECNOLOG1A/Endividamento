@@ -290,7 +290,7 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
                               onClick={(event) => event.stopPropagation()}
                             />
                           </TableCell>
-                          <TableCell className="whitespace-nowrap text-xs">{item.account_code}</TableCell>
+                          <TableCell className="whitespace-nowrap text-[11px]">{item.account_code}</TableCell>
                           <TableCell className="min-w-[220px]">{item.account_name}</TableCell>
                           <TableCell className="whitespace-nowrap">{CLASS_LABELS[item.account_class] || item.account_class}</TableCell>
                           <TableCell className="whitespace-nowrap">{item.account_type === "sintetica" ? "Sintética" : "Analítica"}</TableCell>

@@ -761,7 +761,7 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
         </CardHeader>
         <CardContent className="p-0">
           <div className="w-full">
-            <Table className="w-full text-[10px]">
+            <Table className="w-full text-[11px]">
               <TableHeader>
                 <TableRow className="bg-slate-50">
                   <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5">Mês</TableHead>
@@ -971,7 +971,7 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
                 {/* Aviso se PTAX da operação não existe */}
                 {isUSD && viewMode === "contabil" && page === 0 && row0Warning && (
                   <TableRow className="bg-amber-50">
-                    <TableCell colSpan={10} className="text-center text-xs text-amber-700 py-2">
+                    <TableCell colSpan={10} className="text-center text-[11px] text-amber-700 py-2">
                       ⚠️ {row0Warning} — Linha 0 não renderizada
                     </TableCell>
                   </TableRow>

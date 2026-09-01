@@ -4,19 +4,23 @@ import { DollarIndexer } from "./DollarIndexer.js";
 import { IPCAIndexer } from "./IPCAIndexer.js";
 import { TJLPIndexer } from "./TJLPIndexer.js";
 import { TRIndexer } from "./TRIndexer.js";
+import { INPCIndexer } from "./INPCIndexer.js";
+import { IGPMIndexer } from "./IGPMIndexer.js";
 
 /**
  * Factory de indexadores
  * Centraliza a criação e gestão de instâncias de indexadores
  */
 export class IndexerFactory {
-  constructor(cdiRates = [], selicRates = [], dollarRates = [], ipcaRates = [], tjlpRates = [], trRates = []) {
+  constructor(cdiRates = [], selicRates = [], dollarRates = [], ipcaRates = [], tjlpRates = [], trRates = [], inpcRates = [], igpmRates = []) {
     this.cdiRates = cdiRates;
     this.selicRates = selicRates;
     this.dollarRates = dollarRates;
     this.ipcaRates = ipcaRates;
     this.tjlpRates = tjlpRates;
     this.trRates = trRates;
+    this.inpcRates = inpcRates;
+    this.igpmRates = igpmRates;
 
     // Inicializar indexadores
     this.indexers = {
@@ -26,6 +30,8 @@ export class IndexerFactory {
       IPCA: new IPCAIndexer(ipcaRates),
       TJLP: new TJLPIndexer(tjlpRates),
       TR: new TRIndexer(trRates),
+      INPC: new INPCIndexer(inpcRates),
+      IGPM: new IGPMIndexer(igpmRates),
       NA: null, // Sem indexador
     };
   }

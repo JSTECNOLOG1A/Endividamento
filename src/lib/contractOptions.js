@@ -88,6 +88,8 @@ export const INDEXERS = [
   { value: "CDI", label: "CDI" },
   { value: "SELIC", label: "SELIC" },
   { value: "IPCA", label: "IPCA" },
+  { value: "INPC", label: "INPC" },
+  { value: "IGPM", label: "IGP-M" },
   { value: "TJLP", label: "TJLP" },
   { value: "TR", label: "TR" },
 ];

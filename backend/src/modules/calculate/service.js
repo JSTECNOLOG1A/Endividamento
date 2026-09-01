@@ -7,7 +7,7 @@ async function loadMarketData(params) {
   const indexer = params.indexer || "NA";
 
   if (!Array.isArray(next.cdiRates) || next.cdiRates.length === 0) {
-    if (indexer === "CDI" || indexer === "SELIC" || indexer === "IPCA" || indexer === "TJLP" || indexer === "TR") {
+    if (["CDI", "SELIC", "IPCA", "TJLP", "TR", "INPC", "IGPM"].includes(indexer)) {
       next.cdiRates = await store.list("CDIRate", "rate_date", 20000);
     }
   }

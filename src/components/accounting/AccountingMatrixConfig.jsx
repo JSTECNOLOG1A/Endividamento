@@ -123,7 +123,7 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
           </TabsList>
         </Tabs>
         <div className="max-h-[70vh] overflow-y-auto pr-1">
-          <table className="w-full text-sm">
+          <table className="w-full text-[11px]">
             <thead>
               {/* Sem reordenação por clique: é um formulário de configuração
                   (cada linha é um tipo de evento contábil com Selects de
@@ -134,7 +134,7 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
                 <th className={SORT_HEAD_CLASS}>Evento</th>
                 <th className={SORT_HEAD_CLASS}>Conta de débito</th>
                 <th className={SORT_HEAD_CLASS}>Conta de crédito</th>
-                <th className="px-2 py-2 bg-slate-50" />
+                <th className="px-2 py-1.5 bg-slate-50" />
               </tr>
             </thead>
             <tbody>
@@ -143,7 +143,7 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
                 const configured = !!mappingByType.get(type);
                 return (
                   <tr key={type} className="border-b border-slate-100">
-                    <td className="px-2 py-2 text-slate-700">
+                    <td className="px-2 py-1.5 text-slate-700">
                       {EVENT_TYPE_LABELS[type]}
                       {!configured && <span className="ml-1.5 text-[10px] text-amber-600">não configurado</span>}
                       {RECLASSIFICATION_TYPES.has(type) && (
@@ -153,7 +153,7 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
                         </p>
                       )}
                     </td>
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-1.5">
                       <Select value={draft.debit_account_id || undefined} onValueChange={(v) => setDraft(type, { debit_account_id: v })}>
                         <SelectTrigger className="h-8 w-56"><SelectValue placeholder="Selecione" /></SelectTrigger>
                         <SelectContent>
@@ -161,7 +161,7 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
                         </SelectContent>
                       </Select>
                     </td>
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-1.5">
                       <Select value={draft.credit_account_id || undefined} onValueChange={(v) => setDraft(type, { credit_account_id: v })}>
                         <SelectTrigger className="h-8 w-56"><SelectValue placeholder="Selecione" /></SelectTrigger>
                         <SelectContent>
@@ -169,7 +169,7 @@ export default function AccountingMatrixConfig({ entityId, open, onOpenChange })
                         </SelectContent>
                       </Select>
                     </td>
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-1.5">
                       <Button size="sm" variant="outline" className="h-8 gap-1.5" disabled={savingType === type} onClick={() => handleSave(type)}>
                         <Save className="w-3 h-3" /> {savingType === type ? "..." : "Salvar"}
                       </Button>

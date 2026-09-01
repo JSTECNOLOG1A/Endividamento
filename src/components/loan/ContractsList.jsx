@@ -24,6 +24,7 @@ import { computeContractCET } from "@/lib/cetFromSchedule";
 import { sanitizeFilename, downloadRenamed } from "@/lib/documentActions";
 import { getContractCirculanteSplit } from "../accounting/debtAnalytics";
 import EmailDialog from "../shared/EmailDialog";
+import { createPageUrl } from "@/utils";
 
 function formatCurrency(value) {
   const n = Number(value);
@@ -47,6 +48,9 @@ function formatPercent(value, maxDigits = 4) {
 function jurosLabel(contract) {
   if (!contract.indexer || contract.indexer === "NA") {
     return `${formatPercent(contract.fixed_rate)} a.a.`;
+  }
+  if (contract.indexer_mode === "PERCENTAGE") {
+    return `${formatPercent(contract.indexer_percentage)} do ${contract.indexer}`;
   }
   return `${contract.indexer} + ${formatPercent(contract.indexer_spread)} a.a.`;
 }
@@ -195,7 +199,18 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
               // Clicar na linha sempre "dá andamento" no contrato: rascunho/devolvido
               // abrem na Calculadora para continuar editando; pendente/aprovado abrem
               // a tela de revisão (com os botões de Aprovar/Devolver, se aplicável).
-              const openContract = () => (isEditable ? onEdit(c) : onView(c));
+              // Conta garantida é um produto diferente (sem cronograma de
+              // amortização) — tem tela própria, não passa pela Calculadora/
+              // revisão tradicional (que quebrava tentando ler um cronograma
+              // que nunca existiu para esse tipo de contrato).
+              const isGuaranteedAccount = c.calculation_system === "CONTA_GARANTIDA";
+              const openContract = () => {
+                if (isGuaranteedAccount) {
+                  window.location.href = createPageUrl("GuaranteedAccounts") + "?open=" + c.id;
+                  return;
+                }
+                isEditable ? onEdit(c) : onView(c);
+              };
               const handleDownload = () => {
                 const filename = `${sanitizeFilename(bankName)}_${sanitizeFilename(c.contract_number)}.pdf`;
                 downloadRenamed(c.contract_pdf_url, filename);

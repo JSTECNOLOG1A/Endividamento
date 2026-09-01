@@ -9,8 +9,8 @@ import { ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 // "clicar no título ordena" sempre se comporta e parece exatamente igual em
 // todo lugar.
 export const SORT_HEAD_CLASS =
-  "text-xs font-bold text-slate-700 uppercase tracking-wide whitespace-nowrap px-4 py-3 bg-slate-50 border-b-2 border-slate-200";
-export const SORT_CELL_CLASS = "whitespace-nowrap px-4 py-3.5 text-sm text-slate-700";
+  "text-[11px] font-bold text-slate-700 uppercase tracking-wide whitespace-nowrap px-2 py-2 bg-slate-50 border-b-2 border-slate-200";
+export const SORT_CELL_CLASS = "whitespace-nowrap px-2 py-1.5 text-[11px] text-slate-700";
 export const SORT_CELL_CLASS_RIGHT = `${SORT_CELL_CLASS} text-right`;
 
 export function SortIcon({ active, dir }) {

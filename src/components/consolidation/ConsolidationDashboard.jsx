@@ -386,17 +386,17 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
                 <TableBody>
                   {drilldownSort.sortedRows.map((c) => (
                     <TableRow key={c._key} className="hover:bg-slate-50">
-                      <TableCell className="text-xs">{c.bankName}</TableCell>
-                      <TableCell className="text-xs">{c.contract_number}</TableCell>
-                      <TableCell className="text-xs">{c.operation_type}</TableCell>
-                      <TableCell className="text-xs text-right">{formatCurrency(c.operation_value)}</TableCell>
-                      <TableCell className="text-xs text-right text-blue-600">{formatCurrency(c.saldoDevedor)}</TableCell>
-                      <TableCell className="text-xs text-right">
-                        <Badge variant={c.pctAmortizado > 70 ? "default" : "secondary"} className="text-xs">
+                      <TableCell className="text-[11px]">{c.bankName}</TableCell>
+                      <TableCell className="text-[11px]">{c.contract_number}</TableCell>
+                      <TableCell className="text-[11px]">{c.operation_type}</TableCell>
+                      <TableCell className="text-[11px] text-right">{formatCurrency(c.operation_value)}</TableCell>
+                      <TableCell className="text-[11px] text-right text-blue-600">{formatCurrency(c.saldoDevedor)}</TableCell>
+                      <TableCell className="text-[11px] text-right">
+                        <Badge variant={c.pctAmortizado > 70 ? "default" : "secondary"} className="text-[11px]">
                           {c.pctAmortizado.toFixed(1)}%
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs text-right text-amber-600">{formatCurrency(c.jurosFuturos)}</TableCell>
+                      <TableCell className="text-[11px] text-right text-amber-600">{formatCurrency(c.jurosFuturos)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -602,16 +602,16 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
               <TableBody>
                 {groupSort.sortedRows.map((group) => (
                   <TableRow key={group.name} className="hover:bg-slate-50">
-                    <TableCell className="text-sm font-medium text-slate-700">{group.name}</TableCell>
-                    <TableCell className="text-xs text-right">{group.contracts}</TableCell>
-                    <TableCell className="text-sm text-right">{formatCurrency(group.valorOriginal)}</TableCell>
-                    <TableCell className="text-sm text-right text-blue-600 font-semibold">{formatCurrency(group.saldoAtual)}</TableCell>
-                    <TableCell className="text-xs text-right">
+                    <TableCell className="text-[11px] font-medium text-slate-700">{group.name}</TableCell>
+                    <TableCell className="text-[11px] text-right">{group.contracts}</TableCell>
+                    <TableCell className="text-[11px] text-right">{formatCurrency(group.valorOriginal)}</TableCell>
+                    <TableCell className="text-[11px] text-right text-blue-600 font-semibold">{formatCurrency(group.saldoAtual)}</TableCell>
+                    <TableCell className="text-[11px] text-right">
                       <Badge variant={group.pctAmortizado > 50 ? "default" : "secondary"}>
                         {group.pctAmortizado.toFixed(1)}%
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-right text-amber-600">{formatCurrency(group.jurosFuturos)}</TableCell>
+                    <TableCell className="text-[11px] text-right text-amber-600">{formatCurrency(group.jurosFuturos)}</TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="ghost"
@@ -653,16 +653,16 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
               <TableBody>
                 {bankSort.sortedRows.map((bank) => (
                   <TableRow key={bank.name} className="hover:bg-slate-50">
-                    <TableCell className="text-sm font-medium text-slate-700">{bank.name}</TableCell>
-                    <TableCell className="text-xs text-right">{bank.contracts}</TableCell>
-                    <TableCell className="text-sm text-right">{formatCurrency(bank.valorOriginal)}</TableCell>
-                    <TableCell className="text-sm text-right text-blue-600 font-semibold">
+                    <TableCell className="text-[11px] font-medium text-slate-700">{bank.name}</TableCell>
+                    <TableCell className="text-[11px] text-right">{bank.contracts}</TableCell>
+                    <TableCell className="text-[11px] text-right">{formatCurrency(bank.valorOriginal)}</TableCell>
+                    <TableCell className="text-[11px] text-right text-blue-600 font-semibold">
                       {formatCurrency(bank.saldoAtual)}
                     </TableCell>
-                    <TableCell className="text-xs text-right">
+                    <TableCell className="text-[11px] text-right">
                       <Badge
                         variant={bank.concentration > 30 ? "default" : bank.concentration > 15 ? "secondary" : "outline"}
-                        className={`text-xs ${
+                        className={`text-[11px] ${
                           bank.concentration > 30 ? "bg-red-100 text-red-800 border-red-200" : bank.concentration > 15 ? "bg-amber-100 text-amber-800 border-amber-200" : ""
                         }`}
                       >
@@ -700,13 +700,13 @@ export default function ConsolidationDashboard({ contracts, groups, entities, ba
               <TableBody>
                 {opSort.sortedRows.map((op) => (
                   <TableRow key={op.name} className="hover:bg-slate-50">
-                    <TableCell className="text-sm font-medium text-slate-700">{op.name}</TableCell>
-                    <TableCell className="text-xs text-right">{op.contracts}</TableCell>
-                    <TableCell className="text-sm text-right">{formatCurrency(op.valorOriginal)}</TableCell>
-                    <TableCell className="text-sm text-right text-blue-600 font-semibold">
+                    <TableCell className="text-[11px] font-medium text-slate-700">{op.name}</TableCell>
+                    <TableCell className="text-[11px] text-right">{op.contracts}</TableCell>
+                    <TableCell className="text-[11px] text-right">{formatCurrency(op.valorOriginal)}</TableCell>
+                    <TableCell className="text-[11px] text-right text-blue-600 font-semibold">
                       {formatCurrency(op.saldoAtual)}
                     </TableCell>
-                    <TableCell className="text-xs text-right">
+                    <TableCell className="text-[11px] text-right">
                       <Badge variant="outline">{op.percentage.toFixed(1)}%</Badge>
                     </TableCell>
                   </TableRow>

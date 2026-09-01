@@ -109,7 +109,13 @@ export default function Contracts() {
 
   const handleView = (contract) => {
     const scheduleData = contract.schedule_data ? JSON.parse(contract.schedule_data) : {};
-    const schedule = scheduleData.schedule || scheduleData || [];
+    // {} é truthy em JS — "scheduleData.schedule || scheduleData || []" cai
+    // em {} (não []) quando não há cronograma salvo (ex.: contrato de Conta
+    // Garantida, que nunca tem schedule_data tradicional), e os .forEach/
+    // .reduce logo abaixo quebram em objeto. Garante array sempre.
+    const schedule = Array.isArray(scheduleData.schedule)
+      ? scheduleData.schedule
+      : Array.isArray(scheduleData) ? scheduleData : [];
     // O CET e a Taxa Nominal não ficam salvos em schedule_data (só o
     // cronograma é persistido) — por isso são recalculados aqui a partir do
     // próprio contrato + cronograma já salvos, sem precisar rodar o motor

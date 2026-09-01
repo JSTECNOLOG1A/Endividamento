@@ -552,7 +552,7 @@ export default function AccountsPayable() {
       ) : (
         <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1580px] caption-bottom text-sm">
+            <table className="w-full min-w-[1580px] caption-bottom text-[11px]">
               <thead>
                 <tr className="border-b bg-slate-50">
                   <th className="h-10 w-10 px-3 text-left align-middle">
@@ -592,7 +592,7 @@ export default function AccountsPayable() {
                       onDoubleClick={() => setViewTitle(item)}
                     >
                       <td
-                        className="px-3 py-2.5 align-middle"
+                        className="px-3 py-1.5 align-middle"
                         onDoubleClick={(event) => event.stopPropagation()}
                       >
                         <Checkbox
@@ -602,35 +602,35 @@ export default function AccountsPayable() {
                           aria-label={`Selecionar título ${item.titulo_numero} parcela ${item.parcela}`}
                         />
                       </td>
-                      <td className="px-2 py-2.5 align-middle"><ErpStatusBadge item={item} /></td>
-                      <td className="px-3 py-2.5 align-middle font-medium text-slate-800 max-w-[180px] truncate" title={item.entity_name || ""}>
+                      <td className="px-2 py-1.5 align-middle"><ErpStatusBadge item={item} /></td>
+                      <td className="px-3 py-1.5 align-middle font-medium text-slate-800 max-w-[180px] truncate" title={item.entity_name || ""}>
                         {item.entity_name || "—"}
                       </td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700" title="Empresa do título no SE2 (E2_FILIAL / M0_CODIGO)">
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700" title="Empresa do título no SE2 (E2_FILIAL / M0_CODIGO)">
                         {item.filial || "—"}
                       </td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700" title="Filial de origem (E2_FILORIG). Pode ser diferente da unidade da sessão, ex.: 0301 ou 0104">
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700" title="Filial de origem (E2_FILORIG). Pode ser diferente da unidade da sessão, ex.: 0301 ou 0104">
                         {item.filial_origem || "—"}
                       </td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700 max-w-[200px] truncate" title={supplierLabel(item)}>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700 max-w-[200px] truncate" title={supplierLabel(item)}>
                         {supplierLabel(item)}
                       </td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700">{item.prefixo}</td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700 whitespace-nowrap">{item.titulo_numero}</td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700">{item.parcela}</td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700">{item.tipo}</td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-600 whitespace-nowrap">{formatDate(item.emissao)}</td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-600 whitespace-nowrap">{formatDate(item.vencimento)}</td>
-                      <td className="px-2 py-2.5 align-middle text-right text-xs tabular-nums whitespace-nowrap">{formatMoney(item.valor)}</td>
-                      <td className="px-2 py-2.5 align-middle text-right text-xs tabular-nums whitespace-nowrap">{formatMoney(item.saldo)}</td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-600 whitespace-nowrap" title={natureLabel(item.natureza, natures)}>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700">{item.prefixo}</td>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700 whitespace-nowrap">{item.titulo_numero}</td>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700">{item.parcela}</td>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700">{item.tipo}</td>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-600 whitespace-nowrap">{formatDate(item.emissao)}</td>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-600 whitespace-nowrap">{formatDate(item.vencimento)}</td>
+                      <td className="px-2 py-1.5 align-middle text-right text-[11px] tabular-nums whitespace-nowrap">{formatMoney(item.valor)}</td>
+                      <td className="px-2 py-1.5 align-middle text-right text-[11px] tabular-nums whitespace-nowrap">{formatMoney(item.saldo)}</td>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-600 whitespace-nowrap" title={natureLabel(item.natureza, natures)}>
                         {natureLabel(item.natureza, natures)}
                       </td>
-                      <td className="px-3 py-2.5 align-middle text-xs text-slate-600 max-w-[220px] truncate" title={item.historico || ""}>
+                      <td className="px-3 py-1.5 align-middle text-[11px] text-slate-600 max-w-[220px] truncate" title={item.historico || ""}>
                         {item.historico || "—"}
                       </td>
                       <td
-                        className="px-3 py-2.5 align-middle text-right sticky right-0 bg-white shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.18)]"
+                        className="px-3 py-1.5 align-middle text-right sticky right-0 bg-white shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.18)]"
                         onDoubleClick={(event) => event.stopPropagation()}
                       >
                         <div className="flex items-center justify-end gap-2">
@@ -679,13 +679,13 @@ export default function AccountsPayable() {
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 border-t">
-                  <td className="px-3 py-2.5 text-xs font-medium text-slate-600" colSpan={12}>
+                  <td className="px-3 py-1.5 text-[11px] font-medium text-slate-600" colSpan={12}>
                     {rows.length} {rows.length === 1 ? "título" : "títulos"}
                   </td>
-                  <td className="px-2 py-2.5 text-right text-xs font-semibold tabular-nums whitespace-nowrap text-slate-800">
+                  <td className="px-2 py-1.5 text-right text-[11px] font-semibold tabular-nums whitespace-nowrap text-slate-800">
                     {formatMoney(totals.valor)}
                   </td>
-                  <td className="px-2 py-2.5 text-right text-xs font-semibold tabular-nums whitespace-nowrap text-slate-800">
+                  <td className="px-2 py-1.5 text-right text-[11px] font-semibold tabular-nums whitespace-nowrap text-slate-800">
                     {formatMoney(totals.saldo)}
                   </td>
                   <td colSpan={2} />

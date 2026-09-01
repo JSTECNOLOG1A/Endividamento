@@ -624,6 +624,8 @@ export async function calculateAmortizationSchedule(params) {
     IPCA: effectiveCdiRates.filter(r => r.rate_type === "IPCA"),
     TJLP: effectiveCdiRates.filter(r => r.rate_type === "TJLP"),
     TR: effectiveCdiRates.filter(r => r.rate_type === "TR"),
+    INPC: effectiveCdiRates.filter(r => r.rate_type === "INPC"),
+    IGPM: effectiveCdiRates.filter(r => r.rate_type === "IGPM"),
   };
 
   // Inicializar factory de indexadores
@@ -633,7 +635,9 @@ export async function calculateAmortizationSchedule(params) {
     [], // dollarRates podem ser adicionadas depois
     cdiByType.IPCA,
     cdiByType.TJLP,
-    cdiByType.TR
+    cdiByType.TR,
+    cdiByType.INPC,
+    cdiByType.IGPM
   );
 
   // 1️⃣ PRIMEIRO: Definir a taxa PTAX inicial (Momento Zero)

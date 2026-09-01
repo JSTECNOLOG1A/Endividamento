@@ -787,6 +787,18 @@ function consultEncontrado(data) {
 function patchFromConsult(title, data) {
   const encontrado = consultEncontrado(data);
   if (encontrado === false) {
+    // Título não existe mais no Protheus — normalmente porque foi estornado
+    // lá diretamente (fora do AllDebt). Mesma correção do lado de contas a
+    // pagar (ver backend/src/modules/payables/erpIntegrate.js): antes só
+    // deixava uma mensagem e mantinha erp_status="integrado" pra sempre,
+    // travando o contrato indefinidamente.
+    if (title.erp_status === "integrado" || title.integrado_erp) {
+      return {
+        erp_status: "estornado",
+        integrado_erp: false,
+        erp_mensagem: "Estornado no Protheus (não encontrado nesta consulta).",
+      };
+    }
     return {
       erp_mensagem: "Não localizado no Protheus nesta consulta. O título local foi mantido.",
     };
@@ -921,6 +933,16 @@ export async function refreshReceivableTitlesFromErp(payload = {}) {
   );
   const entityById = new Map(entitiesResult.rows.map((row) => [row.id, row]));
 
+  // Mesma lógica do lado de contas a pagar (ver
+  // backend/src/modules/payables/erpIntegrate.js): decide o que fazer com
+  // um título estornado no ERP a partir do status atual do contrato.
+  const contractIds = [...new Set(titlesResult.rows.map((row) => row.contract_id))];
+  const contractsResult = await pool.query(
+    `SELECT id, status FROM loan_contracts WHERE id = ANY($1::text[])`,
+    [contractIds]
+  );
+  const contractStatusById = new Map(contractsResult.rows.map((row) => [row.id, row.status]));
+
   let sm0Records = [];
   try {
     sm0Records = await fetchSm0Records(linked.integration, credential);
@@ -1034,6 +1056,24 @@ export async function refreshReceivableTitlesFromErp(payload = {}) {
       }
 
       const patch = patchFromConsult(title, response.data);
+
+      // Estornado no ERP + contrato ainda aprovado: some daqui — a próxima
+      // sincronização recria um título novo automaticamente. Ver comentário
+      // completo em backend/src/modules/payables/erpIntegrate.js.
+      if (patch.erp_status === "estornado" && contractStatusById.get(title.contract_id) === "aprovado") {
+        await pool.query(`DELETE FROM receivable_titles WHERE id = $1`, [title.id]);
+        consulted += 1;
+        results.push({
+          id: title.id,
+          ok: true,
+          encontrado,
+          erp_status: "estornado",
+          message: "Estornado no ERP — título removido, será regerado na próxima sincronização",
+          removed: true,
+        });
+        continue;
+      }
+
       const row = await applyConsultPatch(title.id, patch);
       consulted += 1;
       results.push({

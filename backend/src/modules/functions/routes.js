@@ -6,7 +6,7 @@ import { calculateAmortizationScheduleOnServer } from "../calculate/service.js";
 import { previewNatures, integrateNatures } from "../natures/integrate.js";
 import { previewBankAccounts, integrateBankAccounts } from "../bankAccounts/integrate.js";
 import { previewChartAccounts, integrateChartAccounts } from "../chartAccounts/integrate.js";
-import { syncPayableTitlesFromApprovedContracts, refreshPayableTitlesFxValue, reopenApprovedContractForEditing } from "../payables/generate.js";
+import { syncPayableTitlesFromApprovedContracts, refreshPayableTitlesFxValue, reopenApprovedContractForEditing, cleanupOrphanedPayableTitles, refreshGuaranteedAccountPayableTitle, deleteGuaranteedAccount } from "../payables/generate.js";
 import { classifyPayableTitles } from "../payables/classify.js";
 import { integratePayableTitles, reversePayableTitles, refreshPayableTitlesFromErp } from "../payables/erpIntegrate.js";
 import { convertPayablePrToTx } from "../payables/convertPrToTx.js";
@@ -15,7 +15,8 @@ import { syncReceivableTitlesFromApprovedContracts } from "../receivables/genera
 import { classifyReceivableTitles } from "../receivables/classify.js";
 import { integrateReceivableTitles, reverseReceivableTitles, refreshReceivableTitlesFromErp } from "../receivables/erpIntegrate.js";
 import { sendDocumentByEmail } from "../documents/sendByEmail.js";
-import { getPTAXFromBACEN, getPTAXRangeFromBACEN, getRatesFromBACEN, getIPCAFromBACEN, getTJLPFromBACEN, getTRFromBACEN } from "./bacen.js";
+import { getPTAXFromBACEN, getPTAXRangeFromBACEN, getRatesFromBACEN, getIPCAFromBACEN, getTJLPFromBACEN, getTRFromBACEN, getINPCFromBACEN, getIGPMFromBACEN, clearCDIRatesByType, clearCurrencyRates } from "./bacen.js";
+import { getHolidaysFromBrasilAPI } from "./holidays.js";
 import { calculateGuaranteedAccountStatement, renewGuaranteedAccount } from "./guaranteedAccount.js";
 
 async function validateAllApprovedContracts(payload = {}) {
@@ -94,6 +95,7 @@ const FUNCTION_AUDIT = {
   reversePayableTitles: { action: "REVERSE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Estornar títulos a pagar" },
   refreshPayableTitlesFromErp: { action: "CONSULT", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Consultar títulos a pagar no ERP" },
   refreshPayableTitlesFxValue: { action: "UPDATE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Reconverter títulos a pagar pela PTAX mais recente" },
+  refreshGuaranteedAccountPayableTitle: { action: "UPDATE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Recalcular título de conta garantida" },
   convertPayablePrToTx: { action: "UPDATE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Converter títulos PR em TX" },
   classifyReceivableTitles: { action: "CLASSIFY", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Classificar títulos a receber" },
   integrateReceivableTitles: { action: "INTEGRATE", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Integrar títulos a receber" },
@@ -108,6 +110,11 @@ const handlers = {
   getIPCAFromBACEN,
   getTJLPFromBACEN,
   getTRFromBACEN,
+  getINPCFromBACEN,
+  getIGPMFromBACEN,
+  clearCDIRatesByType,
+  clearCurrencyRates,
+  getHolidaysFromBrasilAPI,
   calculateGuaranteedAccountStatement,
   renewGuaranteedAccount: (payload, req) => renewGuaranteedAccount(payload, req.user?.email || "system"),
   validateAllApprovedContracts,
@@ -125,9 +132,15 @@ const handlers = {
   reversePayableTitles: (payload) => reversePayableTitles(payload || {}),
   refreshPayableTitlesFromErp: (payload) => refreshPayableTitlesFromErp(payload || {}),
   refreshPayableTitlesFxValue: (payload) => refreshPayableTitlesFxValue(payload || {}),
+  refreshGuaranteedAccountPayableTitle: (payload) => refreshGuaranteedAccountPayableTitle(payload || {}),
+  // Auditoria própria (writeAudit chamado dentro da função) — não passa por
+  // FUNCTION_AUDIT abaixo pra não duplicar o registro.
+  deleteGuaranteedAccount: (payload, req) => deleteGuaranteedAccount(payload || {}, req),
   // Auditoria própria (writeAudit chamado dentro da função) — não passa por
   // FUNCTION_AUDIT abaixo pra não duplicar o registro.
   reopenApprovedContractForEditing: (payload, req) => reopenApprovedContractForEditing(payload || {}, req),
+  // Auditoria própria também — mesma razão da linha acima.
+  cleanupOrphanedPayableTitles: (payload, req) => cleanupOrphanedPayableTitles(payload || {}, req),
   convertPayablePrToTx: (payload) => convertPayablePrToTx(payload || {}),
   lookupPayableErp: (payload) => lookupPayableErp(payload || {}),
   classifyReceivableTitles: (payload) => classifyReceivableTitles(payload || {}),

@@ -3,7 +3,8 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Upload, Calendar, Loader2, Trash2, RefreshCw } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Upload, Calendar, Loader2, Trash2, RefreshCw, Search } from "lucide-react";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
 
@@ -20,6 +21,10 @@ export default function HolidayImporter() {
   const [error, setError] = React.useState(null);
   const [page, setPage] = React.useState(0);
   const fileInputRef = React.useRef(null);
+  const currentYear = new Date().getFullYear();
+  const [apiStartYear, setApiStartYear] = React.useState(String(currentYear));
+  const [apiEndYear, setApiEndYear] = React.useState(String(currentYear + 1));
+  const [importingApi, setImportingApi] = React.useState(false);
 
   const pageSize = 50;
 
@@ -118,6 +123,51 @@ export default function HolidayImporter() {
     }
   };
 
+  // Busca feriados nacionais direto da BrasilAPI (brasilapi.com.br — pública,
+  // gratuita, sem autenticação) pro intervalo de anos informado, e importa só
+  // as datas que ainda não existem no banco — mesma lógica de deduplicação do
+  // import por CSV acima.
+  const handleImportFromApi = async () => {
+    const startYear = parseInt(apiStartYear, 10);
+    const endYear = parseInt(apiEndYear, 10);
+    if (!startYear || !endYear) {
+      setError("Informe o ano inicial e final para buscar.");
+      return;
+    }
+    if (endYear < startYear) {
+      setError("O ano final deve ser maior ou igual ao ano inicial.");
+      return;
+    }
+
+    setImportingApi(true);
+    setError(null);
+    try {
+      const { data } = await base44.functions.invoke("getHolidaysFromBrasilAPI", { startYear, endYear });
+      const parsed = data?.holidays || [];
+      if (parsed.length === 0) {
+        setError("A API não retornou feriados para esse período.");
+        return;
+      }
+
+      const existing = await base44.entities.Holiday.list("", 10000);
+      const existingDates = new Set(existing.map((h) => h.holiday_date));
+      const newHolidays = parsed.filter((h) => !existingDates.has(h.holiday_date));
+
+      if (newHolidays.length === 0) {
+        setError(`Todos os ${parsed.length} feriados do período já estão cadastrados.`);
+        return;
+      }
+
+      await base44.entities.Holiday.bulkCreate(newHolidays);
+      alert(`✅ ${newHolidays.length} feriados importados!\n${parsed.length - newHolidays.length} já existiam no banco.`);
+      await loadHolidays();
+    } catch (err) {
+      setError("Erro ao importar via API: " + (err.message || "tente novamente"));
+    } finally {
+      setImportingApi(false);
+    }
+  };
+
   const handleDeleteAll = async () => {
     if (!confirm("⚠️ Deseja realmente excluir TODOS os feriados cadastrados?")) return;
     
@@ -182,9 +232,43 @@ export default function HolidayImporter() {
           </div>
         )}
 
-        <div className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
-          <strong>Formato esperado:</strong> CSV com colunas "Data", "Dia da Semana", "Feriado"<br />
-          <strong>Exemplo:</strong> 01/01/2024, Segunda-feira, Confraternização Universal
+        {/* Lado a lado: automático (API) primeiro, CSV manual depois — mesmo
+            padrão de CDIImporter.jsx/PTAXImporter.jsx. */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-medium text-slate-700">Importar automaticamente (BrasilAPI)</p>
+            <div className="flex items-end gap-2 flex-wrap">
+              <div className="space-y-1">
+                <Label className="text-[11px] text-slate-500">Ano inicial</Label>
+                <Input
+                  type="number"
+                  value={apiStartYear}
+                  onChange={(e) => setApiStartYear(e.target.value)}
+                  className="h-9 w-24"
+                  disabled={importingApi}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] text-slate-500">Ano final</Label>
+                <Input
+                  type="number"
+                  value={apiEndYear}
+                  onChange={(e) => setApiEndYear(e.target.value)}
+                  className="h-9 w-24"
+                  disabled={importingApi}
+                />
+              </div>
+              <Button type="button" onClick={handleImportFromApi} disabled={importingApi} className="h-9 gap-1.5">
+                {importingApi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                {importingApi ? "Buscando..." : "Buscar feriados"}
+              </Button>
+            </div>
+            <p className="text-[11px] text-slate-500">Feriados nacionais oficiais, via brasilapi.com.br.</p>
+          </div>
+          <div className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
+            <strong>Formato esperado (CSV manual):</strong> colunas "Data", "Dia da Semana", "Feriado"<br />
+            <strong>Exemplo:</strong> 01/01/2024, Segunda-feira, Confraternização Universal
+          </div>
         </div>
 
         {loading ? (
@@ -210,11 +294,11 @@ export default function HolidayImporter() {
                 <TableBody>
                   {paginatedHolidays.map((holiday) => (
                     <TableRow key={holiday.id} className="hover:bg-slate-50">
-                      <TableCell className="text-sm">
+                      <TableCell className="text-[11px]">
                         {new Date(holiday.holiday_date + "T12:00:00").toLocaleDateString("pt-BR")}
                       </TableCell>
-                      <TableCell className="text-sm">{holiday.day_of_week || "—"}</TableCell>
-                      <TableCell className="text-sm">{holiday.holiday_name}</TableCell>
+                      <TableCell className="text-[11px]">{holiday.day_of_week || "—"}</TableCell>
+                      <TableCell className="text-[11px]">{holiday.holiday_name}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

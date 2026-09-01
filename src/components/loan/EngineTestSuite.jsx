@@ -544,7 +544,7 @@ function TestResult({ result }) {
             <div className="mt-2">
               <p className="text-xs font-medium text-slate-600 mb-1">Primeiras 10 parcelas:</p>
               <div className="bg-slate-50 rounded p-2 overflow-x-auto">
-                <table className="text-[10px] w-full">
+                <table className="text-[11px] w-full">
                   <thead>
                     <tr className="border-b">
                       <th className="text-left pb-1">Parc</th>

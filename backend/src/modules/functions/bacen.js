@@ -1,4 +1,5 @@
 import * as store from "../entities/store.js";
+import { pool } from "../../db/pool.js";
 
 // Funções de acesso à API pública do Banco Central (BACEN) usadas tanto pelas
 // funções sob demanda (/functions/getPTAXFromBACEN, /functions/getRatesFromBACEN
@@ -186,6 +187,8 @@ export async function getRatesFromBACEN(payload = {}) {
 const IPCA_SERIES_ID = 433; // IBGE/BACEN SGS: IPCA - variação mensal (%)
 const TJLP_SERIES_ID = 256; // BACEN SGS: TJLP - % a.a., vigência trimestral (valor se repete dentro do trimestre)
 const TR_SERIES_ID = 226; // BACEN SGS: TR diária — cada cotação já é a taxa de todo o período seguinte (~1 mês)
+const INPC_SERIES_ID = 188; // IBGE/BACEN SGS: INPC - variação mensal (%)
+const IGPM_SERIES_ID = 189; // FGV/BACEN SGS: IGP-M - variação mensal (%)
 
 // Busca o IPCA direto do BACEN (SGS, série 433) — mesma fonte oficial usada
 // acima para CDI/SELIC/PTAX. Diferente de CDI/SELIC (taxa DIÁRIA de mercado),
@@ -195,7 +198,14 @@ const TR_SERIES_ID = 226; // BACEN SGS: TR diária — cada cotação já é a t
 // aqui; `annual_rate` guarda a variação MENSAL tal como publicada (ver
 // IPCAIndexer.js para como isso é consumido no motor de cálculo).
 export async function getIPCAFromBACEN(payload = {}) {
-  const { startDate, endDate } = payload;
+  return getMonthlyIndexFromBACEN({ seriesId: IPCA_SERIES_ID, rateType: "IPCA", ...payload });
+}
+
+// Busca um índice de preços MENSAL do BACEN (SGS) — mesma mecânica do IPCA
+// acima (variação mensal, não anualizada, normalizada pro 1º dia do mês de
+// referência). Reaproveitado por getINPCFromBACEN e getIGPMFromBACEN
+// abaixo, que só trocam a série e o rate_type.
+async function getMonthlyIndexFromBACEN({ seriesId, rateType, startDate, endDate }) {
   if (!startDate || !endDate) {
     const err = new Error("startDate e endDate são obrigatórios (YYYY-MM-DD)");
     err.status = 400;
@@ -204,7 +214,7 @@ export async function getIPCAFromBACEN(payload = {}) {
   const start = formatBCBDate(new Date(`${startDate}T00:00:00`));
   const end = formatBCBDate(new Date(`${endDate}T00:00:00`));
   const url =
-    `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${IPCA_SERIES_ID}/dados` +
+    `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${seriesId}/dados` +
     `?formato=json&dataInicial=${start}&dataFinal=${end}`;
   const response = await fetch(url, { headers: { Accept: "application/json" } });
   if (!response.ok) {
@@ -224,15 +234,25 @@ export async function getIPCAFromBACEN(payload = {}) {
       const monthlyRate = parseFloat(String(item.valor).replace(",", "."));
       if (!dd || !mm || !yyyy || !Number.isFinite(monthlyRate)) return null;
       return {
-        // Normaliza para o 1º dia do mês de referência — é assim que
-        // IPCAIndexer.js busca a taxa por mês (rate_date = 1º dia do mês).
         rate_date: `${yyyy}-${mm}-01`,
-        annual_rate: monthlyRate, // variação MENSAL (não anualizada — ver comentário acima)
-        rate_type: "IPCA",
+        annual_rate: monthlyRate, // variação MENSAL (não anualizada — mesmo campo reaproveitado do IPCA)
+        rate_type: rateType,
       };
     })
     .filter(Boolean);
-  return { success: true, rate_type: "IPCA", count: rates.length, rates };
+  return { success: true, rate_type: rateType, count: rates.length, rates };
+}
+
+// Busca o INPC direto do BACEN (SGS, série 188) — mesma mecânica do IPCA
+// (ver getIPCAFromBACEN acima e INPCIndexer.js).
+export async function getINPCFromBACEN(payload = {}) {
+  return getMonthlyIndexFromBACEN({ seriesId: INPC_SERIES_ID, rateType: "INPC", ...payload });
+}
+
+// Busca o IGP-M direto do BACEN (SGS, série 189) — mesma mecânica do IPCA
+// (ver getIPCAFromBACEN acima e IGPMIndexer.js).
+export async function getIGPMFromBACEN(payload = {}) {
+  return getMonthlyIndexFromBACEN({ seriesId: IGPM_SERIES_ID, rateType: "IGPM", ...payload });
 }
 
 // Busca a TJLP direto do BACEN (SGS, série 256) — publicada mensalmente pelo
@@ -416,5 +436,53 @@ export async function syncRatesToCdiRates() {
     }
     summary.TR = { fetched: rates.length, inserted: newRates.length };
   }
+  // INPC: mesma janela de 45 dias do IPCA (publicação mensal)
+  {
+    const inpcStart = isoDaysAgo(today, 45);
+    const { rates } = await getINPCFromBACEN({ startDate: inpcStart, endDate: today });
+    const existing = await store.filter("CDIRate", { rate_type: "INPC" }, "-rate_date", 10000);
+    const existingDates = new Set(existing.map((r) => r.rate_date));
+    const newRates = rates.filter((r) => !existingDates.has(r.rate_date));
+    if (newRates.length) {
+      await store.bulkCreate("CDIRate", newRates, "sistema-bacen");
+    }
+    summary.INPC = { fetched: rates.length, inserted: newRates.length };
+  }
+  // IGP-M: mesma janela de 45 dias do IPCA (publicação mensal)
+  {
+    const igpmStart = isoDaysAgo(today, 45);
+    const { rates } = await getIGPMFromBACEN({ startDate: igpmStart, endDate: today });
+    const existing = await store.filter("CDIRate", { rate_type: "IGPM" }, "-rate_date", 10000);
+    const existingDates = new Set(existing.map((r) => r.rate_date));
+    const newRates = rates.filter((r) => !existingDates.has(r.rate_date));
+    if (newRates.length) {
+      await store.bulkCreate("CDIRate", newRates, "sistema-bacen");
+    }
+    summary.IGPM = { fetched: rates.length, inserted: newRates.length };
+  }
   return { ok: true, summary };
+}
+
+// Limpa TODAS as taxas de um rate_type (botão "Limpar Taxas X" em
+// CDIImporter.jsx/MonthlyIndexImporter.jsx). Feito numa query só (DELETE ...
+// WHERE) — a versão antiga apagava linha por linha via API genérica, o que
+// pra CDI/SELIC (1000+ registros) disparava centenas de requisições e
+// estourava o rate limit da API (HTTP 429).
+export async function clearCDIRatesByType(payload = {}) {
+  const { rateType } = payload;
+  if (!rateType) {
+    const err = new Error("rateType é obrigatório");
+    err.status = 400;
+    throw err;
+  }
+  const result = await pool.query(`DELETE FROM cdi_rates WHERE rate_type = $1`, [rateType]);
+  return { ok: true, deleted: result.rowCount };
+}
+
+// Mesma ideia acima, mas pro cadastro de Moedas (botão "Limpar Taxas PTAX"
+// em PTAXImporter.jsx).
+export async function clearCurrencyRates(payload = {}) {
+  const { currencyCode = "USD" } = payload;
+  const result = await pool.query(`DELETE FROM currencies WHERE currency_code = $1`, [currencyCode]);
+  return { ok: true, deleted: result.rowCount };
 }

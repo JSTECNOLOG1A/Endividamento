@@ -377,6 +377,10 @@ export default function FechamentoContabil({ entityId, entityName }) {
   const [recalcTarget, setRecalcTarget] = useState(null); // { contract, row, settlement }
   const [recalcJustification, setRecalcJustification] = useState("");
   const [recalcSubmitting, setRecalcSubmitting] = useState(false);
+  // Mesmo padrão do "Reabrir para Edição" em ContractWorkflow.jsx — se
+  // reopenApprovedContractForEditing bloquear por título já integrado ao
+  // ERP, oferece estornar lá também em vez de só travar.
+  const [recalcErpBlock, setRecalcErpBlock] = useState(null);
 
   const competencia = competenciaDate(year, month);
 
@@ -677,47 +681,44 @@ export default function FechamentoContabil({ entityId, entityName }) {
     const { contract, row, settlement } = recalcTarget;
     setRecalcSubmitting(true);
     try {
-      let history = [];
-      try {
-        const parsed = contract.status_history ? JSON.parse(contract.status_history) : [];
-        history = Array.isArray(parsed) ? parsed : [];
-      } catch {
-        history = [];
-      }
-      history.push({
-        from: contract.status,
-        to: "rascunho",
-        by: user?.email,
-        at: new Date().toISOString(),
-        comments: recalcJustification.trim(),
-      });
-
       // Volta para esta mesma tela (mesma empresa/competência) depois do
       // recálculo ser salvo — ver Simulator.jsx (recalcFlag.returnTo).
       const returnTo = `${createPageUrl("Accounting")}?tab=fechamento&entity=${encodeURIComponent(entityId || "")}&month=${month}&year=${year}`;
 
-      await base44.entities.LoanContract.update(contract.id, {
-        status: "rascunho",
-        status_history: JSON.stringify(history),
-        // Campo dinâmico (extra_json) — não exige migração. Lido de volta
-        // em Simulator.jsx → loadContractForEdit para o "modo recálculo".
-        recalculation_flag: {
-          parcela: row.parcela,
-          dataVencimento: row.dataVencimento,
-          contractNumber: contract.contract_number,
-          settlementId: settlement?.id || null,
-          note: recalcJustification.trim(),
-          flaggedBy: user?.email,
-          flaggedAt: new Date().toISOString(),
-          returnTo,
+      // Mesma função usada pelo "Reabrir para Edição" da tela de Contratos —
+      // não um PATCH direto: estorna os títulos a pagar ainda não
+      // integrados ao ERP (o recálculo muda o cronograma) e bloqueia se
+      // algum já foi integrado, pedindo estorno manual primeiro.
+      await base44.functions.invoke("reopenApprovedContractForEditing", {
+        contractId: contract.id,
+        comments: recalcJustification.trim(),
+        ...(recalcErpBlock ? { confirmErpReversal: true } : {}),
+        extraFields: {
+          // Campo dinâmico (extra_json) — não exige migração. Lido de volta
+          // em Simulator.jsx → loadContractForEdit para o "modo recálculo".
+          recalculation_flag: {
+            parcela: row.parcela,
+            dataVencimento: row.dataVencimento,
+            contractNumber: contract.contract_number,
+            settlementId: settlement?.id || null,
+            note: recalcJustification.trim(),
+            flaggedBy: user?.email,
+            flaggedAt: new Date().toISOString(),
+            returnTo,
+          },
         },
       });
 
       setRecalcTarget(null);
       setRecalcJustification("");
+      setRecalcErpBlock(null);
       window.location.href = `${createPageUrl("Simulator")}?edit=${contract.id}`;
     } catch (err) {
-      toast.error("Erro ao reabrir contrato: " + (err.message || "tente novamente"));
+      if (err.data?.code === "TITULOS_INTEGRADOS_PENDENTES" || err.data?.code === "ESTORNO_ERP_FALHOU") {
+        setRecalcErpBlock({ code: err.data.code, details: err.data.details, message: err.message });
+      } else {
+        toast.error("Erro ao reabrir contrato: " + (err.message || "tente novamente"));
+      }
     } finally {
       setRecalcSubmitting(false);
     }
@@ -821,7 +822,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
             <p className="text-sm text-slate-600 py-6 text-center">Nenhuma parcela prevista para esta competência.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[820px]">
+              <table className="w-full text-[11px] min-w-[820px]">
                 <thead>
                   <tr className="border-b border-slate-200">
                     <SortableTh sortField="contrato" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort}>Contrato</SortableTh>
@@ -830,21 +831,21 @@ export default function FechamentoContabil({ entityId, entityName }) {
                     <SortableTh sortField="juros" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort} right>Juros previsto</SortableTh>
                     <SortableTh sortField="totalPago" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort} right>Total pago</SortableTh>
                     <SortableTh sortField="situacao" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort}>Situação</SortableTh>
-                    <th className="px-2 py-2" />
+                    <th className="px-2 py-1.5" />
                   </tr>
                 </thead>
                 <tbody>
                   {step1Sort.sortedRows.map(({ contract, row, settlement, isEstornado, _key }) => {
                     return (
                       <tr key={_key} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="px-2 py-2 text-slate-700">{contract.contract_number}</td>
-                        <td className="px-2 py-2 text-slate-700">{row.dataVencimento?.split("-").reverse().join("/")}</td>
-                        <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(row.amortizacao)}</td>
-                        <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(row.jurosPagos)}</td>
-                        <td className="px-2 py-2 text-right text-slate-700">
+                        <td className="px-2 py-1.5 text-slate-700">{contract.contract_number}</td>
+                        <td className="px-2 py-1.5 text-slate-700">{row.dataVencimento?.split("-").reverse().join("/")}</td>
+                        <td className="px-2 py-1.5 text-right text-slate-700">{formatCurrency(row.amortizacao)}</td>
+                        <td className="px-2 py-1.5 text-right text-slate-700">{formatCurrency(row.jurosPagos)}</td>
+                        <td className="px-2 py-1.5 text-right text-slate-700">
                           {settlement && !isEstornado ? formatCurrency(settlement.total_paid) : "—"}
                         </td>
-                        <td className="px-2 py-2">
+                        <td className="px-2 py-1.5">
                           {!settlement || isEstornado ? (
                             <Badge variant="secondary">Pendente</Badge>
                           ) : settlement.triggers_recalculation ? (
@@ -861,7 +862,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
                             <Badge variant="default">Liquidada</Badge>
                           )}
                         </td>
-                        <td className="px-2 py-2 text-right">
+                        <td className="px-2 py-1.5 text-right">
                           <div className="flex gap-1.5 justify-end">
                             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={isApproved}
                               onClick={() => handleOpenSettlement(contract, row)}>
@@ -933,7 +934,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-[11px]">
                 <thead>
                   <tr className="border-b border-slate-200">
                     <SortableTh sortField="evento" sortKey={step2Sort.sortKey} sortDir={step2Sort.sortDir} onSort={step2Sort.toggleSort}>Evento</SortableTh>
@@ -943,8 +944,8 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 <tbody>
                   {step2Sort.sortedRows.map(({ type, amount, label }) => (
                     <tr key={type} className="border-b border-slate-100">
-                      <td className="px-2 py-2 text-slate-700">{label}</td>
-                      <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(amount)}</td>
+                      <td className="px-2 py-1.5 text-slate-700">{label}</td>
+                      <td className="px-2 py-1.5 text-right text-slate-700">{formatCurrency(amount)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -973,7 +974,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
         {journalResult && (
           <CardContent className="space-y-4">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[700px]">
+              <table className="w-full text-[11px] min-w-[700px]">
                 <thead>
                   <tr className="border-b border-slate-200">
                     <SortableTh sortField="data" sortKey={step3Sort.sortKey} sortDir={step3Sort.sortDir} onSort={step3Sort.toggleSort}>Data</SortableTh>
@@ -986,19 +987,19 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 <tbody>
                   {step3Sort.sortedRows.map((e) => (
                     <tr key={e._key} className="border-b border-slate-100">
-                      <td className="px-2 py-2 text-slate-700">{e.entry_date?.split("-").reverse().join("/")}</td>
-                      <td className="px-2 py-2 text-slate-700">{e.eventLabel}</td>
-                      <td className="px-2 py-2 text-slate-700">{e.accountLabel}</td>
-                      <td className="px-2 py-2 text-right text-slate-700">{e.side === "debito" ? formatCurrency(e.amount) : ""}</td>
-                      <td className="px-2 py-2 text-right text-slate-700">{e.side === "credito" ? formatCurrency(e.amount) : ""}</td>
+                      <td className="px-2 py-1.5 text-slate-700">{e.entry_date?.split("-").reverse().join("/")}</td>
+                      <td className="px-2 py-1.5 text-slate-700">{e.eventLabel}</td>
+                      <td className="px-2 py-1.5 text-slate-700">{e.accountLabel}</td>
+                      <td className="px-2 py-1.5 text-right text-slate-700">{e.side === "debito" ? formatCurrency(e.amount) : ""}</td>
+                      <td className="px-2 py-1.5 text-right text-slate-700">{e.side === "credito" ? formatCurrency(e.amount) : ""}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-300 font-semibold">
-                    <td className="px-2 py-2" colSpan={3}>Totais</td>
-                    <td className="px-2 py-2 text-right">{formatCurrency(journalResult.totalDebito)}</td>
-                    <td className="px-2 py-2 text-right">{formatCurrency(journalResult.totalCredito)}</td>
+                    <td className="px-2 py-1.5" colSpan={3}>Totais</td>
+                    <td className="px-2 py-1.5 text-right">{formatCurrency(journalResult.totalDebito)}</td>
+                    <td className="px-2 py-1.5 text-right">{formatCurrency(journalResult.totalCredito)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -1055,7 +1056,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!recalcTarget} onOpenChange={(open) => { if (!open) { setRecalcTarget(null); setRecalcJustification(""); } }}>
+      <Dialog open={!!recalcTarget} onOpenChange={(open) => { if (!open) { setRecalcTarget(null); setRecalcJustification(""); setRecalcErpBlock(null); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><RotateCcw className="w-4 h-4" /> Reabrir contrato para recálculo</DialogTitle>
@@ -1070,12 +1071,38 @@ export default function FechamentoContabil({ entityId, entityName }) {
               <Label className="text-xs">Justificativa *</Label>
               <Textarea className="min-h-20" value={recalcJustification} onChange={(e) => setRecalcJustification(e.target.value)} />
             </div>
+            {recalcErpBlock && (
+              <div className="space-y-2 text-sm bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                <p className="text-amber-800">{recalcErpBlock.message}</p>
+                <ul className="text-xs text-slate-700 space-y-0.5">
+                  {[...(recalcErpBlock.details?.titulos || []), ...(recalcErpBlock.details?.titulosReceber || [])].map((t) => (
+                    <li key={t.id}>
+                      {t.prefixo} {t.parcela} — {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(t.valor) || 0)}
+                      {t.erp_mensagem ? ` — ${t.erp_mensagem}` : ""}
+                    </li>
+                  ))}
+                </ul>
+                {recalcErpBlock.code === "TITULOS_INTEGRADOS_PENDENTES" ? (
+                  <p className="text-amber-800">Deseja estornar esses títulos no ERP e reabrir o contrato em seguida?</p>
+                ) : (
+                  <p className="text-red-700">
+                    O ERP recusou o estorno de um ou mais títulos — resolva manualmente em Contas a Pagar/Receber antes de tentar novamente.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => { setRecalcTarget(null); setRecalcJustification(""); }}>Cancelar</Button>
-            <Button type="button" variant="destructive" onClick={handleConfirmReopenForRecalc} disabled={recalcSubmitting}>
-              {recalcSubmitting ? "Reabrindo..." : "Reabrir e ir para a Calculadora"}
-            </Button>
+            <Button type="button" variant="ghost" onClick={() => { setRecalcTarget(null); setRecalcJustification(""); setRecalcErpBlock(null); }}>Cancelar</Button>
+            {recalcErpBlock?.code !== "ESTORNO_ERP_FALHOU" && (
+              <Button type="button" variant="destructive" onClick={handleConfirmReopenForRecalc} disabled={recalcSubmitting}>
+                {recalcSubmitting
+                  ? "Reabrindo..."
+                  : recalcErpBlock?.code === "TITULOS_INTEGRADOS_PENDENTES"
+                    ? "Estornar no ERP e Reabrir"
+                    : "Reabrir e ir para a Calculadora"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

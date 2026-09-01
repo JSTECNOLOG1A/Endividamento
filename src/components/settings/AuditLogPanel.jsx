@@ -328,16 +328,16 @@ export default function AuditLogPanel() {
                 className="cursor-pointer hover:bg-slate-50"
                 onClick={() => setSelected(row)}
               >
-                <TableCell className="whitespace-nowrap text-xs text-slate-600">{formatDateTime(row.occurredAt)}</TableCell>
+                <TableCell className="whitespace-nowrap text-[11px] text-slate-600">{formatDateTime(row.occurredAt)}</TableCell>
                 <TableCell>
-                  <div className="text-sm text-slate-900">{row.userName || row.user}</div>
+                  <div className="text-[11px] text-slate-900">{row.userName || row.user}</div>
                   {row.userName ? <div className="text-[11px] text-slate-600">{row.user}</div> : null}
                 </TableCell>
-                <TableCell className="text-xs text-slate-600">
+                <TableCell className="text-[11px] text-slate-600">
                   {PROCESSING_LABELS[row.processingType] || row.processingType}
                 </TableCell>
-                <TableCell className="text-sm">{row.rotina}</TableCell>
-                <TableCell className="max-w-[180px] truncate text-sm" title={row.registro}>{row.registro}</TableCell>
+                <TableCell className="text-[11px]">{row.rotina}</TableCell>
+                <TableCell className="max-w-[180px] truncate text-[11px]" title={row.registro}>{row.registro}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={ACTION_BADGE[row.action] || "border-slate-200 bg-slate-50 text-slate-700"}>
                     {row.actionLabel}
@@ -399,7 +399,7 @@ export default function AuditLogPanel() {
                               {item.label || [item.prefixo, item.numero || item.titulo_numero, item.parcela].filter(Boolean).join(" ") || item.id || "—"}
                             </TableCell>
                             <TableCell>{item.tipo || "—"}</TableCell>
-                            <TableCell className="text-xs text-slate-600">
+                            <TableCell className="text-[11px] text-slate-600">
                               {item.message || (item.ok == null ? "—" : item.ok ? "Ok" : "Erro")}
                             </TableCell>
                           </TableRow>

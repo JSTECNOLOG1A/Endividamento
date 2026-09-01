@@ -1,28 +1,141 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { FileUp, Database, ChevronLeft, ChevronRight, AlertCircle, Trash2 } from "lucide-react";
+import { FileUp, Database, ChevronLeft, ChevronRight, AlertCircle, Trash2, Search } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { computeBacenStartDate, todayIso } from "@/lib/bacenAutoImport";
 
-const PAGE_SIZE = 50;
+const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const HEAD_CLASS = "text-[11px] font-bold text-slate-700 uppercase tracking-wide whitespace-nowrap px-2 py-2 border-b-2 border-slate-200 text-center";
+const DAY_LABEL_CLASS = "text-[11px] font-semibold text-slate-500 whitespace-nowrap px-2 py-1.5 bg-slate-50 text-center sticky left-0";
 
-// Colunas ordenáveis por clique no título (mesma configuração da tabela de
-// Contratos) — exchange_rate ordena como número, o resto como texto.
-const PTAX_SORT_COLUMNS = {
-  exchange_rate: { numeric: true },
-};
+function daysInMonth(year, monthIndex0) {
+  return new Date(year, monthIndex0 + 1, 0).getDate();
+}
+
+function indexByYear(rates) {
+  const byYear = new Map();
+  for (const r of rates) {
+    const year = r.rate_date.slice(0, 4);
+    const monthDay = r.rate_date.slice(5);
+    if (!byYear.has(year)) byYear.set(year, new Map());
+    byYear.get(year).set(monthDay, r);
+  }
+  return byYear;
+}
+
+// Grade calendário (dia × mês) por ano — mesmo formato de CDIImporter.jsx,
+// pra série diária caber numa tela só sem paginação.
+function PTAXYearGrid({ rates }) {
+  const byYear = useMemo(() => indexByYear(rates), [rates]);
+  const years = useMemo(() => [...byYear.keys()].sort((a, b) => b.localeCompare(a)), [byYear]);
+  const [year, setYear] = useState(years[0] || String(new Date().getFullYear()));
+
+  React.useEffect(() => {
+    if (years.length && !years.includes(year)) setYear(years[0]);
+  }, [years, year]);
+
+  if (!years.length) return null;
+
+  const yearData = byYear.get(year) || new Map();
+  const yearNum = Number(year);
+  const yearIdx = years.indexOf(year);
+
+  return (
+    <Card className="border-slate-200 shadow-sm overflow-hidden">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
+            <Search className="w-4 h-4 text-blue-600" />
+            Consulta de Taxas PTAX
+          </CardTitle>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              disabled={yearIdx >= years.length - 1}
+              onClick={() => setYear(years[yearIdx + 1])}
+              title="Ano anterior"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Select value={year} onValueChange={setYear}>
+              <SelectTrigger className="h-8 w-24"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {years.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              disabled={yearIdx <= 0}
+              onClick={() => setYear(years[yearIdx - 1])}
+              title="Próximo ano"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse min-w-[760px] text-[11px]">
+            <thead>
+              <tr>
+                <th className={`${HEAD_CLASS} bg-slate-50`}>Dia</th>
+                {MONTH_LABELS.map((label, monthIdx) => (
+                  <th key={label} className={`${HEAD_CLASS} ${monthIdx % 2 === 0 ? "bg-slate-50" : "bg-slate-100"}`}>{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                <tr key={day} className="border-b border-slate-100">
+                  <td className={DAY_LABEL_CLASS}>{day}</td>
+                  {MONTH_LABELS.map((_, monthIdx) => {
+                    const stripe = monthIdx % 2 === 0 ? "bg-white" : "bg-slate-50";
+                    const validDay = day <= daysInMonth(yearNum, monthIdx);
+                    if (!validDay) {
+                      return <td key={monthIdx} className={stripe} />;
+                    }
+                    const key = `${String(monthIdx + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    const rate = yearData.get(key);
+                    return (
+                      <td
+                        key={monthIdx}
+                        className={`text-[11px] text-center px-2 py-1.5 tabular-nums text-slate-700 ${stripe}`}
+                        title={rate ? `R$ ${rate.exchange_rate.toFixed(4)} — ${rate.status}` : undefined}
+                      >
+                        {rate ? rate.exchange_rate.toFixed(2) : <span className="text-slate-300">·</span>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] text-slate-500 px-3 py-2 border-t border-slate-100">
+          Valores em R$ (venda) — passe o mouse sobre uma célula pra ver a cotação completa e o status.
+          "·" = sem cotação nesse dia (fim de semana ou feriado).
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 // Layout desta tela é o mesmo de CDIImporter.jsx (Card > upload CSV + busca
 // automática no BACEN por período > Card de consulta com tabela paginada) —
@@ -34,11 +147,6 @@ export default function PTAXImporter() {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [page, setPage] = useState(0);
-  const [filterStart, setFilterStart] = useState("");
-  const [filterEnd, setFilterEnd] = useState("");
-  const [bacenStart, setBacenStart] = useState("");
-  const [bacenEnd, setBacenEnd] = useState("");
   const [importingBacen, setImportingBacen] = useState(false);
   const queryClient = useQueryClient();
 
@@ -180,7 +288,6 @@ export default function PTAXImporter() {
         parsed: uniqueParsed.length,
         errors: [...parseErrors, ...insertErrors],
       });
-      setPage(0);
     } catch (err) {
       setError("Erro ao processar arquivo: " + err.message);
     }
@@ -188,20 +295,20 @@ export default function PTAXImporter() {
   }, [file, usdRates, queryClient]);
 
   // Busca a série de PTAX (venda) direto do BACEN (Olinda — fonte oficial e
-  // gratuita, mesma origem usada no "Conciliar PTAX" de contratos) pro
-  // período informado, e importa só as datas que ainda não existem no
+  // gratuita, mesma origem usada no "Conciliar PTAX" de contratos). Sem data
+  // pra escolher: cobre sozinho da última cotação já salva até hoje (ou um
+  // histórico inicial, se o cadastro estiver vazio — ver
+  // computeBacenStartDate). Importa só as datas que ainda não existem no
   // cadastro de Moedas — mesma lógica de deduplicação do import por CSV.
   const handleImportFromBACEN = useCallback(async () => {
-    if (!bacenStart || !bacenEnd) {
-      setError("Informe o período (data inicial e final) para buscar no BACEN.");
-      return;
-    }
     setImportingBacen(true);
     setError(null);
     try {
+      const lastKnownDate = usdRates.reduce((max, r) => (r.rate_date > max ? r.rate_date : max), "");
+      const startDate = computeBacenStartDate(lastKnownDate || null, { isMonthly: false });
       const { data } = await base44.functions.invoke("getPTAXRangeFromBACEN", {
-        startDate: bacenStart,
-        endDate: bacenEnd,
+        startDate,
+        endDate: todayIso(),
       });
       const parsed = data?.rates || [];
       if (parsed.length === 0) {
@@ -234,13 +341,14 @@ export default function PTAXImporter() {
 
       queryClient.invalidateQueries({ queryKey: ["currencies"] });
       setResult({ message: `${newRates.length} novas cotações PTAX importadas do BACEN! ${parsed.length - newRates.length} já existiam no cadastro.` });
-      setPage(0);
     } catch (err) {
       setError("Erro ao importar do BACEN: " + (err.message || "tente novamente"));
     }
     setImportingBacen(false);
-  }, [bacenStart, bacenEnd, usdRates, queryClient]);
+  }, [usdRates, queryClient]);
 
+  // Uma query só no servidor — ver comentário em CDIImporter.jsx
+  // (handleClearRates) sobre por que não apaga mais linha por linha.
   const handleClearRates = useCallback(async () => {
     if (!confirm(`⚠️ Tem certeza que deseja limpar TODAS as ${usdRates.length} taxas PTAX USD?\n\nEsta ação não pode ser desfeita.`)) {
       return;
@@ -248,30 +356,14 @@ export default function PTAXImporter() {
     setImporting(true);
     setError(null);
     try {
-      for (const rate of usdRates) {
-        await base44.entities.Currency.delete(rate.id);
-      }
+      const { data } = await base44.functions.invoke("clearCurrencyRates", { currencyCode: "USD" });
       queryClient.invalidateQueries({ queryKey: ["currencies"] });
-      setResult({ message: `${usdRates.length} taxas PTAX USD foram removidas com sucesso.` });
-      setPage(0);
+      setResult({ message: `${data.deleted} taxas PTAX USD foram removidas com sucesso.` });
     } catch (err) {
       setError("Erro ao limpar taxas: " + err.message);
     }
     setImporting(false);
   }, [usdRates, queryClient]);
-
-  // Filter (ordenação por coluna vem do useSortableRows abaixo — mesma
-  // configuração da tabela de Contratos). Ordem padrão sem coluna
-  // selecionada: data mais recente primeiro.
-  let filteredData = [...usdRates];
-  if (filterStart) filteredData = filteredData.filter((r) => r.rate_date >= filterStart);
-  if (filterEnd) filteredData = filteredData.filter((r) => r.rate_date <= filterEnd);
-  filteredData.sort((a, b) => b.rate_date.localeCompare(a.rate_date));
-
-  const { sortKey, sortDir, toggleSort, sortedRows: displayData } = useSortableRows(filteredData, PTAX_SORT_COLUMNS);
-
-  const totalPages = Math.ceil(displayData.length / PAGE_SIZE);
-  const pageData = displayData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -290,25 +382,15 @@ export default function PTAXImporter() {
             <div className="space-y-2 md:pr-6">
               <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
                 <Database className="w-3.5 h-3.5 text-blue-600" />
-                Importar automaticamente do BACEN
+                Atualizar automaticamente do BACEN
               </Label>
-              <div className="flex flex-wrap items-end gap-2">
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-slate-600">Data inicial</Label>
-                  <Input type="date" value={bacenStart} onChange={(e) => setBacenStart(e.target.value)} className="h-9 w-[9.5rem]" disabled={importingBacen} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-slate-600">Data final</Label>
-                  <Input type="date" value={bacenEnd} onChange={(e) => setBacenEnd(e.target.value)} className="h-9 w-[9.5rem]" disabled={importingBacen} />
-                </div>
-                <Button type="button" onClick={handleImportFromBACEN} disabled={importingBacen} className="h-9 gap-1.5">
-                  <Database className="w-3.5 h-3.5" />
-                  {importingBacen ? "Buscando..." : "Buscar PTAX no BACEN"}
-                </Button>
-              </div>
+              <Button type="button" onClick={handleImportFromBACEN} disabled={importingBacen} className="h-9 gap-1.5">
+                <Database className="w-3.5 h-3.5" />
+                {importingBacen ? "Atualizando..." : "Atualizar PTAX"}
+              </Button>
               <p className="text-[11px] text-slate-500">
-                Busca a série oficial do Banco Central (PTAX venda, olinda.bcb.gov.br) e importa só as datas que
-                ainda não estão no cadastro.
+                Busca a série oficial do Banco Central (PTAX venda, olinda.bcb.gov.br) até hoje, direto de onde
+                parou — sem precisar informar data. Também roda sozinho todo dia (ver Configurações → Agendamento).
               </p>
             </div>
 
@@ -384,83 +466,7 @@ export default function PTAXImporter() {
         </CardContent>
       </Card>
 
-      {/* Consulta Paginada */}
-      {usdRates.length > 0 && (
-        <Card className="border-slate-200 shadow-sm overflow-hidden">
-          <CardHeader className="pb-3">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
-                <Database className="w-4 h-4 text-blue-600" />
-                Consulta de Taxas PTAX
-              </CardTitle>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={filterStart}
-                  onChange={(e) => { setFilterStart(e.target.value); setPage(0); }}
-                  className="h-8 text-xs w-36"
-                  placeholder="De"
-                />
-                <span className="text-xs text-slate-500">até</span>
-                <Input
-                  type="date"
-                  value={filterEnd}
-                  onChange={(e) => { setFilterEnd(e.target.value); setPage(0); }}
-                  className="h-8 text-xs w-36"
-                  placeholder="Até"
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <SortableHead sortField="rate_date" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Data</SortableHead>
-                    <SortableHead sortField="exchange_rate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Cotação PTAX (R$)</SortableHead>
-                    <SortableHead sortField="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Status</SortableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pageData.map((r) => (
-                    <TableRow key={r.id} className="hover:bg-slate-50">
-                      <TableCell className="text-xs">
-                        {new Date(`${r.rate_date}T12:00:00`).toLocaleDateString("pt-BR")}
-                      </TableCell>
-                      <TableCell className="text-xs text-right font-medium">
-                        {r.exchange_rate ? r.exchange_rate.toFixed(4) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">{r.status}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t bg-white">
-                <span className="text-xs text-slate-600">
-                  {displayData.length.toLocaleString("pt-BR")} registros filtrados — Página {page + 1} de {totalPages}
-                </span>
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => setPage(0)} disabled={page === 0} className="text-xs h-7 px-2">Primeira</Button>
-                  <Button variant="ghost" size="icon" onClick={() => setPage(page - 1)} disabled={page === 0} className="h-7 w-7">
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </Button>
-                  <span className="text-xs text-slate-600 px-2 font-medium">{page + 1}</span>
-                  <Button variant="ghost" size="icon" onClick={() => setPage(page + 1)} disabled={page >= totalPages - 1} className="h-7 w-7">
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1} className="text-xs h-7 px-2">Última</Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      <PTAXYearGrid rates={usdRates} />
     </div>
   );
 }
