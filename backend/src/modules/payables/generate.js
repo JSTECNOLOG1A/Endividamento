@@ -2,6 +2,13 @@ import { randomUUID } from "node:crypto";
 import { pool } from "../../db/pool.js";
 import { logger } from "../../logger.js";
 import { se2FilialFromSm0 } from "../integrations/protheusScope.js";
+import { writeAudit } from "../../middleware/audit.js";
+
+function httpError(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
 
 export function titleNumberFromContract(contractNumber) {
   const digits = String(contractNumber || "").replace(/\D/g, "");
@@ -146,6 +153,110 @@ export function buildPayableTitles(contract, bank = null, entity = null) {
     }
   }
   return titles;
+}
+
+function parseStatusHistory(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function titleIsIntegrated(title) {
+  return title.integrado_erp === true || ["integrado", "baixado"].includes(String(title.erp_status || ""));
+}
+
+// Reabre um contrato aprovado pra edição (ajustes no cálculo). Como o
+// cronograma vai mudar, os títulos a pagar já gerados pra ele deixam de
+// corresponder ao que vai ser reaprovado — por isso são estornados
+// (removidos) aqui, pra serem regerados do zero quando o contrato for
+// reaprovado (generatePayableTitlesForContract roda de novo nesse
+// momento, ver syncPayableTitlesFromApprovedContracts).
+//
+// Título já integrado ao Protheus NÃO é tocado aqui — apagar/mudar
+// silenciosamente um título que o ERP já conhece deixaria as duas pontas
+// dessincronizadas. Nesse caso a reabertura é bloqueada: primeiro alguém
+// precisa estornar esse título manualmente em Contas a Pagar (mesmo fluxo
+// que já existe pra estornar título integrado, ver reversePayableTitles
+// em erpIntegrate.js), só depois o contrato pode ser reaberto.
+export async function reopenApprovedContractForEditing(payload = {}, req = null) {
+  const contractId = String(payload?.contractId || "").trim();
+  if (!contractId) throw httpError(400, "contractId é obrigatório");
+
+  const contractResult = await pool.query(`SELECT * FROM loan_contracts WHERE id = $1`, [contractId]);
+  const contract = contractResult.rows[0];
+  if (!contract) throw httpError(404, "Contrato não encontrado");
+  if (contract.status !== "aprovado") {
+    throw httpError(400, `Só é possível reabrir contratos aprovados (status atual: ${contract.status})`);
+  }
+
+  const titlesResult = await pool.query(`SELECT * FROM payable_titles WHERE contract_id = $1`, [contractId]);
+  const integrated = titlesResult.rows.filter(titleIsIntegrated);
+  if (integrated.length) {
+    const err = new Error(
+      `Este contrato tem ${integrated.length} título(s) já integrado(s) ao ERP. ` +
+      `Estorne-o(s) manualmente em Contas a Pagar antes de reabrir o contrato para edição.`
+    );
+    err.status = 409;
+    err.code = "TITULOS_INTEGRADOS_PENDENTES";
+    err.details = { titulos: integrated.map((t) => ({ id: t.id, parcela: t.parcela, prefixo: t.prefixo, valor: t.valor })) };
+    throw err;
+  }
+
+  const toReverse = titlesResult.rows.filter((t) => t.status === "aberto");
+  const actorEmail = req?.user?.email || "system";
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    if (toReverse.length) {
+      await client.query(
+        `DELETE FROM payable_titles WHERE id = ANY($1::text[])`,
+        [toReverse.map((t) => t.id)]
+      );
+    }
+    const history = parseStatusHistory(contract.status_history);
+    history.push({
+      from: contract.status,
+      to: "rascunho",
+      by: actorEmail,
+      at: new Date().toISOString(),
+      comments: payload.comments || `Reaberto para edição — ${toReverse.length} título(s) a pagar estornado(s)`,
+    });
+    await client.query(
+      `UPDATE loan_contracts
+         SET status = 'rascunho', exported_to_payables = false,
+             status_history = $2, updated_date = now()
+       WHERE id = $1`,
+      [contractId, JSON.stringify(history)]
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  if (req) {
+    await writeAudit({
+      req,
+      action: "REVERSE",
+      resourceType: "PayableTitle",
+      resourceId: contractId,
+      rotina: "Contas a pagar",
+      registro: `${toReverse.length} título(s) estornado(s) — reabertura do contrato ${contract.contract_number}`,
+      before: { titulos: toReverse },
+      after: { contractId, novoStatus: "rascunho" },
+      payload: { contractId, titulosEstornados: toReverse.length },
+    });
+  }
+
+  return { ok: true, contractId, titulosEstornados: toReverse.length };
 }
 
 export async function generatePayableTitlesForContract(contract, createdBy = "system") {

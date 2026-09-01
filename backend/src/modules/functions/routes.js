@@ -6,7 +6,7 @@ import { calculateAmortizationScheduleOnServer } from "../calculate/service.js";
 import { previewNatures, integrateNatures } from "../natures/integrate.js";
 import { previewBankAccounts, integrateBankAccounts } from "../bankAccounts/integrate.js";
 import { previewChartAccounts, integrateChartAccounts } from "../chartAccounts/integrate.js";
-import { syncPayableTitlesFromApprovedContracts, refreshPayableTitlesFxValue } from "../payables/generate.js";
+import { syncPayableTitlesFromApprovedContracts, refreshPayableTitlesFxValue, reopenApprovedContractForEditing } from "../payables/generate.js";
 import { classifyPayableTitles } from "../payables/classify.js";
 import { integratePayableTitles, reversePayableTitles, refreshPayableTitlesFromErp } from "../payables/erpIntegrate.js";
 import { convertPayablePrToTx } from "../payables/convertPrToTx.js";
@@ -125,6 +125,9 @@ const handlers = {
   reversePayableTitles: (payload) => reversePayableTitles(payload || {}),
   refreshPayableTitlesFromErp: (payload) => refreshPayableTitlesFromErp(payload || {}),
   refreshPayableTitlesFxValue: (payload) => refreshPayableTitlesFxValue(payload || {}),
+  // Auditoria própria (writeAudit chamado dentro da função) — não passa por
+  // FUNCTION_AUDIT abaixo pra não duplicar o registro.
+  reopenApprovedContractForEditing: (payload, req) => reopenApprovedContractForEditing(payload || {}, req),
   convertPayablePrToTx: (payload) => convertPayablePrToTx(payload || {}),
   lookupPayableErp: (payload) => lookupPayableErp(payload || {}),
   classifyReceivableTitles: (payload) => classifyReceivableTitles(payload || {}),

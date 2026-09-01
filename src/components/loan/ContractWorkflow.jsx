@@ -104,15 +104,26 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             status_history: addToHistory("cancelado", comments),
           };
           break;
-        case "reopen":
-          updateData = {
-            status: "rascunho",
-            status_history: addToHistory("rascunho", comments),
-          };
-          break;
       }
 
-      await base44.entities.LoanContract.update(contract.id, updateData);
+      // Reabrir passa pela função dedicada (não um PATCH direto): ela
+      // estorna os títulos a pagar ainda não integrados ao ERP — já que o
+      // recálculo vai mudar o cronograma, esses títulos deixam de valer e
+      // são regerados quando o contrato for reaprovado. Se algum título já
+      // foi ao ERP, bloqueia e pede pra estornar manualmente primeiro.
+      if (action === "reopen") {
+        const result = await base44.functions.invoke("reopenApprovedContractForEditing", {
+          contractId: contract.id,
+          comments,
+        });
+        if (result?.data?.titulosEstornados > 0) {
+          window.alert(
+            `Contrato reaberto para edição.\n\n${result.data.titulosEstornados} título(s) a pagar (ainda não integrado(s) ao ERP) foi(ram) estornado(s) — serão regerados quando o contrato for reaprovado.`
+          );
+        }
+      } else {
+        await base44.entities.LoanContract.update(contract.id, updateData);
+      }
 
       // Se é reopen, redirecionar para o Simulator com os dados
       if (action === "reopen") {
