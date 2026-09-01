@@ -3,6 +3,11 @@ import { pool } from "../../db/pool.js";
 import { logger } from "../../logger.js";
 import { se2FilialFromSm0 } from "../integrations/protheusScope.js";
 import { writeAudit } from "../../middleware/audit.js";
+import * as store from "../entities/store.js";
+import { calculateGuaranteedAccountStatement } from "../functions/guaranteedAccount.js";
+import { cleanupOrphanedReceivableTitles as cleanupOrphanedReceivableTitlesImpl } from "../receivables/generate.js";
+import { reversePayableTitles } from "./erpIntegrate.js";
+import { reverseReceivableTitles } from "../receivables/erpIntegrate.js";
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -38,6 +43,14 @@ export function totJurosAmount(row) {
   return money((row?.jurosFixosMes || 0) + (row?.jurosVariaveisMes || 0));
 }
 
+// Só populado no cronograma sintético de conta garantida (ver
+// scheduleContractForGeneration) — outros sistemas cobram IOF como valor
+// fixo no momento zero da operação (campo iof_value do contrato), não por
+// parcela, então esse campo fica ausente e iofAmount() retorna 0 para eles.
+export function iofAmount(row) {
+  return money(row?.iofValor);
+}
+
 function todayIsoDate() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
@@ -50,7 +63,7 @@ function todayIsoDate() {
 export function interestTipo(vencimento) {
   const due = dateOnly(vencimento);
   if (!due) return "PR";
-  return due.slice(0, 7) <= todayIsoDate().slice(0, 7) ? "TX" : "PR";
+  return due.slice(0, 7) <= todayIsoDate().slice(0, 7) ? "JUR" : "PR";
 }
 
 function dateOnly(value) {
@@ -78,8 +91,8 @@ export function parseContractSchedule(contract) {
 
 function prefixAndType(contract) {
   const category = String(contract?.operation_category || "").toLowerCase();
-  if (category === "financiamentos") return { prefixo: "FIN", tipo: "NP" };
-  return { prefixo: "EMP", tipo: "NP" };
+  if (category === "financiamentos") return { prefixo: "FIN", tipo: "DEF" };
+  return { prefixo: "EMP", tipo: "DEF" };
 }
 
 export { prefixAndType };
@@ -151,6 +164,18 @@ export function buildPayableTitles(contract, bank = null, entity = null) {
         historico: `Juros parcela ${parcela} do contrato ${contractNumber}`,
       });
     }
+
+    const iofValor = iofAmount(row);
+    if (iofValor > 0) {
+      titles.push({
+        ...base,
+        tipo: interestTipo(vencimento),
+        prefixo: "IOF",
+        valor: iofValor,
+        saldo: iofValor,
+        historico: `IOF parcela ${parcela} do contrato ${contractNumber}`,
+      });
+    }
   }
   return titles;
 }
@@ -183,6 +208,82 @@ function titleIsIntegrated(title) {
 // precisa estornar esse título manualmente em Contas a Pagar (mesmo fluxo
 // que já existe pra estornar título integrado, ver reversePayableTitles
 // em erpIntegrate.js), só depois o contrato pode ser reaberto.
+// Limpeza retroativa: cobre títulos que ficaram órfãos ANTES de
+// reopenApprovedContractForEditing existir (ou por qualquer outra falha —
+// ex.: front-end desatualizado batendo direto no PATCH de LoanContract em
+// vez de passar pela função de reabertura). Encontra título cujo contrato
+// NÃO está mais "aprovado" e estorna (remove) os que ainda não foram ao
+// ERP — mesma regra e mesma trilha de auditoria de reopenApprovedContractForEditing,
+// só que varrendo a base inteira em vez de um contrato só.
+export async function cleanupOrphanedPayableTitles(payload = {}, req = null) {
+  const result = await pool.query(
+    `SELECT t.* FROM payable_titles t
+       JOIN loan_contracts c ON c.id = t.contract_id
+      WHERE c.status != 'aprovado'`
+  );
+
+  const integrated = result.rows.filter(titleIsIntegrated);
+  const toDelete = result.rows.filter((t) => !titleIsIntegrated(t));
+
+  const byContract = new Map();
+  for (const t of toDelete) {
+    if (!byContract.has(t.contract_id)) byContract.set(t.contract_id, []);
+    byContract.get(t.contract_id).push(t);
+  }
+
+  if (toDelete.length) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `DELETE FROM payable_titles WHERE id = ANY($1::text[])`,
+        [toDelete.map((t) => t.id)]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    if (req) {
+      for (const [contractId, rows] of byContract) {
+        await writeAudit({
+          req,
+          action: "REVERSE",
+          resourceType: "PayableTitle",
+          resourceId: contractId,
+          rotina: "Contas a pagar",
+          registro: `${rows.length} título(s) órfão(s) estornado(s) — limpeza retroativa (contrato fora de 'aprovado')`,
+          before: { titulos: rows },
+          after: { contractId },
+          payload: { contractId, titulosEstornados: rows.length },
+        });
+      }
+    }
+  }
+
+  // Mesma varredura do lado de contas a receber — ver
+  // reverseNonIntegratedReceivableTitles/cleanupOrphanedReceivableTitles em
+  // backend/src/modules/receivables/generate.js.
+  const receivableCleanup = await cleanupOrphanedReceivableTitlesImpl(req);
+
+  return {
+    ok: true,
+    titulosEstornados: toDelete.length,
+    contratosAfetados: byContract.size,
+    titulosIntegradosPendentes: integrated.length,
+    detalhesIntegrados: integrated.map((t) => ({
+      id: t.id, contractId: t.contract_id, parcela: t.parcela, prefixo: t.prefixo, valor: t.valor,
+    })),
+    titulosReceberEstornados: receivableCleanup.titulosEstornados,
+    contratosReceberAfetados: receivableCleanup.contratosAfetados,
+    titulosReceberIntegradosPendentes: receivableCleanup.titulosIntegradosPendentes,
+    detalhesReceberIntegrados: receivableCleanup.detalhesIntegrados,
+  };
+}
+
 export async function reopenApprovedContractForEditing(payload = {}, req = null) {
   const contractId = String(payload?.contractId || "").trim();
   if (!contractId) throw httpError(400, "contractId é obrigatório");
@@ -194,53 +295,97 @@ export async function reopenApprovedContractForEditing(payload = {}, req = null)
     throw httpError(400, `Só é possível reabrir contratos aprovados (status atual: ${contract.status})`);
   }
 
-  const titlesResult = await pool.query(`SELECT * FROM payable_titles WHERE contract_id = $1`, [contractId]);
-  const integrated = titlesResult.rows.filter(titleIsIntegrated);
-  if (integrated.length) {
+  let titlesResult = await pool.query(`SELECT * FROM payable_titles WHERE contract_id = $1`, [contractId]);
+  let integrated = titlesResult.rows.filter(titleIsIntegrated);
+  let receivableResult = await pool.query(`SELECT * FROM receivable_titles WHERE contract_id = $1`, [contractId]);
+  let receivableIntegrated = receivableResult.rows.filter(titleIsIntegrated);
+
+  let erpReversalAttempt = null;
+  if ((integrated.length || receivableIntegrated.length) && payload.confirmErpReversal) {
+    // Usuário confirmou explicitamente que quer estornar esses títulos NO
+    // ERP também (não só localmente) — chama as mesmas funções que "Estornar
+    // no ERP" usa em Contas a Pagar/Receber (ver reversePayableTitles /
+    // reverseReceivableTitles). Reconsulta depois: a chamada pode falhar
+    // pra alguns títulos (ex.: já baixado no ERP, movimentação pendente),
+    // então o que continuar bloqueado é decidido pelo estado real, não pela
+    // resposta em si.
+    const payableResult = integrated.length
+      ? await reversePayableTitles({ ids: integrated.map((t) => t.id) })
+      : null;
+    const receivableErpResult = receivableIntegrated.length
+      ? await reverseReceivableTitles({ ids: receivableIntegrated.map((t) => t.id) })
+      : null;
+    erpReversalAttempt = { payable: payableResult, receivable: receivableErpResult };
+
+    titlesResult = await pool.query(`SELECT * FROM payable_titles WHERE contract_id = $1`, [contractId]);
+    integrated = titlesResult.rows.filter(titleIsIntegrated);
+    receivableResult = await pool.query(`SELECT * FROM receivable_titles WHERE contract_id = $1`, [contractId]);
+    receivableIntegrated = receivableResult.rows.filter(titleIsIntegrated);
+  }
+
+  if (integrated.length || receivableIntegrated.length) {
+    const total = integrated.length + receivableIntegrated.length;
     const err = new Error(
-      `Este contrato tem ${integrated.length} título(s) já integrado(s) ao ERP. ` +
-      `Estorne-o(s) manualmente em Contas a Pagar antes de reabrir o contrato para edição.`
+      erpReversalAttempt
+        ? `O ERP não aceitou o estorno de ${total} título(s) — veja o motivo em cada um e resolva manualmente antes de reabrir o contrato.`
+        : `Este contrato tem ${total} título(s) já integrado(s) ao ERP` +
+          `${integrated.length && receivableIntegrated.length ? ` (${integrated.length} a pagar, ${receivableIntegrated.length} a receber)` : ""}. ` +
+          `Deseja estornar no ERP e reabrir o contrato?`
     );
     err.status = 409;
-    err.code = "TITULOS_INTEGRADOS_PENDENTES";
-    err.details = { titulos: integrated.map((t) => ({ id: t.id, parcela: t.parcela, prefixo: t.prefixo, valor: t.valor })) };
+    err.code = erpReversalAttempt ? "ESTORNO_ERP_FALHOU" : "TITULOS_INTEGRADOS_PENDENTES";
+    err.details = {
+      titulos: integrated.map((t) => ({ id: t.id, parcela: t.parcela, prefixo: t.prefixo, valor: t.valor, erp_mensagem: t.erp_mensagem })),
+      titulosReceber: receivableIntegrated.map((t) => ({ id: t.id, parcela: t.parcela, prefixo: t.prefixo, valor: t.valor, erp_mensagem: t.erp_mensagem })),
+      erpReversalAttempt,
+    };
     throw err;
   }
 
   const toReverse = titlesResult.rows.filter((t) => t.status === "aberto");
+  const toReverseReceivable = receivableResult.rows.filter((t) => t.status === "aberto");
   const actorEmail = req?.user?.email || "system";
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    if (toReverse.length) {
-      await client.query(
-        `DELETE FROM payable_titles WHERE id = ANY($1::text[])`,
-        [toReverse.map((t) => t.id)]
-      );
-    }
-    const history = parseStatusHistory(contract.status_history);
-    history.push({
-      from: contract.status,
-      to: "rascunho",
-      by: actorEmail,
-      at: new Date().toISOString(),
-      comments: payload.comments || `Reaberto para edição — ${toReverse.length} título(s) a pagar estornado(s)`,
-    });
-    await client.query(
-      `UPDATE loan_contracts
-         SET status = 'rascunho', exported_to_payables = false,
-             status_history = $2, updated_date = now()
-       WHERE id = $1`,
-      [contractId, JSON.stringify(history)]
+  if (toReverse.length) {
+    await pool.query(
+      `DELETE FROM payable_titles WHERE id = ANY($1::text[])`,
+      [toReverse.map((t) => t.id)]
     );
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
   }
+  if (toReverseReceivable.length) {
+    await pool.query(
+      `DELETE FROM receivable_titles WHERE id = ANY($1::text[])`,
+      [toReverseReceivable.map((t) => t.id)]
+    );
+  }
+
+  const erpReversedCount = erpReversalAttempt
+    ? (erpReversalAttempt.payable?.reversed || 0) + (erpReversalAttempt.receivable?.reversed || 0)
+    : 0;
+
+  const history = parseStatusHistory(contract.status_history);
+  history.push({
+    from: contract.status,
+    to: "rascunho",
+    by: actorEmail,
+    at: new Date().toISOString(),
+    comments: payload.comments || (
+      `Reaberto para edição — ${toReverse.length} título(s) a pagar e ${toReverseReceivable.length} a receber estornado(s)` +
+      (erpReversalAttempt ? ` (${erpReversedCount} estornado(s) também no ERP)` : "")
+    ),
+  });
+
+  // store.update (não SQL cru) — assim campos não-coluna vindos em
+  // extraFields (ex.: recalculation_flag, usado pelo "Reabrir para
+  // recálculo" do Fechamento Contábil) vão pro extra_json automaticamente,
+  // igual qualquer update feito pela rota genérica de entidades.
+  await store.update("LoanContract", contractId, {
+    status: "rascunho",
+    exported_to_payables: false,
+    exported_to_receivables: false,
+    status_history: JSON.stringify(history),
+    ...(payload.extraFields && typeof payload.extraFields === "object" ? payload.extraFields : {}),
+  });
 
   if (req) {
     await writeAudit({
@@ -249,14 +394,56 @@ export async function reopenApprovedContractForEditing(payload = {}, req = null)
       resourceType: "PayableTitle",
       resourceId: contractId,
       rotina: "Contas a pagar",
-      registro: `${toReverse.length} título(s) estornado(s) — reabertura do contrato ${contract.contract_number}`,
-      before: { titulos: toReverse },
+      registro: `${toReverse.length} título(s) a pagar e ${toReverseReceivable.length} a receber estornado(s) — reabertura do contrato ${contract.contract_number}`,
+      before: { titulos: toReverse, titulosReceber: toReverseReceivable },
       after: { contractId, novoStatus: "rascunho" },
-      payload: { contractId, titulosEstornados: toReverse.length },
+      payload: { contractId, titulosEstornados: toReverse.length, titulosReceberEstornados: toReverseReceivable.length },
     });
   }
 
-  return { ok: true, contractId, titulosEstornados: toReverse.length };
+  return {
+    ok: true,
+    contractId,
+    titulosEstornados: toReverse.length,
+    titulosReceberEstornados: toReverseReceivable.length,
+    titulosEstornadosNoErp: erpReversedCount,
+  };
+}
+
+// Conta garantida não passa pelo motor de cálculo (não tem cronograma fixo —
+// ver backend/src/modules/functions/guaranteedAccount.js), então
+// contract.schedule_data nunca é preenchido e buildPayableTitles (que só lê
+// schedule_data) nunca gera nada pra ela. Aqui montamos um "cronograma"
+// sintético de UMA parcela, projetando o saldo da conta garantida até o
+// vencimento (mesma lógica do extrato) e reaproveitando o pipeline normal de
+// buildPayableTitles/generatePayableTitlesForContract a partir daí — o título
+// representa a obrigação total (principal + juros acumulados) na data de
+// vencimento, do jeito que um Bullet também vira um título só na última
+// parcela.
+async function scheduleContractForGeneration(contract) {
+  if (contract.calculation_system !== "CONTA_GARANTIDA") return contract;
+  // calculateGuaranteedAccountStatement lê datas via store.js (sempre string
+  // "YYYY-MM-DD") e compara asOfDate com elas via operadores de string — como
+  // aqui o contrato vem de um pool.query cru (não passa por store.js), a
+  // coluna DATE chega como objeto Date do node-postgres; sem normalizar com
+  // dateOnly(), a comparação de tipos mistos quebra silenciosamente e o
+  // período final de juros (do último lançamento até o vencimento) nunca é
+  // somado.
+  const asOfDate = dateOnly(contract.final_maturity_date) || todayIsoDate();
+  const statement = await calculateGuaranteedAccountStatement({ contractId: contract.id, asOfDate });
+  const jurosValor = money(statement.total_juros_acumulado);
+  const iofValor = money(statement.total_iof);
+  const amortValor = Math.max(0, money(statement.saldo_atual - jurosValor));
+  if (amortValor <= 0 && jurosValor <= 0 && iofValor <= 0) return contract;
+  const row = {
+    parcela: "1",
+    dataVencimento: asOfDate,
+    amortizacao: amortValor,
+    jurosFixosMes: jurosValor,
+    jurosVariaveisMes: 0,
+    iofValor,
+  };
+  return { ...contract, schedule_data: JSON.stringify({ schedule: [row] }) };
 }
 
 export async function generatePayableTitlesForContract(contract, createdBy = "system") {
@@ -283,7 +470,8 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
     `SELECT codigo_empresa, codigo_filial FROM company_entities WHERE id = $1`,
     [contract.entity_id]
   );
-  const titles = buildPayableTitles(contract, bank, entityResult.rows[0] || null)
+  const scheduleContract = await scheduleContractForGeneration(contract);
+  const titles = buildPayableTitles(scheduleContract, bank, entityResult.rows[0] || null)
     .filter((title) => !existingKeys.has(`${title.prefixo}::${title.parcela}`));
   if (!titles.length) {
     if (!existing.rows.length) {
@@ -349,6 +537,100 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
   } finally {
     client.release();
   }
+}
+
+// Recalcula o título da conta garantida depois de qualquer mudança que
+// afete o saldo projetado (lançamento novo/editado/excluído, edição da taxa
+// ou do vencimento do contrato). Título já integrado ao ERP fica intocado —
+// mesma regra de reopenApprovedContractForEditing: se já foi pro Protheus,
+// só um estorno manual em Contas a Pagar libera a regeneração.
+export async function refreshGuaranteedAccountPayableTitle(payload = {}) {
+  const contractId = String(payload?.contractId || "").trim();
+  if (!contractId) throw httpError(400, "contractId é obrigatório");
+
+  const contractResult = await pool.query(`SELECT * FROM loan_contracts WHERE id = $1`, [contractId]);
+  const contract = contractResult.rows[0];
+  if (!contract || contract.calculation_system !== "CONTA_GARANTIDA") {
+    throw httpError(400, "Contrato não encontrado ou não é uma conta garantida");
+  }
+  if (contract.status !== "aprovado") {
+    return { ok: true, skipped: true, reason: "Contrato não está aprovado" };
+  }
+
+  const existing = await pool.query(`SELECT * FROM payable_titles WHERE contract_id = $1`, [contractId]);
+  const nonIntegrated = existing.rows.filter((t) => !titleIsIntegrated(t));
+  if (nonIntegrated.length) {
+    await pool.query(`DELETE FROM payable_titles WHERE id = ANY($1::text[])`, [nonIntegrated.map((t) => t.id)]);
+  }
+
+  const generated = await generatePayableTitlesForContract(contract, "system");
+  return { ok: true, titulosRemovidos: nonIntegrated.length, ...generated };
+}
+
+// Exclui uma conta garantida por completo: título(s) a pagar + lançamentos +
+// o próprio contrato. Precisa ser feito nessa ordem porque payable_titles e
+// account_movements têm FK ON DELETE RESTRICT pra loan_contracts (ver
+// migrations 011 e 036) — apagar o contrato primeiro simplesmente falharia.
+// Bloqueia (não apaga nada) se algum título já foi integrado ao ERP, mesma
+// regra usada em reopenApprovedContractForEditing.
+export async function deleteGuaranteedAccount(payload = {}, req = null) {
+  const contractId = String(payload?.contractId || "").trim();
+  if (!contractId) throw httpError(400, "contractId é obrigatório");
+
+  const contractResult = await pool.query(`SELECT * FROM loan_contracts WHERE id = $1`, [contractId]);
+  const contract = contractResult.rows[0];
+  if (!contract) throw httpError(404, "Contrato não encontrado");
+  if (contract.calculation_system !== "CONTA_GARANTIDA") {
+    throw httpError(400, "Esta função só pode ser usada para contas garantidas");
+  }
+
+  const titlesResult = await pool.query(`SELECT * FROM payable_titles WHERE contract_id = $1`, [contractId]);
+  const integrated = titlesResult.rows.filter(titleIsIntegrated);
+  if (integrated.length) {
+    const err = new Error(
+      `Este contrato tem ${integrated.length} título(s) já integrado(s) ao ERP. ` +
+      `Estorne-o(s) manualmente em Contas a Pagar antes de excluir a conta garantida.`
+    );
+    err.status = 409;
+    err.code = "TITULOS_INTEGRADOS_PENDENTES";
+    err.details = { titulos: integrated.map((t) => ({ id: t.id, parcela: t.parcela, prefixo: t.prefixo, valor: t.valor })) };
+    throw err;
+  }
+
+  const movementsResult = await pool.query(`SELECT * FROM account_movements WHERE contract_id = $1`, [contractId]);
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    if (titlesResult.rows.length) {
+      await client.query(`DELETE FROM payable_titles WHERE contract_id = $1`, [contractId]);
+    }
+    if (movementsResult.rows.length) {
+      await client.query(`DELETE FROM account_movements WHERE contract_id = $1`, [contractId]);
+    }
+    await client.query(`DELETE FROM loan_contracts WHERE id = $1`, [contractId]);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  if (req) {
+    await writeAudit({
+      req,
+      action: "DELETE",
+      resourceType: "LoanContract",
+      resourceId: contractId,
+      rotina: "Contas Garantidas",
+      registro: `Conta garantida ${contract.contract_number} excluída — ${movementsResult.rows.length} lançamento(s) e ${titlesResult.rows.length} título(s) removidos junto`,
+      before: { contract, movimentos: movementsResult.rows, titulos: titlesResult.rows },
+      payload: { contractId },
+    });
+  }
+
+  return { ok: true, contractId, movimentosRemovidos: movementsResult.rows.length, titulosRemovidos: titlesResult.rows.length };
 }
 
 export async function backfillPayableSuppliers() {

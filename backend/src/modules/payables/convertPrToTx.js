@@ -30,13 +30,13 @@ function inErp(title) {
 
 function cannotConvert(title) {
   if (title.status && title.status !== "aberto") {
-    return "Somente títulos abertos podem ser convertidos de PR para TX";
+    return "Somente títulos abertos podem ser convertidos de PR para JUR";
   }
   if (title.erp_status === "baixado") {
-    return "Título baixado no ERP não pode ser convertido de PR para TX";
+    return "Título baixado no ERP não pode ser convertido de PR para JUR";
   }
   if (Number(title.saldo) + 0.009 < Number(title.valor)) {
-    return "Título possui movimentação e não pode ser convertido de PR para TX";
+    return "Título possui movimentação e não pode ser convertido de PR para JUR";
   }
   return null;
 }
@@ -49,7 +49,7 @@ async function loadTitle(id) {
 async function markAsTx(id) {
   await pool.query(
     `UPDATE payable_titles
-     SET tipo = 'TX',
+     SET tipo = 'JUR',
          converted_pr_tx_em = COALESCE(converted_pr_tx_em, now()),
          updated_date = now()
      WHERE id = $1`,
@@ -74,7 +74,7 @@ async function listPendingTxConversions() {
   const result = await pool.query(
     `SELECT * FROM payable_titles
      WHERE converted_pr_tx_em IS NOT NULL
-       AND upper(btrim(tipo)) = 'TX'
+       AND upper(btrim(tipo)) = 'JUR'
        AND status = 'aberto'
        AND erp_status NOT IN ('integrado', 'baixado')
      ORDER BY vencimento ASC, parcela ASC`
@@ -93,7 +93,7 @@ async function integrateOne(title) {
   const result = await integratePayableTitles({ ids: [title.id] });
   const row = firstResult(result);
   if (row?.ok) {
-    return { ok: true, message: row.message || "Integrado como TX" };
+    return { ok: true, message: row.message || "Integrado como JUR" };
   }
   if (row?.skipped && /já integrado/i.test(row.message || "")) {
     return { ok: true, skipped: true, message: row.message };
@@ -101,7 +101,7 @@ async function integrateOne(title) {
   return {
     ok: false,
     skipped: Boolean(row?.skipped),
-    message: row?.message || "Não foi possível integrar o título TX no Protheus",
+    message: row?.message || "Não foi possível integrar o título JUR no Protheus",
   };
 }
 
@@ -145,8 +145,8 @@ async function convertOne(title) {
     integrated: Boolean(integrated.ok),
     step: "integrar",
     message: reversed
-      ? `PR estornado, tipo alterado para TX. ${integrated.message}`
-      : `Tipo alterado para TX. ${integrated.message}`,
+      ? `PR estornado, tipo alterado para JUR. ${integrated.message}`
+      : `Tipo alterado para JUR. ${integrated.message}`,
   };
 }
 
@@ -159,7 +159,7 @@ async function retryOne(title) {
     return { id: current.id, ok: true, skipped: true, step: "integrar", message: "Já integrado" };
   }
   if (current.erp_status === "baixado" || current.status !== "aberto") {
-    return { id: current.id, ok: false, skipped: true, step: "integrar", message: "Título não está aberto para reintegrar como TX" };
+    return { id: current.id, ok: false, skipped: true, step: "integrar", message: "Título não está aberto para reintegrar como JUR" };
   }
   const integrated = await integrateOne(current);
   return {
@@ -240,7 +240,7 @@ export async function convertPayablePrToTx(payload = {}) {
   const scanned = prTitles.length + retryTitles.filter((item) => !seen.has(item.id)).length;
   const message = scanned === 0
     ? `Nenhum título PR a converter em ${bounds.yearMonth}`
-    : `${converted} convertidos para TX · ${reversed} estornados · ${integrated} integrados · ${failed} com erro`;
+    : `${converted} convertidos para JUR · ${reversed} estornados · ${integrated} integrados · ${failed} com erro`;
 
   logger.info({
     yearMonth: bounds.yearMonth,

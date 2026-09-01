@@ -44,7 +44,7 @@ export default function ClassifyTitleDialog({
   const entityId = titles[0]?.entity_id || "";
   const entity = entities.find((item) => item.id === entityId) || null;
 
-  const [tipo, setTipo] = useState(titles[0]?.tipo || "NP");
+  const [tipo, setTipo] = useState(titles[0]?.tipo || "DEF");
   const [natureza, setNatureza] = useState(titles[0]?.natureza || "");
   const [partyCode, setPartyCode] = useState(isReceber ? (titles[0]?.cliente || "") : (titles[0]?.fornecedor || ""));
   const [partyLoja, setPartyLoja] = useState(isReceber ? (titles[0]?.cliente_loja || "01") : (titles[0]?.fornecedor_loja || "01"));
@@ -54,7 +54,7 @@ export default function ClassifyTitleDialog({
 
   useEffect(() => {
     if (!open) return;
-    setTipo(titles[0]?.tipo || "NP");
+    setTipo(titles[0]?.tipo || "DEF");
     setNatureza(titles[0]?.natureza || "");
     setPartyCode(isReceber ? (titles[0]?.cliente || "") : (titles[0]?.fornecedor || ""));
     setPartyLoja(isReceber ? (titles[0]?.cliente_loja || "01") : (titles[0]?.fornecedor_loja || "01"));
@@ -116,7 +116,7 @@ export default function ClassifyTitleDialog({
               value={tipo}
               onChange={(value) => setTipo(String(value || "").toUpperCase())}
               onLookup={() => setLookup("tipos")}
-              placeholder="NP, NF, TX..."
+              placeholder="DEF, NF, JUR..."
               mono
             />
             <div className="space-y-1">

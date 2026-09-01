@@ -252,7 +252,7 @@ export default function SchedulesPanel() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-600">
-          Escolha a tarefa, crie o agendamento e defina o dia ou o intervalo. A conversão PR→TX consulta o Protheus, estorna o PR e integra de novo como TX.
+          Escolha a tarefa, crie o agendamento e defina o dia ou o intervalo. A conversão PR→JUR consulta o Protheus, estorna o PR e integra de novo como JUR.
         </p>
         <div className="flex flex-wrap gap-2">
           {missingTasks.length > 0 && (
@@ -297,10 +297,10 @@ export default function SchedulesPanel() {
                     <div className="text-[11px] text-slate-600 mt-0.5 max-w-[280px]">{task.descricao}</div>
                   ) : null}
                 </TableCell>
-                <TableCell className="text-sm text-slate-700">
+                <TableCell className="text-[11px] text-slate-700">
                   {job ? job.nome : <span className="text-slate-500">Não criada</span>}
                 </TableCell>
-                <TableCell className="text-sm text-slate-600">
+                <TableCell className="text-[11px] text-slate-600">
                   {job ? scheduleLabel(job) : "—"}
                 </TableCell>
                 <TableCell>
@@ -315,7 +315,7 @@ export default function SchedulesPanel() {
                 <TableCell>
                   {job ? (
                     <>
-                      <div className="text-sm text-slate-700">{formatDateTime(job.ultimaExecucaoEm)}</div>
+                      <div className="text-[11px] text-slate-700">{formatDateTime(job.ultimaExecucaoEm)}</div>
                       {job.ultimaMensagem ? (
                         <div
                           className={`text-[11px] max-w-[240px] truncate ${job.ultimaExecucaoOk ? "text-emerald-700" : "text-rose-700"}`}
@@ -326,10 +326,10 @@ export default function SchedulesPanel() {
                       ) : null}
                     </>
                   ) : (
-                    <span className="text-sm text-slate-500">—</span>
+                    <span className="text-[11px] text-slate-500">—</span>
                   )}
                 </TableCell>
-                <TableCell className="text-sm text-slate-600">
+                <TableCell className="text-[11px] text-slate-600">
                   {job?.ativo ? formatDateTime(job.proximaExecucaoEm) : "—"}
                 </TableCell>
                 <TableCell className="text-right">

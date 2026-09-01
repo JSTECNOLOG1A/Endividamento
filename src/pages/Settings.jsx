@@ -52,7 +52,7 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-base text-slate-900">Agendamento</CardTitle>
               <CardDescription>
-                Cadastre cada tarefa (consultar pagar, consultar receber ou converter PR→TX) e escolha o dia ou o intervalo. Nas rotinas também há execução manual.
+                Cadastre cada tarefa (consultar pagar, consultar receber ou converter PR→JUR) e escolha o dia ou o intervalo. Nas rotinas também há execução manual.
               </CardDescription>
             </CardHeader>
             <CardContent>

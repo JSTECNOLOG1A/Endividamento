@@ -60,10 +60,10 @@ export const TASKS = {
   },
   converter_titulos_pr_tx: {
     key: "converter_titulos_pr_tx",
-    label: "Converter títulos PR em TX no virar do mês",
+    label: "Converter títulos PR em JUR no virar do mês",
     rotina: "Contas a pagar",
-    descricao: "No dia escolhido, consulta o PR no Protheus, estorna, troca o tipo para TX e integra de novo.",
-    defaultNome: "Converter juros PR em TX no virar do mês",
+    descricao: "No dia escolhido, consulta o PR no Protheus, estorna, troca o tipo para JUR e integra de novo.",
+    defaultNome: "Converter juros PR em JUR no virar do mês",
     defaultModo: "mensal",
     defaultIntervaloMinutos: 1440,
     defaultDiaMes: 1,
