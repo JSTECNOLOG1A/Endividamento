@@ -804,3 +804,48 @@ Todos os critérios de aceite da reorganização foram atendidos. Limitações d
 **Criado:** `archive/README.md`
 
 **Não movido (conforme escopo):** `src/`, `backend/`, `server/`, `base44/`, `protheus/`, `docs/`, `.github/`
+
+---
+
+## Etapa B — Auditoria de código morto
+
+**Data:** 2026-09-02  
+**Tipo:** Somente leitura (B1). Nenhum arquivo excluído, movido ou alterado em `src/`.
+
+**Documento detalhado:** [`FRONTEND-DEAD-CODE-AUDIT.md`](./FRONTEND-DEAD-CODE-AUDIT.md)
+
+### Escopo
+
+- Inventário e grafo de imports a partir de `src/main.jsx`
+- Investigação de candidatos: `saas/`, `ApprovedContractManager`, `Configuracoes`, `_to_delete/`
+- Testes expostos no `Simulator.jsx`
+- Comparação `src/components/loan/{strategies,indexers}` vs `backend/src/engine`
+- Stubs, console, rotas, marca
+
+### Gate B1
+
+| Métrica | Valor |
+|---------|-------|
+| TOTAL FRONTEND FILES ANALISADOS | **199** |
+| ATIVOS | **138** |
+| ÓRFÃOS COMPROVADOS | **29** |
+| STUBS | **7** |
+| DEBUG/TEST EXPOSTO | **5** (6 abas no Simulator) |
+| DUPLICADOS (engine frontend) | **11** |
+| NÃO COMPROVADOS | **29** |
+
+### Principais achados
+
+1. **`src/components/saas/`** — pasta inteira órfã (billing real no backend + `PlanPanel`).
+2. **`accounting/_to_delete/`** — 5 arquivos sem referências; remover na B2.
+3. **`Simulator.jsx`** — abas de teste (`EngineTestSuite`, `ZeroRisk`, `ScenarioTests`, etc.) visíveis a **todos** os usuários autenticados, sem gate de ambiente.
+4. **Engine duplicado** — `loan/strategies` e `loan/indexers` no frontend são cópias mortas; produção usa `@engine`.
+5. **`Configuracoes.jsx`** — rota `/Configuracoes` sem menu; stub explícito; `Settings` é a tela real.
+6. **22 componentes `ui/` shadcn** — sem uso fora da pasta (scaffold); classificar antes de remover.
+
+### Próximo passo (B2 — não iniciado)
+
+Aguardando aprovação para: remoção segura, ocultar abas de teste em produção, limpar rotas stub.
+
+**Status:** B1 CONCLUÍDA — execução BLOQUEADA até aprovação.
+
