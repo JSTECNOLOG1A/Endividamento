@@ -1081,7 +1081,10 @@ export default function FechamentoContabil({ entityId, entityName }) {
         saving={savingSettlement}
       />
 
-      <AccountingMatrixConfig entityId={entityId} open={matrixOpen} onOpenChange={setMatrixOpen} />
+      {/* key={entityId}: força remontagem ao trocar de empresa, senão o
+          estado de rascunho do AccountingMatrixConfig (guardado localmente,
+          não por entityId) vaza de uma empresa pra outra. */}
+      <AccountingMatrixConfig key={entityId} entityId={entityId} open={matrixOpen} onOpenChange={setMatrixOpen} />
 
       <Dialog open={reopenOpen} onOpenChange={setReopenOpen}>
         <DialogContent>

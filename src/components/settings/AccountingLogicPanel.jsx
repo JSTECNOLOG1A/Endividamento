@@ -265,7 +265,11 @@ export default function AccountingLogicPanel() {
       </Card>
 
       {entityId && (
-        <AccountingMatrixConfig entityId={entityId} open={matrixOpen} onOpenChange={setMatrixOpen} />
+        // key={entityId} força remontagem ao trocar de empresa — sem isso,
+        // o estado de rascunho (campos editados mas não salvos) do
+        // AccountingMatrixConfig vaza de uma empresa pra outra, já que ele
+        // guarda os drafts localmente, não por entityId.
+        <AccountingMatrixConfig key={entityId} entityId={entityId} open={matrixOpen} onOpenChange={setMatrixOpen} />
       )}
     </div>
   );
