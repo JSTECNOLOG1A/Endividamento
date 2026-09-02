@@ -2,23 +2,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/notify";
 import { useProcessing } from "@/lib/ProcessingContext";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import AccountTypeBadge from "@/components/shared/AccountTypeBadge";
+import { Dialog } from "@/components/ui/dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
   SelectItem,
-  SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Table,
@@ -31,6 +19,25 @@ import {
 import { base44 } from "@/api/base44Client";
 import { normalizeEmpresaCode } from "@/lib/empresaCode";
 import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
+import {
+  SubscreenAlert,
+  SubscreenBody,
+  SubscreenCancelButton,
+  SubscreenDescription,
+  SubscreenDialogContent,
+  SubscreenFilterPanel,
+  SubscreenFilterSelect,
+  SubscreenFooter,
+  SubscreenHeader,
+  SubscreenLoading,
+  SubscreenMeta,
+  SubscreenPrimaryButton,
+  SubscreenSearchInput,
+  SubscreenSearchRow,
+  SubscreenSelectionHint,
+  SubscreenTableShell,
+  SubscreenTitle,
+} from "@/layouts/modern/ModernSubscreen";
 
 const EMPRESA_ALL = "__all__";
 const TIPO_ALL = "__all__";
@@ -71,18 +78,6 @@ const NATURE_IMPORT_SORT_COLUMNS = {
   lcdpr: { getValue: (item) => (item.gera_lcdpr ? "Sim" : "Não") },
   situacao: { getValue: (item) => (item.already_exists ? "Já cadastrada" : "Nova") },
 };
-
-function FilterSelect({ label, value, onValueChange, children }) {
-  return (
-    <div className="space-y-1 min-w-0">
-      <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">{label}</Label>
-      <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-        <SelectContent>{children}</SelectContent>
-      </Select>
-    </div>
-  );
-}
 
 export default function NatureImportModal({ open, onOpenChange, entities = [], onImported }) {
   const { withProcessing } = useProcessing();
@@ -255,94 +250,93 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!confirming && !loading) onOpenChange(next); }}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Importar naturezas</DialogTitle>
-          <DialogDescription>
+      <SubscreenDialogContent>
+        <SubscreenHeader>
+          <SubscreenTitle>Importar naturezas</SubscreenTitle>
+          <SubscreenDescription>
             {loading
               ? "Buscando naturezas em todas as empresas do grupo..."
               : `Selecione as naturezas de ${preview?.connection_name || "ERP"}. O código do ED_FILIAL é a empresa; a filial fica em branco. Só entram registros da mesma empresa da entidade.`}
-          </DialogDescription>
-        </DialogHeader>
+          </SubscreenDescription>
+        </SubscreenHeader>
 
         {loading ? (
-          <p className="text-sm text-slate-600 py-8 text-center">Consultando o ERP...</p>
+          <SubscreenLoading>Consultando o ERP...</SubscreenLoading>
         ) : (
-          <div className="space-y-3 min-h-0 flex-1 flex flex-col">
-            {(preview?.grupo_empresas || preview?.empresas?.length || preview?.tabela) ? (
-              <p className="text-xs text-slate-600">
-                {[
-                  preview.grupo_empresas ? `Grupo ${preview.grupo_empresas}` : null,
-                  preview.empresas?.length ? `Empresas ${preview.empresas.join(", ")}` : null,
-                  preview.tabela ? `Tabela ${preview.tabela}` : null,
-                ].filter(Boolean).join(" · ")}
-              </p>
-            ) : null}
+          <SubscreenBody>
+            <SubscreenMeta>
+              {[
+                preview?.grupo_empresas ? `Grupo ${preview.grupo_empresas}` : null,
+                preview?.empresas?.length ? `Empresas ${preview.empresas.join(", ")}` : null,
+                preview?.tabela ? `Tabela ${preview.tabela}` : null,
+              ].filter(Boolean).join(" · ")}
+            </SubscreenMeta>
 
             {entitiesWithoutCode.length > 0 ? (
-              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              <SubscreenAlert>
                 Entidades sem empresa Protheus: {entitiesWithoutCode.map((entity) => entity.entity_name).join(", ")}.
-              </p>
+              </SubscreenAlert>
             ) : null}
 
             {unmatchedScopes.length > 0 ? (
-              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              <SubscreenAlert>
                 Empresas do ERP sem entidade no FinCalc: {unmatchedScopes.join(", ")}. Informe o M0_CODIGO no cadastro da entidade.
-              </p>
+              </SubscreenAlert>
             ) : null}
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <FilterSelect label="Empresa" value={empresaFilter} onValueChange={setEmpresaFilter}>
+            <SubscreenFilterPanel>
+              <SubscreenFilterSelect label="Empresa" value={empresaFilter} onValueChange={setEmpresaFilter}>
                 <SelectItem value={EMPRESA_ALL}>Todas</SelectItem>
                 {empresaOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
-              </FilterSelect>
-              <FilterSelect label="Vínculo" value={vinculoFilter} onValueChange={setVinculoFilter}>
+              </SubscreenFilterSelect>
+              <SubscreenFilterSelect label="Vínculo" value={vinculoFilter} onValueChange={setVinculoFilter}>
                 <SelectItem value="todas">Todos</SelectItem>
                 <SelectItem value="vinculadas">Vinculadas</SelectItem>
                 <SelectItem value="sem_vinculo">Sem vínculo</SelectItem>
                 <SelectItem value="ambiguas">Ambíguas</SelectItem>
-              </FilterSelect>
-              <FilterSelect label="LCDPR" value={lcdprFilter} onValueChange={setLcdprFilter}>
+              </SubscreenFilterSelect>
+              <SubscreenFilterSelect label="LCDPR" value={lcdprFilter} onValueChange={setLcdprFilter}>
                 <SelectItem value="todas">Todas</SelectItem>
                 <SelectItem value="sim">Gera LCDPR</SelectItem>
                 <SelectItem value="nao">Não gera</SelectItem>
-              </FilterSelect>
-              <FilterSelect label="Tipo" value={tipoNaturezaFilter} onValueChange={setTipoNaturezaFilter}>
+              </SubscreenFilterSelect>
+              <SubscreenFilterSelect label="Tipo" value={tipoNaturezaFilter} onValueChange={setTipoNaturezaFilter}>
                 <SelectItem value="todas">Todas</SelectItem>
                 <SelectItem value="analitica">Analítica</SelectItem>
                 <SelectItem value="sintetica">Sintética</SelectItem>
-              </FilterSelect>
-              <FilterSelect label="Receita/Despesa" value={tipoContaFilter} onValueChange={setTipoContaFilter}>
+              </SubscreenFilterSelect>
+              <SubscreenFilterSelect label="Receita/Despesa" value={tipoContaFilter} onValueChange={setTipoContaFilter}>
                 <SelectItem value={TIPO_ALL}>Todos</SelectItem>
                 {tipoContaOptions.map((tipo) => (
                   <SelectItem key={tipo} value={tipo}>{tipo}</SelectItem>
                 ))}
-              </FilterSelect>
-              <FilterSelect label="Situação" value={situacaoFilter} onValueChange={setSituacaoFilter}>
+              </SubscreenFilterSelect>
+              <SubscreenFilterSelect label="Situação" value={situacaoFilter} onValueChange={setSituacaoFilter}>
                 <SelectItem value="todas">Todas</SelectItem>
                 <SelectItem value="nova">Nova</SelectItem>
                 <SelectItem value="cadastrada">Já cadastrada</SelectItem>
-              </FilterSelect>
-            </div>
+              </SubscreenFilterSelect>
+            </SubscreenFilterPanel>
 
-            <div className="flex items-center gap-2">
-              <Input
+            <SubscreenSearchRow>
+              <SubscreenSearchInput
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Filtrar por entidade, código, descrição ou empresa"
-                className="h-9"
               />
               <Button type="button" variant="outline" size="sm" onClick={toggleFiltered} disabled={!filtered.length}>
                 {allFilteredSelected ? "Nenhum" : "Todos"}
               </Button>
-            </div>
-            <p className="text-xs text-slate-600">
+            </SubscreenSearchRow>
+
+            <SubscreenSelectionHint>
               {selectedKeys.size} de {items.length} selecionadas
               {hasActiveFilters ? ` · ${filtered.length} visíveis` : ""}
-            </p>
-            <div className="border border-slate-200 rounded-lg overflow-auto max-h-[46vh]">
+            </SubscreenSelectionHint>
+
+            <SubscreenTableShell>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -395,9 +389,7 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
                           <TableCell className="whitespace-nowrap">{item.codigo}</TableCell>
                           <TableCell>{item.descricao}</TableCell>
                           <TableCell>
-                            <Badge variant="outline">
-                              {item.tipo_natureza === "sintetica" ? "Sintética" : "Analítica"}
-                            </Badge>
+                            <AccountTypeBadge value={item.tipo_natureza} />
                           </TableCell>
                           <TableCell className="text-slate-600 whitespace-nowrap">{item.tipo_conta || "—"}</TableCell>
                           <TableCell>
@@ -414,19 +406,19 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
                   )}
                 </TableBody>
               </Table>
-            </div>
-          </div>
+            </SubscreenTableShell>
+          </SubscreenBody>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={confirming || loading}>
+        <SubscreenFooter>
+          <SubscreenCancelButton onClick={() => onOpenChange(false)} disabled={confirming || loading}>
             Cancelar
-          </Button>
-          <Button onClick={handleConfirm} disabled={loading || confirming || selectedKeys.size === 0}>
+          </SubscreenCancelButton>
+          <SubscreenPrimaryButton onClick={handleConfirm} disabled={loading || confirming || selectedKeys.size === 0}>
             {confirming ? "Importando..." : selectedKeys.size ? `Importar (${selectedKeys.size})` : "Importar"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+          </SubscreenPrimaryButton>
+        </SubscreenFooter>
+      </SubscreenDialogContent>
     </Dialog>
   );
 }

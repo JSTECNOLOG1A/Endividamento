@@ -17,6 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { Combobox } from "@/components/ui/combobox";
 import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCircle, Info, Paperclip, Trash2, Save, Send, Banknote, Receipt, LayoutList } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 
 import {
@@ -99,8 +100,10 @@ function SubsectionHeading({ icon: Icon, children }) {
   );
 }
 
-export default function ContractForm({ onCalculate, onIdentificationChange, initialData, groups, entities, banks, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf, draftKey = "new", hasResult = false, onSaveDraft, onSubmitForReview, isSaving = false }) {
+export default function ContractForm({ onCalculate, onIdentificationChange, initialData, groups, entities, banks, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf, draftKey = "new", hasResult = false, onSaveDraft, onSubmitForReview, isSaving = false, narrowColumn = false }) {
   const [form, setForm] = useState(defaultForm);
+  const gridCols2 = cn("grid grid-cols-1 gap-4", !narrowColumn && "md:grid-cols-2");
+  const gridCols3 = cn("grid grid-cols-1 gap-4", !narrowColumn && "md:grid-cols-3");
   const [initialForm, setInitialForm] = useState(defaultForm);
   const [isLoaded, setIsLoaded] = useState(false);
   const [draftBanner, setDraftBanner] = useState(null);
@@ -575,7 +578,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Grupo Econômico *</Label>
               <Combobox
@@ -598,7 +601,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Banco Credor *</Label>
               <Combobox
@@ -614,7 +617,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               <Input value={form.contract_number} onChange={(e) => update("contract_number", e.target.value)} placeholder="000.000.000" className="h-9" required />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Categoria da Operação *</Label>
               <Select 
@@ -648,7 +651,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </Select>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Garantia Real
@@ -718,7 +721,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
         <CardContent className="space-y-5">
           {/* Moeda e Defasagem PTAX - Primeiro Bloco */}
           <SubsectionHeading icon={Banknote}>Moeda e Câmbio</SubsectionHeading>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Moeda (Opcional)</Label>
               <Select value={form.currency_id || ""} onValueChange={(v) => update("currency_id", v)}>
@@ -762,7 +765,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           {/* Campos de Moeda Estrangeira */}
           {form.currency_id && (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className={gridCols2}>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                     Valor em Moeda Estrangeira * 
@@ -867,7 +870,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
 
           <SubsectionHeading icon={Receipt}>Custos da Operação</SubsectionHeading>
           {/* Valor da Operação e Sinal */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Valor da Operação (R$) *
@@ -896,7 +899,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
           </div>
           <Separator />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 rounded-lg border border-slate-100 bg-slate-50/70 p-4">
+          <div className={cn(gridCols3, "rounded-lg border border-slate-100 bg-slate-50/70 p-4")}>
             <div className="space-y-3">
               <div className="space-y-1.5">
                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
@@ -917,9 +920,9 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                  </Label>
                  <CurrencyInput type="currency" value={form.iof_value} onChange={(e) => update("iof_value", e.target.value)} className="h-9" />
                </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={form.iof_financed} onCheckedChange={(v) => update("iof_financed", v)} />
-                <Label className="text-xs text-slate-600">IOF financiado (somar ao principal)</Label>
+              <div className="flex items-start gap-2">
+                <Switch className="shrink-0 mt-0.5" checked={form.iof_financed} onCheckedChange={(v) => update("iof_financed", v)} />
+                <Label className="text-xs text-slate-600 leading-snug min-w-0">IOF financiado (somar ao principal)</Label>
               </div>
             </div>
             <div className="space-y-3">
@@ -942,9 +945,9 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                  </Label>
                  <CurrencyInput type="currency" value={form.encargo_garantia_value} onChange={(e) => update("encargo_garantia_value", e.target.value)} className="h-9" />
                </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={form.encargo_garantia_financed} onCheckedChange={(v) => update("encargo_garantia_financed", v)} />
-                <Label className="text-xs text-slate-600">ECG financiado (somar ao principal)</Label>
+              <div className="flex items-start gap-2">
+                <Switch className="shrink-0 mt-0.5" checked={form.encargo_garantia_financed} onCheckedChange={(v) => update("encargo_garantia_financed", v)} />
+                <Label className="text-xs text-slate-600 leading-snug min-w-0">ECG financiado (somar ao principal)</Label>
               </div>
             </div>
             <div className="space-y-3">
@@ -967,14 +970,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                  </Label>
                  <CurrencyInput type="currency" value={form.other_fees} onChange={(e) => update("other_fees", e.target.value)} className="h-9" />
                </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={form.other_fees_financed} onCheckedChange={(v) => update("other_fees_financed", v)} />
-                <Label className="text-xs text-slate-600">Taxas financiadas</Label>
+              <div className="flex items-start gap-2">
+                <Switch className="shrink-0 mt-0.5" checked={form.other_fees_financed} onCheckedChange={(v) => update("other_fees_financed", v)} />
+                <Label className="text-xs text-slate-600 leading-snug min-w-0">Taxas financiadas</Label>
               </div>
             </div>
           </div>
           <Separator />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className={gridCols3}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Data da Operação *
@@ -997,7 +1000,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </div>
           <Separator />
           <SubsectionHeading icon={Percent}>Taxa e Indexação</SubsectionHeading>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Taxa Fixa (% a.a.) *</Label>
               <CurrencyInput type="percent" value={form.fixed_rate} onChange={(e) => update("fixed_rate", e.target.value)} placeholder="0,0000" className="h-9" required />
@@ -1011,7 +1014,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Indexador</Label>
               <Select value={form.indexer} onValueChange={(v) => update("indexer", v)}>
@@ -1067,7 +1070,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className={gridCols3}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Prazo Total (meses) *
@@ -1151,7 +1154,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
           </div>
           <Separator />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Carência Principal (meses)
@@ -1319,7 +1322,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
           )}
           <Separator />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Periodicidade Amortização</Label>
               <Select 
@@ -1485,7 +1488,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             parte da tela. Ficam desabilitados até existir um cálculo (result)
             porque é dele que vem o cronograma que será persistido. */}
         {(onSaveDraft || onSubmitForReview) && (
-          <div className="grid grid-cols-2 gap-2">
+          <div className={cn("grid gap-2", narrowColumn ? "grid-cols-1" : "grid-cols-2")}>
             {onSaveDraft && (
               <Button
                 type="button"

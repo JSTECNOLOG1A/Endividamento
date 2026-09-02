@@ -7,6 +7,7 @@
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";
 @import "@fontsource/inter/700.css";
+@import "./layouts/modern/modern-content.css";
 
 @tailwind base;
 @tailwind components;
@@ -125,4 +126,12 @@
 
 .processing-bar {
   animation: processing-bar 1.15s ease-in-out infinite;
+}
+
+/* Shell Modern: rolagem só no conteúdo — sidebar e header ficam fixos */
+html[data-layout-shell="modern"],
+html[data-layout-shell="modern"] body,
+html[data-layout-shell="modern"] #root {
+  height: 100%;
+  overflow: hidden;
 }

@@ -154,7 +154,7 @@ export const ENTITIES = {
   },
   AccountMovement: {
     table: "account_movements",
-    columns: ["contract_id", "movement_date", "movement_type", "amount", "observacao"],
+    columns: ["group_id", "contract_id", "movement_date", "movement_type", "amount", "observacao"],
     booleans: [],
     numbers: ["amount"],
   },
@@ -175,7 +175,7 @@ export const ENTITIES = {
   },
   NotificationLog: {
     table: "notification_log",
-    columns: ["event_type", "contract_id", "to_email", "subject", "body", "status", "error_message"],
+    columns: ["group_id", "event_type", "contract_id", "to_email", "subject", "body", "status", "error_message"],
     booleans: [],
     numbers: [],
   },

@@ -1048,7 +1048,7 @@ export async function refreshReceivableTitlesFromErp(payload = {}) {
       // sincronização recria um título novo automaticamente. Ver comentário
       // completo em backend/src/modules/payables/erpIntegrate.js.
       if (patch.erp_status === "estornado" && contractStatusById.get(title.contract_id) === "aprovado") {
-        await pool.query(`DELETE FROM receivable_titles WHERE id = $1`, [title.id]);
+        await pool.query(`DELETE FROM receivable_titles WHERE id = $1 AND group_id = $2`, [title.id, groupIdOrThrow()]);
         consulted += 1;
         results.push({
           id: title.id,

@@ -1,6 +1,7 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import AccountTypeBadge from "@/components/shared/AccountTypeBadge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -181,7 +182,7 @@ function Cells({ item, type, onEdit, onDelete, onRelated, relatedTitle }) {
         <TableCell className="text-[11px] whitespace-nowrap">{dash(item.codigo)}</TableCell>
         <TableCell className="font-medium text-slate-800 min-w-[220px]">{dash(item.descricao)}</TableCell>
         <TableCell className="whitespace-nowrap">
-          {item.tipo_natureza === "sintetica" ? "Sintética" : "Analítica"}
+          <AccountTypeBadge value={item.tipo_natureza} />
         </TableCell>
         <TableCell className="whitespace-nowrap">{dash(item.tipo_conta)}</TableCell>
         <TableCell>
@@ -201,7 +202,9 @@ function Cells({ item, type, onEdit, onDelete, onRelated, relatedTitle }) {
         <TableCell className="text-[11px] whitespace-nowrap">{dash(item.account_code)}</TableCell>
         <TableCell className="font-medium text-slate-800">{dash(item.account_name)}</TableCell>
         <TableCell className="whitespace-nowrap">{CLASS_LABELS[item.account_class] || dash(item.account_class)}</TableCell>
-        <TableCell className="whitespace-nowrap">{item.account_type === "sintetica" ? "Sintética" : "Analítica"}</TableCell>
+        <TableCell className="whitespace-nowrap">
+          <AccountTypeBadge value={item.account_type} />
+        </TableCell>
         <TableCell className="whitespace-nowrap">{item.account_nature === "credora" ? "Credora" : "Devedora"}</TableCell>
         <TableCell className="whitespace-nowrap">{item.origem === "integrado" ? "Integrada" : "Manual"}</TableCell>
         <TableCell><StatusBadge status={item.status} /></TableCell>

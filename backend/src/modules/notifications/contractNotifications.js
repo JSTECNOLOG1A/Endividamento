@@ -3,6 +3,7 @@ import { config } from "../../config.js";
 import { logger } from "../../logger.js";
 import * as entityStore from "../entities/store.js";
 import { sendNotification } from "./mailer.js";
+import { requireTenantContext } from "../tenants/scope.js";
 
 function parseStatusHistory(raw) {
   if (!raw) return [];
@@ -16,9 +17,20 @@ function parseStatusHistory(raw) {
   }
 }
 
-async function adminEmails() {
-  const result = await pool.query("SELECT email FROM users WHERE role = 'admin' AND status = 'active'");
-  return result.rows.map((row) => row.email);
+export async function adminEmails() {
+  const groupId = requireTenantContext();
+  const result = await pool.query(
+    `SELECT u.email
+     FROM users u
+     JOIN tenant_users tu ON lower(tu.user_email) = lower(u.email)
+     WHERE tu.group_id = $1
+       AND u.status = 'active'
+       AND u.blocked IS NOT TRUE
+       AND u.platform_admin IS NOT TRUE
+       AND (u.role = 'admin' OR tu.role IN ('OWNER', 'ADMIN'))`,
+    [groupId]
+  );
+  return [...new Set(result.rows.map((row) => row.email))];
 }
 
 // Quem enviou o contrato pra aprovação (procura no histórico, do mais

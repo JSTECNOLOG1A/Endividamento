@@ -18,9 +18,12 @@ import IntegrityValidator from "../components/loan/IntegrityValidator";
 import ScenarioTests from "../components/loan/ScenarioTests";
 import { calculateAmortizationSchedule } from "../lib/runCalculation";
 import { toBRDecimalString } from "../lib/brNumber";
+import { useLayoutMode } from "@/lib/LayoutContext";
 
 export default function Simulator() {
   const navigate = useNavigate();
+  const { layoutMode } = useLayoutMode();
+  const isModernLayout = layoutMode === "modern";
   const [result, setResult] = useState(null);
   const [formParams, setFormParams] = useState(null);
   const [lastCalculatedParams, setLastCalculatedParams] = useState(null);
@@ -767,7 +770,13 @@ export default function Simulator() {
   };
 
   return (
-    <div className="w-full px-4 sm:px-6 py-8">
+    <div
+      className={
+        isModernLayout
+          ? "w-full h-full min-h-0 flex flex-col"
+          : "w-full px-4 sm:px-6 py-8"
+      }
+    >
       {editingContractId && (
         <div className="mb-4">
           <Button variant="outline" size="sm" onClick={handleBack} className="gap-1.5 text-xs">
@@ -788,10 +797,22 @@ export default function Simulator() {
           </div>
         </div>
       )}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-        {/* Left — Form */}
-        <div className="xl:col-span-4">
-          <div className="sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
+      <div
+        className={
+          isModernLayout
+            ? "grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0 lg:min-h-[calc(100dvh-10.5rem)]"
+            : "grid grid-cols-1 xl:grid-cols-12 gap-8"
+        }
+      >
+        {/* Left — Form (mesma ordem de campos do clássico) */}
+        <div className={isModernLayout ? "lg:col-span-4 flex flex-col min-h-0" : "xl:col-span-4"}>
+          <div
+            className={
+              isModernLayout
+                ? "lg:sticky lg:top-0 lg:max-h-[calc(100dvh-10.5rem)] overflow-y-auto pr-1"
+                : "sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto"
+            }
+          >
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Calculadora</h1>
@@ -812,6 +833,7 @@ export default function Simulator() {
               </div>
             )}
             <ContractForm
+              narrowColumn={isModernLayout}
               onCalculate={handleCalculate}
               onIdentificationChange={(fields) =>
                 setFormParams((prev) => (prev ? { ...prev, ...fields } : prev))
@@ -836,9 +858,15 @@ export default function Simulator() {
         </div>
 
         {/* Right — Results */}
-        <div className="xl:col-span-8">
+        <div
+          className={
+            isModernLayout
+              ? "lg:col-span-8 flex flex-col min-h-[320px] lg:min-h-[calc(100dvh-10.5rem)]"
+              : "xl:col-span-8"
+          }
+        >
           {result ? (
-            <div className="space-y-6">
+            <div className="space-y-6 flex-1 min-h-0">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-900 tracking-tight">Resultado</h2>
                 {editingContractId && (
@@ -887,6 +915,18 @@ export default function Simulator() {
                 </TabsContent>
                 </Tabs>
             </div>
+          ) : isModernLayout ? (
+            <div className="flex flex-1 items-center justify-center min-h-[320px] lg:min-h-full rounded-xl border border-dashed border-[#E5E7EB] bg-white">
+              <div className="text-center px-6 py-12">
+                <div className="w-20 h-20 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-10 h-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-slate-700">Nenhum cálculo realizado</h3>
+                <p className="text-sm text-slate-500 mt-1">Preencha os parâmetros e clique em &quot;Calcular&quot;</p>
+              </div>
+            </div>
           ) : (
             <div className="flex items-center justify-center h-full min-h-[400px]">
               <div className="text-center">
@@ -896,7 +936,7 @@ export default function Simulator() {
                   </svg>
                 </div>
                 <h3 className="text-lg font-semibold text-slate-700">Nenhum cálculo realizado</h3>
-                <p className="text-sm text-slate-500 mt-1">Preencha os parâmetros e clique em "Calcular"</p>
+                <p className="text-sm text-slate-500 mt-1">Preencha os parâmetros e clique em &quot;Calcular&quot;</p>
               </div>
             </div>
           )}

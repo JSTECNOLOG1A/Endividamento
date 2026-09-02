@@ -26,6 +26,7 @@ import { accountRouter } from "./modules/account/routes.js";
 import { platformRouter } from "./modules/platform/routes.js";
 import { billingRouter } from "./modules/billing/routes.js";
 import { onboardingRouter } from "./modules/onboarding/routes.js";
+import { parametersRouter } from "./modules/parameters/routes.js";
 import { openApiDocument } from "./openapi.js";
 import * as store from "./modules/entities/store.js";
 
@@ -57,7 +58,11 @@ export function createApp() {
   const app = express();
   app.set("trust proxy", 1);
   app.use(requestId);
-  app.use(pinoHttp({ logger, genReqId: (req) => req.requestId }));
+  app.use(pinoHttp({
+    logger,
+    genReqId: (req) => req.requestId,
+    redact: ["req.headers.authorization", "req.query.token"],
+  }));
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
   app.use(cors({ origin: config.corsOrigins, credentials: true }));
   app.use(express.json({ limit: "8mb" }));
@@ -123,6 +128,7 @@ export function createApp() {
   app.use("/api/integrations", integrationsRouter);
   app.use("/api/schedules", schedulesRouter);
   app.use("/api/users", usersRouter);
+  app.use("/api/parameters", parametersRouter);
 
   const aliases = {
     groups: "Group",

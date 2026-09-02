@@ -1,5 +1,7 @@
 import * as store from "../entities/store.js";
 import { pool } from "../../db/pool.js";
+import { groupIdOrNull, isPlatformAdmin } from "../tenants/access.js";
+import { requireTenantContext } from "../tenants/scope.js";
 
 // Funções de acesso à API pública do Banco Central (BACEN) usadas tanto pelas
 // funções sob demanda (/functions/getPTAXFromBACEN, /functions/getRatesFromBACEN
@@ -475,14 +477,36 @@ export async function clearCDIRatesByType(payload = {}) {
     err.status = 400;
     throw err;
   }
-  const result = await pool.query(`DELETE FROM cdi_rates WHERE rate_type = $1`, [rateType]);
-  return { ok: true, deleted: result.rowCount };
+  if (isPlatformAdmin() && !groupIdOrNull()) {
+    const result = await pool.query(
+      `DELETE FROM cdi_rates WHERE rate_type = $1 AND group_id IS NULL`,
+      [rateType]
+    );
+    return { ok: true, deleted: result.rowCount, scope: "platform" };
+  }
+  const groupId = requireTenantContext();
+  const result = await pool.query(
+    `DELETE FROM cdi_rates WHERE rate_type = $1 AND group_id = $2`,
+    [rateType, groupId]
+  );
+  return { ok: true, deleted: result.rowCount, scope: "tenant" };
 }
 
 // Mesma ideia acima, mas pro cadastro de Moedas (botão "Limpar Taxas PTAX"
 // em PTAXImporter.jsx).
 export async function clearCurrencyRates(payload = {}) {
   const { currencyCode = "USD" } = payload;
-  const result = await pool.query(`DELETE FROM currencies WHERE currency_code = $1`, [currencyCode]);
-  return { ok: true, deleted: result.rowCount };
+  if (isPlatformAdmin() && !groupIdOrNull()) {
+    const result = await pool.query(
+      `DELETE FROM currencies WHERE currency_code = $1 AND group_id IS NULL`,
+      [currencyCode]
+    );
+    return { ok: true, deleted: result.rowCount, scope: "platform" };
+  }
+  const groupId = requireTenantContext();
+  const result = await pool.query(
+    `DELETE FROM currencies WHERE currency_code = $1 AND group_id = $2`,
+    [currencyCode, groupId]
+  );
+  return { ok: true, deleted: result.rowCount, scope: "tenant" };
 }

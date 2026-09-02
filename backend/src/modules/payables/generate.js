@@ -3,14 +3,15 @@ import { pool } from "../../db/pool.js";
 import { logger } from "../../logger.js";
 import { se2FilialFromSm0 } from "../integrations/protheusScope.js";
 import { groupIdOrThrow } from "../tenants/access.js";
-import { assertContractInTenant } from "../tenants/scope.js";
-import { resolveContractReopen } from "../tenants/policy.js";
+import { assertContractInTenant, requireTenantContext } from "../tenants/scope.js";
+import { assertPlatformAdminWithTenant, assertTenantAdmin, resolveContractReopen } from "../tenants/policy.js";
 import { writeAudit } from "../../middleware/audit.js";
 import * as store from "../entities/store.js";
 import { calculateGuaranteedAccountStatement } from "../functions/guaranteedAccount.js";
 import { cleanupOrphanedReceivableTitles as cleanupOrphanedReceivableTitlesImpl } from "../receivables/generate.js";
 import { reversePayableTitles } from "./erpIntegrate.js";
 import { reverseReceivableTitles } from "../receivables/erpIntegrate.js";
+import { resolveParameter } from "../parameters/service.js";
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -63,10 +64,45 @@ function todayIsoDate() {
   }).format(new Date());
 }
 
-export function interestTipo(vencimento) {
+export function interestTipo(vencimento, financeParams = null) {
+  const provisional = String(financeParams?.provisionalTitleType || "PR").trim() || "PR";
+  const interest = String(financeParams?.interestTitleType || "JUR").trim() || "JUR";
   const due = dateOnly(vencimento);
-  if (!due) return "PR";
-  return due.slice(0, 7) <= todayIsoDate().slice(0, 7) ? "JUR" : "PR";
+  if (!due) return provisional;
+  return due.slice(0, 7) <= todayIsoDate().slice(0, 7) ? interest : provisional;
+}
+
+export function normalizeFinanceTitleParams(raw = {}) {
+  return {
+    mainTitleType: String(raw.mainTitleType ?? raw.main_title_type ?? "").trim(),
+    interestTitleType: String(raw.interestTitleType ?? raw.interest_title_type ?? "JUR").trim() || "JUR",
+    provisionalTitleType: String(raw.provisionalTitleType ?? raw.provisional_title_type ?? "PR").trim() || "PR",
+    mainTitleNature: String(raw.mainTitleNature ?? raw.main_title_nature ?? "").trim(),
+    interestTitleNature: String(raw.interestTitleNature ?? raw.interest_title_nature ?? "").trim(),
+  };
+}
+
+export async function loadFinanceTitleParams(groupId) {
+  const [
+    mainTitleType,
+    interestTitleType,
+    provisionalTitleType,
+    mainTitleNature,
+    interestTitleNature,
+  ] = await Promise.all([
+    resolveParameter("finance.main_title_type", { groupId }),
+    resolveParameter("finance.interest_title_type", { groupId }),
+    resolveParameter("finance.provisional_title_type", { groupId }),
+    resolveParameter("finance.main_title_nature", { groupId }),
+    resolveParameter("finance.interest_title_nature", { groupId }),
+  ]);
+  return normalizeFinanceTitleParams({
+    mainTitleType,
+    interestTitleType,
+    provisionalTitleType,
+    mainTitleNature,
+    interestTitleNature,
+  });
 }
 
 function dateOnly(value) {
@@ -109,9 +145,11 @@ export function supplierFromBank(bank) {
   };
 }
 
-export function buildPayableTitles(contract, bank = null, entity = null) {
+export function buildPayableTitles(contract, bank = null, entity = null, financeParams = null) {
   if (!contract?.id || !contract.entity_id) return [];
+  const finance = normalizeFinanceTitleParams(financeParams);
   const amort = prefixAndType(contract);
+  const mainTipo = finance.mainTitleType || amort.tipo;
   const tituloNumero = titleNumberFromContract(contract.contract_number);
   const emissao = dateOnly(contract.operation_date);
   const contractNumber = String(contract.contract_number || tituloNumero).trim();
@@ -148,10 +186,11 @@ export function buildPayableTitles(contract, bank = null, entity = null) {
     if (amortValor > 0) {
       titles.push({
         ...base,
-        tipo: amort.tipo,
+        tipo: mainTipo,
         prefixo: amort.prefixo,
         valor: amortValor,
         saldo: amortValor,
+        natureza: finance.mainTitleNature,
         historico: `Amortização parcela ${parcela} do contrato ${contractNumber}`,
       });
     }
@@ -160,10 +199,11 @@ export function buildPayableTitles(contract, bank = null, entity = null) {
     if (jurosValor > 0) {
       titles.push({
         ...base,
-        tipo: interestTipo(vencimento),
+        tipo: interestTipo(vencimento, finance),
         prefixo: "JUR",
         valor: jurosValor,
         saldo: jurosValor,
+        natureza: finance.interestTitleNature,
         historico: `Juros parcela ${parcela} do contrato ${contractNumber}`,
       });
     }
@@ -172,10 +212,11 @@ export function buildPayableTitles(contract, bank = null, entity = null) {
     if (iofValor > 0) {
       titles.push({
         ...base,
-        tipo: interestTipo(vencimento),
+        tipo: interestTipo(vencimento, finance),
         prefixo: "IOF",
         valor: iofValor,
         saldo: iofValor,
+        natureza: finance.interestTitleNature,
         historico: `IOF parcela ${parcela} do contrato ${contractNumber}`,
       });
     }
@@ -219,10 +260,15 @@ function titleIsIntegrated(title) {
 // ERP — mesma regra e mesma trilha de auditoria de reopenApprovedContractForEditing,
 // só que varrendo a base inteira em vez de um contrato só.
 export async function cleanupOrphanedPayableTitles(payload = {}, req = null) {
+  await assertPlatformAdminWithTenant();
+  const groupId = requireTenantContext();
   const result = await pool.query(
     `SELECT t.* FROM payable_titles t
        JOIN loan_contracts c ON c.id = t.contract_id
-      WHERE c.status != 'aprovado'`
+      WHERE c.status != 'aprovado'
+        AND t.group_id = $1
+        AND c.group_id = $1`,
+    [groupId]
   );
 
   const integrated = result.rows.filter(titleIsIntegrated);
@@ -239,8 +285,8 @@ export async function cleanupOrphanedPayableTitles(payload = {}, req = null) {
     try {
       await client.query("BEGIN");
       await client.query(
-        `DELETE FROM payable_titles WHERE id = ANY($1::text[])`,
-        [toDelete.map((t) => t.id)]
+        `DELETE FROM payable_titles WHERE id = ANY($1::text[]) AND group_id = $2`,
+        [toDelete.map((t) => t.id), groupId]
       );
       await client.query("COMMIT");
     } catch (error) {
@@ -291,13 +337,10 @@ export async function reopenApprovedContractForEditing(payload = {}, req = null)
   const contractId = String(payload?.contractId || "").trim();
   if (!contractId) throw httpError(400, "contractId é obrigatório");
 
-  const contractResult = await pool.query(`SELECT * FROM loan_contracts WHERE id = $1`, [contractId]);
-  const contract = contractResult.rows[0];
-  if (!contract) throw httpError(404, "Contrato não encontrado");
+  const contract = await assertContractInTenant(contractId);
   if (contract.status !== "aprovado") {
-    throw httpError(400, `Só é possível reabrir contratos aprovados (status atual: ${contract.status})`);
+    throw httpError(400, "Só é possível reabrir contratos aprovados");
   }
-  await assertContractInTenant(contractId);
   const decision = await resolveContractReopen(contract);
   if (decision.action === "request") {
     await store.update("LoanContract", contractId, {
@@ -315,9 +358,16 @@ export async function reopenApprovedContractForEditing(payload = {}, req = null)
     };
   }
 
-  let titlesResult = await pool.query(`SELECT * FROM payable_titles WHERE contract_id = $1`, [contractId]);
+  const groupId = requireTenantContext();
+  let titlesResult = await pool.query(
+    `SELECT * FROM payable_titles WHERE contract_id = $1 AND group_id = $2`,
+    [contractId, groupId]
+  );
   let integrated = titlesResult.rows.filter(titleIsIntegrated);
-  let receivableResult = await pool.query(`SELECT * FROM receivable_titles WHERE contract_id = $1`, [contractId]);
+  let receivableResult = await pool.query(
+    `SELECT * FROM receivable_titles WHERE contract_id = $1 AND group_id = $2`,
+    [contractId, groupId]
+  );
   let receivableIntegrated = receivableResult.rows.filter(titleIsIntegrated);
 
   let erpReversalAttempt = null;
@@ -337,9 +387,15 @@ export async function reopenApprovedContractForEditing(payload = {}, req = null)
       : null;
     erpReversalAttempt = { payable: payableResult, receivable: receivableErpResult };
 
-    titlesResult = await pool.query(`SELECT * FROM payable_titles WHERE contract_id = $1`, [contractId]);
+    titlesResult = await pool.query(
+      `SELECT * FROM payable_titles WHERE contract_id = $1 AND group_id = $2`,
+      [contractId, groupId]
+    );
     integrated = titlesResult.rows.filter(titleIsIntegrated);
-    receivableResult = await pool.query(`SELECT * FROM receivable_titles WHERE contract_id = $1`, [contractId]);
+    receivableResult = await pool.query(
+      `SELECT * FROM receivable_titles WHERE contract_id = $1 AND group_id = $2`,
+      [contractId, groupId]
+    );
     receivableIntegrated = receivableResult.rows.filter(titleIsIntegrated);
   }
 
@@ -368,14 +424,14 @@ export async function reopenApprovedContractForEditing(payload = {}, req = null)
 
   if (toReverse.length) {
     await pool.query(
-      `DELETE FROM payable_titles WHERE id = ANY($1::text[])`,
-      [toReverse.map((t) => t.id)]
+      `DELETE FROM payable_titles WHERE id = ANY($1::text[]) AND group_id = $2`,
+      [toReverse.map((t) => t.id), groupId]
     );
   }
   if (toReverseReceivable.length) {
     await pool.query(
-      `DELETE FROM receivable_titles WHERE id = ANY($1::text[])`,
-      [toReverseReceivable.map((t) => t.id)]
+      `DELETE FROM receivable_titles WHERE id = ANY($1::text[]) AND group_id = $2`,
+      [toReverseReceivable.map((t) => t.id), groupId]
     );
   }
 
@@ -494,7 +550,8 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
     [contract.entity_id, groupId]
   );
   const scheduleContract = await scheduleContractForGeneration(contract);
-  const titles = buildPayableTitles(scheduleContract, bank, entityResult.rows[0] || null)
+  const financeParams = await loadFinanceTitleParams(groupId);
+  const titles = buildPayableTitles(scheduleContract, bank, entityResult.rows[0] || null, financeParams)
     .filter((title) => !existingKeys.has(`${title.prefixo}::${title.parcela}`));
   if (!titles.length) {
     if (!existing.rows.length) {
@@ -572,19 +629,36 @@ export async function refreshGuaranteedAccountPayableTitle(payload = {}) {
   const contractId = String(payload?.contractId || "").trim();
   if (!contractId) throw httpError(400, "contractId é obrigatório");
 
-  const contractResult = await pool.query(`SELECT * FROM loan_contracts WHERE id = $1`, [contractId]);
-  const contract = contractResult.rows[0];
-  if (!contract || contract.calculation_system !== "CONTA_GARANTIDA") {
+  const contract = await assertContractInTenant(contractId);
+  if (contract.calculation_system !== "CONTA_GARANTIDA") {
     throw httpError(400, "Contrato não encontrado ou não é uma conta garantida");
   }
   if (contract.status !== "aprovado") {
     return { ok: true, skipped: true, reason: "Contrato não está aprovado" };
   }
 
-  const existing = await pool.query(`SELECT * FROM payable_titles WHERE contract_id = $1`, [contractId]);
-  const nonIntegrated = existing.rows.filter((t) => !titleIsIntegrated(t));
-  if (nonIntegrated.length) {
-    await pool.query(`DELETE FROM payable_titles WHERE id = ANY($1::text[])`, [nonIntegrated.map((t) => t.id)]);
+  const groupId = requireTenantContext();
+  const client = await pool.connect();
+  let nonIntegrated = [];
+  try {
+    await client.query("BEGIN");
+    const existing = await client.query(
+      `SELECT * FROM payable_titles WHERE contract_id = $1 AND group_id = $2`,
+      [contractId, groupId]
+    );
+    nonIntegrated = existing.rows.filter((t) => !titleIsIntegrated(t));
+    if (nonIntegrated.length) {
+      await client.query(
+        `DELETE FROM payable_titles WHERE id = ANY($1::text[]) AND group_id = $2`,
+        [nonIntegrated.map((t) => t.id), groupId]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
 
   const generated = await generatePayableTitlesForContract(contract, "system");
@@ -598,17 +672,20 @@ export async function refreshGuaranteedAccountPayableTitle(payload = {}) {
 // Bloqueia (não apaga nada) se algum título já foi integrado ao ERP, mesma
 // regra usada em reopenApprovedContractForEditing.
 export async function deleteGuaranteedAccount(payload = {}, req = null) {
+  await assertTenantAdmin("Apenas administradores podem excluir uma conta garantida.");
   const contractId = String(payload?.contractId || "").trim();
   if (!contractId) throw httpError(400, "contractId é obrigatório");
 
-  const contractResult = await pool.query(`SELECT * FROM loan_contracts WHERE id = $1`, [contractId]);
-  const contract = contractResult.rows[0];
-  if (!contract) throw httpError(404, "Contrato não encontrado");
+  const contract = await assertContractInTenant(contractId);
   if (contract.calculation_system !== "CONTA_GARANTIDA") {
     throw httpError(400, "Esta função só pode ser usada para contas garantidas");
   }
 
-  const titlesResult = await pool.query(`SELECT * FROM payable_titles WHERE contract_id = $1`, [contractId]);
+  const groupId = requireTenantContext();
+  const titlesResult = await pool.query(
+    `SELECT * FROM payable_titles WHERE contract_id = $1 AND group_id = $2`,
+    [contractId, groupId]
+  );
   const integrated = titlesResult.rows.filter(titleIsIntegrated);
   if (integrated.length) {
     const err = new Error(
@@ -621,18 +698,30 @@ export async function deleteGuaranteedAccount(payload = {}, req = null) {
     throw err;
   }
 
-  const movementsResult = await pool.query(`SELECT * FROM account_movements WHERE contract_id = $1`, [contractId]);
+  const movementsResult = await pool.query(
+    `SELECT * FROM account_movements WHERE contract_id = $1 AND group_id = $2`,
+    [contractId, groupId]
+  );
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     if (titlesResult.rows.length) {
-      await client.query(`DELETE FROM payable_titles WHERE contract_id = $1`, [contractId]);
+      await client.query(
+        `DELETE FROM payable_titles WHERE contract_id = $1 AND group_id = $2`,
+        [contractId, groupId]
+      );
     }
     if (movementsResult.rows.length) {
-      await client.query(`DELETE FROM account_movements WHERE contract_id = $1`, [contractId]);
+      await client.query(
+        `DELETE FROM account_movements WHERE contract_id = $1 AND group_id = $2`,
+        [contractId, groupId]
+      );
     }
-    await client.query(`DELETE FROM loan_contracts WHERE id = $1`, [contractId]);
+    await client.query(
+      `DELETE FROM loan_contracts WHERE id = $1 AND group_id = $2`,
+      [contractId, groupId]
+    );
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -731,6 +820,7 @@ export async function refreshPayableTitlesFxValue(payload = {}) {
   }
   const freshRate = Number(latestPtax.exchange_rate);
 
+  const groupId = groupIdOrThrow();
   let sql = `
     SELECT t.id, t.contract_id, t.parcela, t.prefixo, t.valor, c.schedule_data
     FROM payable_titles t
@@ -738,11 +828,13 @@ export async function refreshPayableTitlesFxValue(payload = {}) {
     WHERE t.status = 'aberto'
       AND COALESCE(t.integrado_erp, false) = false
       AND c.currency_id IS NOT NULL
+      AND t.group_id = $1
+      AND c.group_id = $1
   `;
-  const params = [];
+  const params = [groupId];
   if (ids?.length) {
     params.push(ids);
-    sql += ` AND t.id = ANY($1::text[])`;
+    sql += ` AND t.id = ANY($2::text[])`;
   }
   const { rows } = await pool.query(sql, params);
 
@@ -762,8 +854,8 @@ export async function refreshPayableTitlesFxValue(payload = {}) {
     if (Math.abs(valorNovo - valorAnterior) < 0.01) continue;
 
     await pool.query(
-      `UPDATE payable_titles SET valor = $2, saldo = $2, updated_date = now() WHERE id = $1`,
-      [title.id, valorNovo]
+      `UPDATE payable_titles SET valor = $2, saldo = $2, updated_date = now() WHERE id = $1 AND group_id = $3`,
+      [title.id, valorNovo, groupId]
     );
     updated += 1;
     titulos.push({

@@ -2,22 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/notify";
 import { useProcessing } from "@/lib/ProcessingContext";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Dialog } from "@/components/ui/dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
   SelectItem,
-  SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Table,
@@ -30,6 +17,25 @@ import {
 import { base44 } from "@/api/base44Client";
 import { normalizeEmpresaCode } from "@/lib/empresaCode";
 import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
+import {
+  SubscreenAlert,
+  SubscreenBody,
+  SubscreenCancelButton,
+  SubscreenDescription,
+  SubscreenDialogContent,
+  SubscreenFilterPanel,
+  SubscreenFilterSelect,
+  SubscreenFooter,
+  SubscreenHeader,
+  SubscreenLoading,
+  SubscreenMeta,
+  SubscreenPrimaryButton,
+  SubscreenSearchInput,
+  SubscreenSearchRow,
+  SubscreenSelectionHint,
+  SubscreenTableShell,
+  SubscreenTitle,
+} from "@/layouts/modern/ModernSubscreen";
 
 const ALL = "__all__";
 
@@ -83,18 +89,6 @@ const BANK_IMPORT_SORT_COLUMNS = {
   nome: { getValue: (item) => item.nome || "" },
   situacao: { getValue: (item) => situacaoLabel(item) },
 };
-
-function FilterSelect({ label, value, onValueChange, children }) {
-  return (
-    <div className="space-y-1 min-w-0">
-      <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">{label}</Label>
-      <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-        <SelectContent>{children}</SelectContent>
-      </Select>
-    </div>
-  );
-}
 
 export default function BankAccountImportModal({ open, onOpenChange, entities = [], banks = [], onImported }) {
   const { withProcessing } = useProcessing();
@@ -269,99 +263,98 @@ export default function BankAccountImportModal({ open, onOpenChange, entities = 
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!confirming && !loading) onOpenChange(next); }}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Importar contas bancárias</DialogTitle>
-          <DialogDescription>
+      <SubscreenDialogContent>
+        <SubscreenHeader>
+          <SubscreenTitle>Importar contas bancárias</SubscreenTitle>
+          <SubscreenDescription>
             {loading
               ? "Buscando contas em todas as empresas do grupo..."
               : `Selecione as contas de ${preview?.connection_name || "ERP"}. O A6_FILIAL é a empresa; a filial fica em branco. Só entram registros da mesma empresa da entidade e do mesmo COMPE do banco.`}
-          </DialogDescription>
-        </DialogHeader>
+          </SubscreenDescription>
+        </SubscreenHeader>
 
         {loading ? (
-          <p className="text-sm text-slate-600 py-8 text-center">Consultando o ERP...</p>
+          <SubscreenLoading>Consultando o ERP...</SubscreenLoading>
         ) : (
-          <div className="space-y-3 min-h-0 flex-1 flex flex-col">
-            {(preview?.grupo_empresas || preview?.empresas?.length || preview?.tabela) ? (
-              <p className="text-xs text-slate-600">
-                {[
-                  preview.grupo_empresas ? `Grupo ${preview.grupo_empresas}` : null,
-                  preview.empresas?.length ? `Empresas ${preview.empresas.join(", ")}` : null,
-                  preview.tabela ? `Tabela ${preview.tabela}` : null,
-                ].filter(Boolean).join(" · ")}
-              </p>
-            ) : null}
+          <SubscreenBody>
+            <SubscreenMeta>
+              {[
+                preview?.grupo_empresas ? `Grupo ${preview.grupo_empresas}` : null,
+                preview?.empresas?.length ? `Empresas ${preview.empresas.join(", ")}` : null,
+                preview?.tabela ? `Tabela ${preview.tabela}` : null,
+              ].filter(Boolean).join(" · ")}
+            </SubscreenMeta>
 
             {entitiesWithoutCode.length > 0 ? (
-              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              <SubscreenAlert>
                 Entidades sem empresa Protheus: {entitiesWithoutCode.map((entity) => entity.entity_name).join(", ")}.
-              </p>
+              </SubscreenAlert>
             ) : null}
 
             {unmatchedScopes.length > 0 ? (
-              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              <SubscreenAlert>
                 Empresas do ERP sem entidade no FinCalc: {unmatchedScopes.join(", ")}. Informe o M0_CODIGO no cadastro da entidade.
-              </p>
+              </SubscreenAlert>
             ) : null}
 
             {unmatchedBanks.length > 0 ? (
-              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              <SubscreenAlert>
                 Bancos do ERP sem cadastro no FinCalc: {unmatchedBanks.join(", ")}. Cadastre o banco com o código COMPE correspondente.
-              </p>
+              </SubscreenAlert>
             ) : null}
 
             {banks.length === 0 ? (
-              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              <SubscreenAlert>
                 Nenhum banco cadastrado. Cadastre a instituição financeira antes de importar as contas.
-              </p>
+              </SubscreenAlert>
             ) : null}
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <FilterSelect label="Empresa" value={empresaFilter} onValueChange={setEmpresaFilter}>
+            <SubscreenFilterPanel>
+              <SubscreenFilterSelect label="Empresa" value={empresaFilter} onValueChange={setEmpresaFilter}>
                 <SelectItem value={ALL}>Todas</SelectItem>
                 {empresaOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
-              </FilterSelect>
-              <FilterSelect label="Entidade" value={vinculoFilter} onValueChange={setVinculoFilter}>
+              </SubscreenFilterSelect>
+              <SubscreenFilterSelect label="Entidade" value={vinculoFilter} onValueChange={setVinculoFilter}>
                 <SelectItem value="todas">Todos</SelectItem>
                 <SelectItem value="vinculadas">Vinculadas</SelectItem>
                 <SelectItem value="sem_vinculo">Sem vínculo</SelectItem>
                 <SelectItem value="ambiguas">Ambíguas</SelectItem>
-              </FilterSelect>
-              <FilterSelect label="Banco" value={bancoFilter} onValueChange={setBancoFilter}>
+              </SubscreenFilterSelect>
+              <SubscreenFilterSelect label="Banco" value={bancoFilter} onValueChange={setBancoFilter}>
                 <SelectItem value={ALL}>Todos</SelectItem>
                 {bancoOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
-              </FilterSelect>
-              <FilterSelect label="Situação" value={situacaoFilter} onValueChange={setSituacaoFilter}>
+              </SubscreenFilterSelect>
+              <SubscreenFilterSelect label="Situação" value={situacaoFilter} onValueChange={setSituacaoFilter}>
                 <SelectItem value="todas">Todas</SelectItem>
                 <SelectItem value="nova">Nova</SelectItem>
                 <SelectItem value="cadastrada">Já cadastrada</SelectItem>
-              </FilterSelect>
-            </div>
+              </SubscreenFilterSelect>
+            </SubscreenFilterPanel>
 
-            <div className="flex items-center gap-2">
-              <Input
+            <SubscreenSearchRow>
+              <SubscreenSearchInput
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Filtrar por entidade, banco, agência, conta ou nome"
-                className="h-9"
               />
               <Button type="button" variant="outline" size="sm" onClick={toggleFiltered} disabled={!importableFiltered.length}>
                 {allFilteredSelected ? "Nenhum" : "Todos"}
               </Button>
-            </div>
-            <p className="text-xs text-slate-600">
+            </SubscreenSearchRow>
+
+            <SubscreenSelectionHint>
               {selectedImportableCount} de {importableFiltered.length} prontas para importar
               {filtered.length !== items.length || hasActiveFilters ? ` · ${filtered.length} visíveis` : ""}
               {filtered.length - importableFiltered.length > 0
                 ? ` · ${filtered.length - importableFiltered.length} sem banco cadastrado`
                 : ""}
-            </p>
-            <div className="border border-slate-200 rounded-lg overflow-auto max-h-[46vh]">
+            </SubscreenSelectionHint>
+
+            <SubscreenTableShell>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -438,15 +431,15 @@ export default function BankAccountImportModal({ open, onOpenChange, entities = 
                   )}
                 </TableBody>
               </Table>
-            </div>
-          </div>
+            </SubscreenTableShell>
+          </SubscreenBody>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={confirming || loading}>
+        <SubscreenFooter>
+          <SubscreenCancelButton onClick={() => onOpenChange(false)} disabled={confirming || loading}>
             Cancelar
-          </Button>
-          <Button
+          </SubscreenCancelButton>
+          <SubscreenPrimaryButton
             onClick={handleConfirm}
             disabled={loading || confirming || selectedImportableCount === 0}
           >
@@ -455,9 +448,9 @@ export default function BankAccountImportModal({ open, onOpenChange, entities = 
               : selectedImportableCount
                 ? `Importar (${selectedImportableCount})`
                 : "Importar"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+          </SubscreenPrimaryButton>
+        </SubscreenFooter>
+      </SubscreenDialogContent>
     </Dialog>
   );
 }

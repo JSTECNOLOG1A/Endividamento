@@ -1,0 +1,298 @@
+/**
+ * Tema Clarity IB — conteúdo interno do layout Modern.
+ * Scoped em data-layout-shell="modern"; Classic permanece inalterado.
+ */
+
+html[data-layout-shell="modern"] {
+  --primary: 187 96% 43%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 187 96% 43%;
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --muted-foreground: 220 9% 46%;
+  --accent: 210 40% 98%;
+  --accent-foreground: 192 80% 28%;
+  --radius: 0.625rem;
+  --background: 220 20% 97%;
+  --card: 0 0% 100%;
+}
+
+/* ---- Tipografia ---- */
+html[data-layout-shell="modern"] main .text-slate-900 {
+  color: #172033;
+}
+
+html[data-layout-shell="modern"] main .text-slate-800 {
+  color: #1e293b;
+}
+
+html[data-layout-shell="modern"] main .text-slate-700 {
+  color: #475569;
+}
+
+html[data-layout-shell="modern"] main .text-slate-600 {
+  color: #667085;
+}
+
+html[data-layout-shell="modern"] main .text-slate-500 {
+  color: #94a3b8;
+}
+
+html[data-layout-shell="modern"] main h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: #172033;
+}
+
+html[data-layout-shell="modern"] main h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #1e293b;
+}
+
+/* ---- Botões primários (CTA sólido ciano) ---- */
+html[data-layout-shell="modern"] main .bg-blue-600,
+html[data-layout-shell="modern"] main .bg-green-600,
+html[data-layout-shell="modern"] main .bg-violet-600,
+html[data-layout-shell="modern"] main .bg-amber-600,
+html[data-layout-shell="modern"] main .bg-orange-600,
+html[data-layout-shell="modern"] main button.bg-primary {
+  background-color: #06b6d4 !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  border-radius: 0.625rem;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgb(6 182 212 / 0.2);
+}
+
+html[data-layout-shell="modern"] main .hover\:bg-blue-700:hover,
+html[data-layout-shell="modern"] main .hover\:bg-green-700:hover,
+html[data-layout-shell="modern"] main .hover\:bg-violet-700:hover,
+html[data-layout-shell="modern"] main .hover\:bg-amber-700:hover,
+html[data-layout-shell="modern"] main .hover\:bg-orange-700:hover {
+  background-color: #0891b2 !important;
+}
+
+/* Botões secundários: branco + borda ciano */
+html[data-layout-shell="modern"] main button.border-input[class*="bg-background"],
+html[data-layout-shell="modern"] main button.border[class*="variant-outline"],
+html[data-layout-shell="modern"] main .border-input.bg-background {
+  border-color: #06b6d4 !important;
+  color: #0891b2 !important;
+  background-color: #fff !important;
+  border-radius: 0.625rem;
+}
+
+html[data-layout-shell="modern"] main button.border-input[class*="bg-background"]:hover,
+html[data-layout-shell="modern"] main .border-input.bg-background:hover {
+  background-color: rgb(6 182 212 / 0.06) !important;
+  color: #0891b2 !important;
+}
+
+/* Links azuis → ciano */
+html[data-layout-shell="modern"] main .text-blue-600,
+html[data-layout-shell="modern"] main .text-blue-700 {
+  color: #06b6d4;
+}
+
+html[data-layout-shell="modern"] main .hover\:text-blue-700:hover,
+html[data-layout-shell="modern"] main .hover\:text-blue-800:hover {
+  color: #0891b2;
+}
+
+html[data-layout-shell="modern"] main .border-blue-200,
+html[data-layout-shell="modern"] main .border-blue-300 {
+  border-color: rgb(6 182 212 / 0.35);
+}
+
+html[data-layout-shell="modern"] main .bg-blue-50,
+html[data-layout-shell="modern"] main .bg-blue-100 {
+  background-color: rgb(6 182 212 / 0.08);
+}
+
+/* ---- Cards e painéis brancos ---- */
+html[data-layout-shell="modern"] main .modern-page-content .rounded-xl.border,
+html[data-layout-shell="modern"] main .modern-page-content .rounded-lg.border,
+html[data-layout-shell="modern"] main .modern-page-content .border.border-slate-200.rounded-lg,
+html[data-layout-shell="modern"] main .border.border-slate-200.rounded-lg.bg-white {
+  border-color: #e5e7eb;
+  border-radius: 0.75rem;
+  background-color: #fff;
+  box-shadow: 0 1px 3px rgb(23 32 51 / 0.05);
+}
+
+html[data-layout-shell="modern"] main .border-dashed.border-slate-200 {
+  border-color: #e5e7eb;
+  background: #fff;
+  border-radius: 0.75rem;
+}
+
+html[data-layout-shell="modern"] main .border-dashed .bg-slate-100 {
+  background-color: rgb(6 182 212 / 0.1);
+}
+
+html[data-layout-shell="modern"] main .border-dashed .text-slate-300 {
+  color: #06b6d4;
+}
+
+/* ---- Tabelas (cabeçalho claro, linhas limpas) ---- */
+html[data-layout-shell="modern"] main thead.bg-slate-50,
+html[data-layout-shell="modern"] main thead[class*="bg-slate-50"] {
+  background-color: #f8fafc !important;
+}
+
+html[data-layout-shell="modern"] main thead tr {
+  border-color: #e5e7eb !important;
+}
+
+html[data-layout-shell="modern"] main th.text-slate-700 {
+  color: #64748b;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+html[data-layout-shell="modern"] main tbody tr {
+  border-color: #f1f5f9;
+}
+
+html[data-layout-shell="modern"] main tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+html[data-layout-shell="modern"] main tr.bg-violet-50,
+html[data-layout-shell="modern"] main tr.hover\:bg-violet-50:hover {
+  background-color: rgb(6 182 212 / 0.07) !important;
+}
+
+html[data-layout-shell="modern"] main .hover\:bg-slate-50:hover {
+  background-color: #f8fafc;
+}
+
+/* ---- Filtros em barra branca ---- */
+html[data-layout-shell="modern"] main label.text-slate-600,
+html[data-layout-shell="modern"] main .text-xs.font-medium.text-slate-600 {
+  color: #667085;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+html[data-layout-shell="modern"] main .grid.gap-3:has(label.uppercase),
+html[data-layout-shell="modern"] main .grid.gap-3:has(label.text-slate-600) {
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(23 32 51 / 0.05);
+  align-items: end;
+}
+
+html[data-layout-shell="modern"] main input,
+html[data-layout-shell="modern"] main button[role="combobox"] {
+  border-radius: 0.5rem;
+  border-color: #e5e7eb;
+  background-color: #fff;
+}
+
+html[data-layout-shell="modern"] main input:focus-visible,
+html[data-layout-shell="modern"] main button[role="combobox"]:focus-visible {
+  --tw-ring-color: rgb(6 182 212 / 0.3);
+  border-color: #06b6d4;
+}
+
+/* ---- Abas ---- */
+html[data-layout-shell="modern"] main [role="tablist"] {
+  background-color: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.625rem;
+  padding: 0.25rem;
+}
+
+html[data-layout-shell="modern"] main [role="tab"][data-state="active"] {
+  background-color: #06b6d4;
+  color: #fff;
+  border-radius: 0.5rem;
+  box-shadow: none;
+}
+
+html[data-layout-shell="modern"] main [role="tab"]:not([data-state="active"]) {
+  color: #667085;
+}
+
+/* ---- Badges ---- */
+html[data-layout-shell="modern"] .account-type-badge--analitica {
+  border-color: rgb(6 182 212 / 0.35);
+  background-color: rgb(6 182 212 / 0.12);
+  color: #0e7490;
+  box-shadow: 0 0 0 1px rgb(6 182 212 / 0.08);
+}
+
+html[data-layout-shell="modern"] .account-type-badge--sintetica {
+  border-color: rgb(139 92 246 / 0.35);
+  background-color: rgb(139 92 246 / 0.12);
+  color: #6d28d9;
+  box-shadow: 0 0 0 1px rgb(139 92 246 / 0.08);
+}
+
+html[data-layout-shell="modern"] main .border-green-200 {
+  border-color: rgb(22 163 74 / 0.25);
+}
+
+html[data-layout-shell="modern"] main .border-slate-200 {
+  border-color: #e5e7eb;
+}
+
+/* ---- Cabeçalho de seção ---- */
+html[data-layout-shell="modern"] main .modern-page-content > div > .mb-6:first-child p {
+  color: #667085;
+  max-width: 42rem;
+}
+
+/* ---- Cards de métrica (stat-like) ---- */
+html[data-layout-shell="modern"] main .rounded-xl.border.bg-card,
+html[data-layout-shell="modern"] main .rounded-lg.border.bg-white {
+  transition: box-shadow 0.15s ease;
+}
+
+html[data-layout-shell="modern"] main .rounded-xl.border.bg-card:hover,
+html[data-layout-shell="modern"] main .rounded-lg.border.bg-white:hover {
+  box-shadow: 0 2px 8px rgb(23 32 51 / 0.07);
+}
+
+/* ---- Dialogs / subtelas ---- */
+html[data-layout-shell="modern"] [role="dialog"] {
+  border-color: #e5e7eb;
+  border-radius: 1rem;
+  color: #172033;
+}
+
+html[data-layout-shell="modern"] .fixed.inset-0.z-50.bg-black\/80 {
+  background-color: rgb(15 23 42 / 0.45);
+}
+
+html[data-layout-shell="modern"] [role="dialog"] thead[class*="bg-slate-50"] {
+  background-color: #f8fafc !important;
+}
+
+html[data-layout-shell="modern"] [role="dialog"] tbody tr:hover {
+  background-color: rgb(6 182 212 / 0.04);
+}
+
+html[data-layout-shell="modern"] [role="dialog"] .text-amber-700 {
+  color: #0891b2;
+}
+
+html[data-layout-shell="modern"] [role="dialog"] button.bg-primary,
+html[data-layout-shell="modern"] [role="dialog"] .bg-primary {
+  background-color: #06b6d4 !important;
+}
+
+html[data-layout-shell="modern"] [role="alertdialog"] {
+  border-radius: 1rem;
+  border-color: #e5e7eb;
+}

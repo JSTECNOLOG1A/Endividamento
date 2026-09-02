@@ -54,12 +54,27 @@ import CDIManager from './pages/CDIManager';
 import Configuracoes from './pages/Configuracoes';
 import Consolidation from './pages/Consolidation';
 import Contracts from './pages/Contracts';
-import Governance from './pages/Governance';
+import GovernancePage from './pages/Governance';
+import {
+  GovernanceGroups,
+  GovernanceEntities,
+  GovernanceBanks,
+  GovernanceNatures,
+  GovernanceChart,
+} from './pages/governancePages';
 import GuaranteedAccounts from './pages/GuaranteedAccounts';
-import Settings from './pages/Settings';
+import SettingsPage from './pages/Settings';
+import {
+  SettingsIntegrations,
+  SettingsSchedules,
+  SettingsParameters,
+  SettingsUsers,
+  SettingsLog,
+  SettingsAccount,
+} from './pages/settingsPages';
 import Simulator from './pages/Simulator';
 import UserManual from './pages/UserManual';
-import __Layout from './Layout.jsx';
+import __Layout from './layouts/AppLayout.jsx';
 
 
 export const PAGES = {
@@ -70,9 +85,20 @@ export const PAGES = {
     "Configuracoes": Configuracoes,
     "Consolidation": Consolidation,
     "Contracts": Contracts,
-    "Governance": Governance,
+    "Governance": GovernancePage,
+    "GovernanceGroups": GovernanceGroups,
+    "GovernanceEntities": GovernanceEntities,
+    "GovernanceBanks": GovernanceBanks,
+    "GovernanceNatures": GovernanceNatures,
+    "GovernanceChart": GovernanceChart,
     "GuaranteedAccounts": GuaranteedAccounts,
-    "Settings": Settings,
+    "Settings": SettingsPage,
+    "SettingsIntegrations": SettingsIntegrations,
+    "SettingsSchedules": SettingsSchedules,
+    "SettingsParameters": SettingsParameters,
+    "SettingsUsers": SettingsUsers,
+    "SettingsLog": SettingsLog,
+    "SettingsAccount": SettingsAccount,
     "Simulator": Simulator,
     "UserManual": UserManual,
 }

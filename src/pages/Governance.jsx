@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,11 +26,25 @@ import ChartOfAccountsForm from "../components/governance/ChartOfAccountsForm";
 import ChartImportModal from "../components/governance/ChartImportModal";
 import GovernanceList from "../components/governance/GovernanceList";
 import { useAuth } from "@/lib/AuthContext";
+import { useLayoutMode } from "@/lib/LayoutContext";
+import { cn } from "@/lib/utils";
+import { createPageUrl } from "../utils";
+import {
+  DEFAULT_GOVERNANCE_PAGE,
+  GOVERNANCE_META_BY_SECTION,
+  GOVERNANCE_SECTION_COPY,
+} from "@/config/governanceNavigation";
 
-export default function Governance() {
+export function GovernanceView({ section = null }) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { layoutMode } = useLayoutMode();
+  const isSectionMode = section != null;
+  const isModernLayout = layoutMode === "modern" && isSectionMode;
+  const hideSectionH2 = isModernLayout;
   const { user } = useAuth();
   const canDeleteEntity = Boolean(user?.platform_admin || user?.tenant_role === "OWNER");
-  const [activeTab, setActiveTab] = useState("groups");
+  const [activeTab, setActiveTab] = useState(section || "groups");
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
@@ -48,6 +63,20 @@ export default function Governance() {
   const [natureStatusFilter, setNatureStatusFilter] = useState("todas");
 
   const queryClient = useQueryClient();
+
+  React.useEffect(() => {
+    if (section) setActiveTab(section);
+  }, [section]);
+
+  React.useEffect(() => {
+    const groupId = searchParams.get("group");
+    if (groupId && (section === "entities" || activeTab === "entities")) {
+      setSelectedGroup(groupId);
+    }
+  }, [searchParams, section, activeTab]);
+
+  const sectionMeta = section ? GOVERNANCE_META_BY_SECTION[section] : null;
+  const currentTab = section || activeTab;
 
   const { data: groups } = useQuery({
     queryKey: ["groups"],
@@ -423,21 +452,28 @@ export default function Governance() {
   }, [accountsWithRefs, accountSearch, accountEntityFilter, accountStatusFilter, selectedBankId]);
 
   return (
-    <div className="w-full px-4 sm:px-6 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Governança</h1>
-        <p className="text-sm text-slate-600 mt-0.5">Grupos, entidades, bancos, contas, naturezas e plano de contas</p>
+    <div className={cn(isModernLayout ? "w-full" : "w-full px-4 sm:px-6 py-8")}>
+      <div className={cn("mb-6", isModernLayout && "shrink-0")}>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          {sectionMeta?.name || "Governança"}
+        </h1>
+        <p className="text-sm text-slate-600 mt-0.5">
+          {section ? GOVERNANCE_SECTION_COPY[section] : "Grupos, entidades, bancos, contas, naturezas e plano de contas"}
+        </p>
       </div>
 
       <Tabs
-        value={activeTab}
+        value={currentTab}
         onValueChange={(value) => {
+          if (isSectionMode) return;
           setActiveTab(value);
           setShowForm(false);
           setEditingItem(null);
           setEditingKind(null);
         }}
+        className={cn(isModernLayout && "flex-1 min-h-0 flex flex-col")}
       >
+        {!isSectionMode ? (
         <TabsList className="bg-slate-100 flex-wrap h-auto">
           <TabsTrigger value="groups" className="text-xs">Grupos Econômicos</TabsTrigger>
           <TabsTrigger value="entities" className="text-xs">Entidades Componentes</TabsTrigger>
@@ -445,11 +481,14 @@ export default function Governance() {
           <TabsTrigger value="natures" className="text-xs">Naturezas</TabsTrigger>
           <TabsTrigger value="chart" className="text-xs">Plano de contas</TabsTrigger>
         </TabsList>
+        ) : null}
 
         {/* Groups */}
         <TabsContent value="groups" className="mt-4 space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-base font-semibold text-slate-800">Grupos Econômicos</h2>
+          <div className={cn("flex justify-between items-center", hideSectionH2 && "justify-end")}>
+            {!hideSectionH2 ? (
+              <h2 className="text-base font-semibold text-slate-800">Grupos Econômicos</h2>
+            ) : null}
             {!showForm && (
               <Button
                 onClick={() => { setEditingItem(null); setShowForm(true); }}
@@ -460,7 +499,7 @@ export default function Governance() {
               </Button>
             )}
           </div>
-          {showForm && activeTab === "groups" && (
+          {showForm && currentTab === "groups" && (
             <GroupForm
               onSubmit={handleGroupSubmit}
               onCancel={handleCancel}
@@ -473,6 +512,10 @@ export default function Governance() {
             onEdit={handleEdit}
             onSelect={(item) => {
               setSelectedGroup(item.id);
+              if (isSectionMode && section === "groups") {
+                navigate(`${createPageUrl("GovernanceEntities")}?group=${encodeURIComponent(item.id)}`);
+                return;
+              }
               setActiveTab("entities");
               setShowForm(false);
               setEditingItem(null);
@@ -483,8 +526,10 @@ export default function Governance() {
 
         {/* Entities */}
         <TabsContent value="entities" className="mt-4 space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-base font-semibold text-slate-800">Entidades Componentes</h2>
+          <div className={cn("flex justify-between items-center", hideSectionH2 && "justify-end")}>
+            {!hideSectionH2 ? (
+              <h2 className="text-base font-semibold text-slate-800">Entidades Componentes</h2>
+            ) : null}
             {!showForm && (
               <Button
                 onClick={() => { setEditingItem(null); setShowForm(true); }}
@@ -495,7 +540,7 @@ export default function Governance() {
               </Button>
             )}
           </div>
-          {showForm && activeTab === "entities" && (
+          {showForm && currentTab === "entities" && (
             <EntityForm
               groups={groups}
               groupId={selectedGroup}
@@ -533,8 +578,10 @@ export default function Governance() {
         {/* Banks */}
         <TabsContent value="banks" className="mt-4 space-y-8">
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-base font-semibold text-slate-800">Instituições Financeiras</h2>
+            <div className={cn("flex justify-between items-center", hideSectionH2 && "justify-end")}>
+              {!hideSectionH2 ? (
+                <h2 className="text-base font-semibold text-slate-800">Instituições Financeiras</h2>
+              ) : null}
               {!(showForm && editingKind === "bank") && (
                 <Button
                   onClick={() => { setEditingKind("bank"); setEditingItem(null); setShowForm(true); }}
@@ -545,7 +592,7 @@ export default function Governance() {
                 </Button>
               )}
             </div>
-            {showForm && activeTab === "banks" && editingKind === "bank" && (
+            {showForm && currentTab === "banks" && editingKind === "bank" && (
               <BankForm
                 onSubmit={handleBankSubmit}
                 onCancel={handleCancel}
@@ -613,7 +660,7 @@ export default function Governance() {
                 </div>
               )}
             </div>
-            {showForm && activeTab === "banks" && editingKind === "account" && (
+            {showForm && currentTab === "banks" && editingKind === "account" && (
               <BankAccountForm
                 key={editingItem?.id || `new-${selectedBankId || "all"}`}
                 banks={banks}
@@ -678,8 +725,10 @@ export default function Governance() {
         </TabsContent>
 
         <TabsContent value="natures" className="mt-4 space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-base font-semibold text-slate-800">Naturezas</h2>
+          <div className={cn("flex justify-between items-center", hideSectionH2 && "justify-end")}>
+            {!hideSectionH2 ? (
+              <h2 className="text-base font-semibold text-slate-800">Naturezas</h2>
+            ) : null}
             {!showForm && (
               <div className="flex gap-2">
                 <Button
@@ -700,7 +749,7 @@ export default function Governance() {
               </div>
             )}
           </div>
-          {showForm && activeTab === "natures" && (
+          {showForm && currentTab === "natures" && (
             <NatureForm
               entities={entities}
               onSubmit={handleNatureSubmit}
@@ -782,10 +831,14 @@ export default function Governance() {
         </TabsContent>
 
         <TabsContent value="chart" className="mt-4 space-y-4">
-          <div className="flex justify-between items-center">
+          <div className={cn("flex justify-between items-center", hideSectionH2 && "justify-end")}>
             <div>
-              <h2 className="text-base font-semibold text-slate-800">Plano de contas</h2>
-              <p className="text-xs text-slate-600 mt-0.5">Compartilhado no grupo 01, sem validação de filial. Contas bloqueadas no ERP não entram.</p>
+              {!hideSectionH2 ? (
+                <h2 className="text-base font-semibold text-slate-800">Plano de contas</h2>
+              ) : null}
+              <p className={cn("text-xs text-slate-600", !hideSectionH2 && "mt-0.5")}>
+                Compartilhado no grupo 01, sem validação de filial. Contas bloqueadas no ERP não entram.
+              </p>
             </div>
             {!showForm && (
               <div className="flex gap-2">
@@ -807,7 +860,7 @@ export default function Governance() {
               </div>
             )}
           </div>
-          {showForm && activeTab === "chart" && (
+          {showForm && currentTab === "chart" && (
             <ChartOfAccountsForm
               onSubmit={handleAccountSubmit}
               onCancel={handleCancel}
@@ -829,4 +882,12 @@ export default function Governance() {
       </Tabs>
     </div>
   );
+}
+
+export default function GovernancePage() {
+  const { layoutMode } = useLayoutMode();
+  if (layoutMode === "modern") {
+    return <Navigate to={`/${DEFAULT_GOVERNANCE_PAGE}`} replace />;
+  }
+  return <GovernanceView />;
 }

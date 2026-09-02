@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import AllDebtLogo from "@/components/shared/AllDebtLogo";
 
 export default function Login({ onSubmit, error, loading }) {
   const [email, setEmail] = useState("admin@fincalc.local");
@@ -16,9 +17,9 @@ export default function Login({ onSubmit, error, loading }) {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-slate-50 p-6">
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 bg-white border border-slate-200 rounded-xl p-6">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900">Endividamento</h1>
-          <p className="text-sm text-slate-500 mt-1">Entre com sua conta para acessar o sistema.</p>
+        <div className="flex flex-col items-center text-center">
+          <AllDebtLogo className="h-10 w-auto max-w-[220px] object-contain mb-4" />
+          <p className="text-sm text-slate-500">Entre com sua conta para acessar o sistema.</p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="email">E-mail</Label>

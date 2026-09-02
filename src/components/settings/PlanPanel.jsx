@@ -93,7 +93,7 @@ export default function PlanPanel() {
           </span>
         </div>
       </div>
-      {canChange ? (
+      {isMaster && canChange ? (
         <div className="flex flex-wrap gap-2">
           <Button type="button" size="sm" variant="outline" disabled={Boolean(saving)} onClick={() => apply("STARTER", "trial")}>
             {saving === "STARTER" ? "Salvando..." : "Starter em avaliação"}
@@ -106,10 +106,12 @@ export default function PlanPanel() {
           </Button>
         </div>
       ) : (
-        <p className="text-xs text-slate-500">Apenas o proprietário ou o master altera o plano.</p>
+        <p className="text-xs text-slate-500">
+          Para mudar de plano, solicite ao suporte. O cliente não altera entitlement por esta tela.
+        </p>
       )}
       {isMaster ? (
-        <p className="text-xs text-slate-400">Atalho local sem gateway. O histórico fica no log de acesso master.</p>
+        <p className="text-xs text-slate-400">Atalho de suporte. Sem gateway de pagamento. O histórico fica no log de acesso master.</p>
       ) : null}
     </div>
   );

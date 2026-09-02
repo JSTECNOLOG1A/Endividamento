@@ -1,5 +1,6 @@
 import { config } from "./config.js";
 import { logger } from "./logger.js";
+import { validateProductionSecrets } from "./config/validateSecrets.js";
 import { migrate } from "./db/migrate.js";
 import { seed } from "./db/seed.js";
 import { createApp } from "./app.js";
@@ -7,6 +8,7 @@ import { pool } from "./db/pool.js";
 import { startScheduler, stopScheduler } from "./modules/schedules/runner.js";
 
 async function main() {
+  validateProductionSecrets(process.env);
   await migrate();
   await seed();
   const app = createApp();

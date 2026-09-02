@@ -3,7 +3,8 @@ import { pool } from "../../db/pool.js";
 import { logger } from "../../logger.js";
 import { se2FilialFromSm0 } from "../integrations/protheusScope.js";
 import { groupIdOrThrow } from "../tenants/access.js";
-import { assertContractInTenant } from "../tenants/scope.js";
+import { assertContractInTenant, requireTenantContext } from "../tenants/scope.js";
+import { assertPlatformAdminWithTenant } from "../tenants/policy.js";
 import { writeAudit } from "../../middleware/audit.js";
 import {
   parseContractSchedule,
@@ -11,6 +12,8 @@ import {
   prefixAndType,
   supplierFromBank,
   titleNumberFromContract,
+  loadFinanceTitleParams,
+  normalizeFinanceTitleParams,
 } from "../payables/generate.js";
 
 function titleIsIntegrated(title) {
@@ -49,12 +52,14 @@ export function firstScheduleRowWithSdIni(contract) {
   return null;
 }
 
-export function buildReceivableTitles(contract, bank = null, entity = null) {
+export function buildReceivableTitles(contract, bank = null, entity = null, financeParams = null) {
   if (!contract?.id || !contract.entity_id) return [];
   const row = firstScheduleRowWithSdIni(contract);
   if (!row) return [];
 
+  const finance = normalizeFinanceTitleParams(financeParams);
   const { prefixo, tipo } = prefixAndType(contract);
+  const mainTipo = finance.mainTitleType || tipo;
   const tituloNumero = titleNumberFromContract(contract.contract_number);
   const contractNumber = String(contract.contract_number || tituloNumero).trim();
   const party = supplierFromBank(bank);
@@ -66,13 +71,13 @@ export function buildReceivableTitles(contract, bank = null, entity = null) {
     contract_id: contract.id,
     parcela: "001",
     titulo_numero: tituloNumero,
-    tipo,
+    tipo: mainTipo,
     prefixo,
     emissao: dateOnly(contract.operation_date),
     vencimento: dateOnly(row.dataVencimento) || dateOnly(contract.operation_date),
     valor,
     saldo: valor,
-    natureza: "",
+    natureza: finance.mainTitleNature,
     historico: `SD Ini BRL do contrato ${contractNumber}`,
     status: "aberto",
     origem: "contrato",
@@ -120,7 +125,8 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
     `SELECT codigo_empresa, codigo_filial FROM company_entities WHERE id = $1 AND group_id = $2`,
     [contract.entity_id, groupId]
   );
-  const titles = buildReceivableTitles(contract, bank, entityResult.rows[0] || null);
+  const financeParams = await loadFinanceTitleParams(groupId);
+  const titles = buildReceivableTitles(contract, bank, entityResult.rows[0] || null, financeParams);
   if (!titles.length) {
     logger.warn({ contractId: contract.id }, "contrato aprovado sem parcelas para contas a receber");
     return { created: 0, skipped: false };
@@ -196,11 +202,19 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
 // 'aprovado' — ver syncReceivableTitlesFromApprovedContracts). Título já
 // integrado ao ERP não é tocado aqui.
 export async function reverseNonIntegratedReceivableTitles(contractId) {
-  const result = await pool.query(`SELECT * FROM receivable_titles WHERE contract_id = $1`, [contractId]);
+  await assertContractInTenant(contractId);
+  const groupId = requireTenantContext();
+  const result = await pool.query(
+    `SELECT * FROM receivable_titles WHERE contract_id = $1 AND group_id = $2`,
+    [contractId, groupId]
+  );
   const integrated = result.rows.filter(titleIsIntegrated);
   const toReverse = result.rows.filter((t) => !titleIsIntegrated(t));
   if (toReverse.length) {
-    await pool.query(`DELETE FROM receivable_titles WHERE id = ANY($1::text[])`, [toReverse.map((t) => t.id)]);
+    await pool.query(
+      `DELETE FROM receivable_titles WHERE id = ANY($1::text[]) AND group_id = $2`,
+      [toReverse.map((t) => t.id), groupId]
+    );
   }
   return { reversed: toReverse, integrated };
 }
@@ -209,10 +223,15 @@ export async function reverseNonIntegratedReceivableTitles(contractId) {
 // desse fix existir (contrato saiu de 'aprovado' sem que reopenApprovedContractForEditing
 // tivesse a parte de contas a receber) — mesmo padrão de cleanupOrphanedPayableTitles.
 export async function cleanupOrphanedReceivableTitles(req = null) {
+  await assertPlatformAdminWithTenant();
+  const groupId = requireTenantContext();
   const result = await pool.query(
     `SELECT t.* FROM receivable_titles t
        JOIN loan_contracts c ON c.id = t.contract_id
-      WHERE c.status != 'aprovado'`
+      WHERE c.status != 'aprovado'
+        AND t.group_id = $1
+        AND c.group_id = $1`,
+    [groupId]
   );
 
   const integrated = result.rows.filter(titleIsIntegrated);
@@ -225,7 +244,10 @@ export async function cleanupOrphanedReceivableTitles(req = null) {
   }
 
   if (toDelete.length) {
-    await pool.query(`DELETE FROM receivable_titles WHERE id = ANY($1::text[])`, [toDelete.map((t) => t.id)]);
+    await pool.query(
+      `DELETE FROM receivable_titles WHERE id = ANY($1::text[]) AND group_id = $2`,
+      [toDelete.map((t) => t.id), groupId]
+    );
 
     if (req) {
       for (const [contractId, rows] of byContract) {

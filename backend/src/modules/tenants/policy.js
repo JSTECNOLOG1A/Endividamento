@@ -114,6 +114,27 @@ export async function assertTenantAdmin(message = "Apenas administradores podem 
   throw httpError(403, message, "ADMIN_REQUIRED");
 }
 
+/** Manutenção destrutiva: só master, e somente no tenant explicitamente selecionado. */
+export async function assertPlatformAdminWithTenant(
+  message = "Apenas o master pode executar esta manutenção, com um cliente selecionado."
+) {
+  if (!isPlatformAdmin()) {
+    throw httpError(403, message, "PLATFORM_FORBIDDEN");
+  }
+  groupIdOrThrow();
+}
+
+/** Parâmetros do tenant: OWNER, ADMIN (tenant_users), users.role=admin ou master. */
+export async function assertParameterAdmin(
+  message = "Apenas administradores podem alterar parâmetros do sistema."
+) {
+  await assertCanWrite();
+  if (isSystemActor() || isPlatformAdmin() || isOwner()) return;
+  if (userRole() === "admin") return;
+  if (tenantRole() === "ADMIN") return;
+  throw httpError(403, message, "ADMIN_REQUIRED");
+}
+
 function planCaps(tenant) {
   const fromPlan = PLAN_LIMITS[tenant.plan] || PLAN_LIMITS.STARTER;
   const contractLimit = Number(tenant.contract_limit);

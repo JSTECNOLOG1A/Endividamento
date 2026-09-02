@@ -27,7 +27,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-development}
       API_PORT: 3001
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
@@ -47,6 +47,7 @@ services:
       SMTP_FROM: "${SMTP_FROM:-Endividamento <noreply@localhost>}"
     ports:
       - "${API_PORT:-3001}:3001"
+    command: ["node", "--watch", "src/index.js"]
     volumes:
       - ./backend/src:/app/src
       - api_uploads:/app/uploads

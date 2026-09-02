@@ -2,22 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/notify";
 import { useProcessing } from "@/lib/ProcessingContext";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Dialog } from "@/components/ui/dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
   SelectItem,
-  SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Table,
@@ -29,6 +16,25 @@ import {
 } from "@/components/ui/table";
 import { base44 } from "@/api/base44Client";
 import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
+import AccountTypeBadge from "@/components/shared/AccountTypeBadge";
+import {
+  SubscreenBody,
+  SubscreenCancelButton,
+  SubscreenDescription,
+  SubscreenDialogContent,
+  SubscreenFilterPanel,
+  SubscreenFilterSelect,
+  SubscreenFooter,
+  SubscreenHeader,
+  SubscreenLoading,
+  SubscreenMeta,
+  SubscreenPrimaryButton,
+  SubscreenSearchInput,
+  SubscreenSearchRow,
+  SubscreenSelectionHint,
+  SubscreenTableShell,
+  SubscreenTitle,
+} from "@/layouts/modern/ModernSubscreen";
 
 const ALL = "__all__";
 
@@ -54,18 +60,6 @@ const CHART_IMPORT_SORT_COLUMNS = {
   natureza: { getValue: (item) => (item.account_nature === "credora" ? "Credora" : "Devedora") },
   situacao: { getValue: (item) => (item.already_exists ? "Já cadastrada" : "Nova") },
 };
-
-function FilterSelect({ label, value, onValueChange, children }) {
-  return (
-    <div className="space-y-1 min-w-0">
-      <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">{label}</Label>
-      <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-        <SelectContent>{children}</SelectContent>
-      </Select>
-    </div>
-  );
-}
 
 export default function ChartImportModal({ open, onOpenChange, onImported }) {
   const { withProcessing } = useProcessing();
@@ -184,71 +178,70 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!confirming && !loading) onOpenChange(next); }}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Importar plano de contas</DialogTitle>
-          <DialogDescription>
+      <SubscreenDialogContent>
+        <SubscreenHeader>
+          <SubscreenTitle>Importar plano de contas</SubscreenTitle>
+          <SubscreenDescription>
             {loading
               ? "Buscando o plano de contas no grupo..."
               : `Selecione as contas de ${preview?.connection_name || "ERP"}. O CT1 do grupo 01 é compartilhado: contas bloqueadas e validação de filial não entram.`}
-          </DialogDescription>
-        </DialogHeader>
+          </SubscreenDescription>
+        </SubscreenHeader>
 
         {loading ? (
-          <p className="text-sm text-slate-600 py-8 text-center">Consultando o ERP...</p>
+          <SubscreenLoading>Consultando o ERP...</SubscreenLoading>
         ) : (
-          <div className="space-y-3 min-h-0 flex-1 flex flex-col">
-            {(preview?.grupo_empresas || preview?.empresas?.length || preview?.tabela) ? (
-              <p className="text-xs text-slate-600">
-                {[
-                  preview.grupo_empresas ? `Grupo ${preview.grupo_empresas}` : null,
-                  preview.empresas?.length ? `Empresas ${preview.empresas.join(", ")}` : null,
-                  preview.tabela ? `Tabela ${preview.tabela}` : null,
-                  "Sem filtro de filial",
-                ].filter(Boolean).join(" · ")}
-              </p>
-            ) : null}
+          <SubscreenBody>
+            <SubscreenMeta>
+              {[
+                preview?.grupo_empresas ? `Grupo ${preview.grupo_empresas}` : null,
+                preview?.empresas?.length ? `Empresas ${preview.empresas.join(", ")}` : null,
+                preview?.tabela ? `Tabela ${preview.tabela}` : null,
+                "Sem filtro de filial",
+              ].filter(Boolean).join(" · ")}
+            </SubscreenMeta>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <FilterSelect label="Classe" value={classFilter} onValueChange={setClassFilter}>
+            <SubscreenFilterPanel>
+              <SubscreenFilterSelect label="Classe" value={classFilter} onValueChange={setClassFilter}>
                 <SelectItem value={ALL}>Todas</SelectItem>
                 {Object.entries(CLASS_LABELS).map(([value, label]) => (
                   <SelectItem key={value} value={value}>{label}</SelectItem>
                 ))}
-              </FilterSelect>
-              <FilterSelect label="Tipo" value={tipoFilter} onValueChange={setTipoFilter}>
+              </SubscreenFilterSelect>
+              <SubscreenFilterSelect label="Tipo" value={tipoFilter} onValueChange={setTipoFilter}>
                 <SelectItem value="todas">Todos</SelectItem>
                 <SelectItem value="analitica">Analítica</SelectItem>
                 <SelectItem value="sintetica">Sintética</SelectItem>
-              </FilterSelect>
-              <FilterSelect label="Natureza" value={naturezaFilter} onValueChange={setNaturezaFilter}>
+              </SubscreenFilterSelect>
+              <SubscreenFilterSelect label="Natureza" value={naturezaFilter} onValueChange={setNaturezaFilter}>
                 <SelectItem value="todas">Todas</SelectItem>
                 <SelectItem value="devedora">Devedora</SelectItem>
                 <SelectItem value="credora">Credora</SelectItem>
-              </FilterSelect>
-              <FilterSelect label="Situação" value={situacaoFilter} onValueChange={setSituacaoFilter}>
+              </SubscreenFilterSelect>
+              <SubscreenFilterSelect label="Situação" value={situacaoFilter} onValueChange={setSituacaoFilter}>
                 <SelectItem value="todas">Todas</SelectItem>
                 <SelectItem value="nova">Nova</SelectItem>
                 <SelectItem value="cadastrada">Já cadastrada</SelectItem>
-              </FilterSelect>
-            </div>
+              </SubscreenFilterSelect>
+            </SubscreenFilterPanel>
 
-            <div className="flex items-center gap-2">
-              <Input
+            <SubscreenSearchRow>
+              <SubscreenSearchInput
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Filtrar por código ou nome"
-                className="h-9"
               />
               <Button type="button" variant="outline" size="sm" onClick={toggleFiltered} disabled={!filtered.length}>
                 {allFilteredSelected ? "Nenhum" : "Todos"}
               </Button>
-            </div>
-            <p className="text-xs text-slate-600">
+            </SubscreenSearchRow>
+
+            <SubscreenSelectionHint>
               {selectedKeys.size} de {items.length} selecionadas
               {hasActiveFilters ? ` · ${filtered.length} visíveis` : ""}
-            </p>
-            <div className="border border-slate-200 rounded-lg overflow-auto max-h-[46vh]">
+            </SubscreenSelectionHint>
+
+            <SubscreenTableShell>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -293,7 +286,9 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
                           <TableCell className="whitespace-nowrap text-[11px]">{item.account_code}</TableCell>
                           <TableCell className="min-w-[220px]">{item.account_name}</TableCell>
                           <TableCell className="whitespace-nowrap">{CLASS_LABELS[item.account_class] || item.account_class}</TableCell>
-                          <TableCell className="whitespace-nowrap">{item.account_type === "sintetica" ? "Sintética" : "Analítica"}</TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <AccountTypeBadge value={item.account_type} />
+                          </TableCell>
                           <TableCell className="whitespace-nowrap">{item.account_nature === "credora" ? "Credora" : "Devedora"}</TableCell>
                           <TableCell className="text-slate-600 whitespace-nowrap">
                             {item.already_exists ? "Já cadastrada" : "Nova"}
@@ -304,19 +299,19 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
                   )}
                 </TableBody>
               </Table>
-            </div>
-          </div>
+            </SubscreenTableShell>
+          </SubscreenBody>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={confirming || loading}>
+        <SubscreenFooter>
+          <SubscreenCancelButton onClick={() => onOpenChange(false)} disabled={confirming || loading}>
             Cancelar
-          </Button>
-          <Button onClick={handleConfirm} disabled={loading || confirming || selectedKeys.size === 0}>
+          </SubscreenCancelButton>
+          <SubscreenPrimaryButton onClick={handleConfirm} disabled={loading || confirming || selectedKeys.size === 0}>
             {confirming ? "Importando..." : selectedKeys.size ? `Importar (${selectedKeys.size})` : "Importar"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+          </SubscreenPrimaryButton>
+        </SubscreenFooter>
+      </SubscreenDialogContent>
     </Dialog>
   );
 }

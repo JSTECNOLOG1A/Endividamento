@@ -4,6 +4,7 @@ import {
   loadUserById,
   runWithTenant,
 } from "../modules/tenants/access.js";
+import { writeAccessLog } from "../modules/platform/service.js";
 
 function requestedTenantId(req) {
   const header = req.headers["x-tenant-id"];
@@ -47,6 +48,7 @@ export async function attachTenant(req, res, next) {
       req.user.tenant_role = "PLATFORM";
       runWithTenant(
         {
+          userId: dbUser.id,
           platformAdmin: true,
           groupId: tenant?.group_id || null,
           tenantId: tenant?.id || null,
@@ -55,7 +57,17 @@ export async function attachTenant(req, res, next) {
           role: dbUser.role,
           tenantRole: "PLATFORM",
         },
-        () => next()
+        () => {
+          if (tenant && !["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+            writeAccessLog({
+              req,
+              action: "TENANT_WRITE",
+              tenant,
+              purpose: "suporte_operacional",
+            }).catch(() => {});
+          }
+          next();
+        }
       );
       return;
     }
@@ -81,6 +93,7 @@ export async function attachTenant(req, res, next) {
     req.user.tenant_role = tenant.tenant_role;
     runWithTenant(
       {
+        userId: dbUser.id,
         groupId: tenant.group_id,
         tenantId: tenant.id,
         email: dbUser.email,

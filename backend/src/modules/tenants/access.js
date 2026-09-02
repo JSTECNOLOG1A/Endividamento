@@ -37,6 +37,7 @@ export function tenantIdOrNull() {
 
 export function runWithTenant(scope, fn) {
   return tenantContext.run({
+    userId: scope.userId || null,
     groupId: scope.groupId || null,
     tenantId: scope.tenantId || null,
     email: scope.email || null,
@@ -68,10 +69,14 @@ export async function loadTenantById(id, client = pool) {
   return result.rows[0] || null;
 }
 
-/** Filtro SQL por tenant. Master sem cliente selecionado vê todos. */
-export function scopedGroupSql(column, startIndex = 1) {
+/**
+ * Filtro SQL por tenant.
+ * Master sem cliente selecionado NÃO vê dados de cliente (P0-14),
+ * salvo `allowUnscopedMaster` em rotas realmente globais da plataforma.
+ */
+export function scopedGroupSql(column, startIndex = 1, { allowUnscopedMaster = false } = {}) {
   const scope = getTenantScope();
-  if (scope?.platformAdmin && !scope.groupId) {
+  if (allowUnscopedMaster && scope?.platformAdmin && !scope.groupId) {
     return { sql: "TRUE", params: [] };
   }
   return { sql: `${column} = $${startIndex}`, params: [groupIdOrThrow()] };

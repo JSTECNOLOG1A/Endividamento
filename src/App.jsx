@@ -8,6 +8,8 @@ import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-d
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { PlatformProvider } from '@/lib/PlatformContext';
+import { GroupProvider } from '@/lib/GroupContext';
+import { LayoutProvider } from '@/lib/LayoutContext';
 import { ProcessingProvider } from '@/lib/ProcessingContext';
 import Login from '@/components/Login';
 import Signup from '@/components/Signup';
@@ -84,6 +86,8 @@ const AuthenticatedApp = () => {
 
   return (
     <PlatformProvider>
+    <GroupProvider>
+    <LayoutProvider>
     <Routes>
       <Route path="/" element={
         <LayoutWrapper currentPageName={mainPageKey}>
@@ -113,6 +117,8 @@ const AuthenticatedApp = () => {
       <Route path="/aceitar-convite" element={<Navigate to="/" replace />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+    </LayoutProvider>
+    </GroupProvider>
     </PlatformProvider>
   );
 };

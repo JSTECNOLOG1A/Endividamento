@@ -7,6 +7,7 @@ import { config } from "../../config.js";
 import { passwordSchema } from "../signup/service.js";
 import { resetPasswordEmail, sendMail } from "../signup/mailer.js";
 import { consumeAccountToken, issueAccountToken, loadAccountToken } from "./tokens.js";
+import { logger } from "../../logger.js";
 
 export const accountRouter = Router();
 
@@ -48,12 +49,15 @@ accountRouter.post("/forgot-password", limiter, async (req, res, next) => {
       const token = await issueAccountToken({ kind: "password_reset", userId: user.id, createdBy: user.email });
       resetUrl = publicUrl("/redefinir-senha", token.raw);
       const mail = resetPasswordEmail({ fullName: user.full_name, resetUrl });
-      emailSent = (await sendMail({ to: user.email, ...mail })).sent;
+      const sent = await sendMail({ to: user.email, ...mail });
+      emailSent = sent.sent;
+      if (!emailSent) {
+        logger.warn({ email: user.email, smtp: Boolean(config.smtpHost) }, "reset de senha sem entrega SMTP");
+      }
     }
     res.json({
       ok: true,
-      email_sent: emailSent,
-      reset_url: emailSent || !resetUrl ? undefined : resetUrl,
+      message: "Se a conta existir, as instruções serão enviadas.",
     });
   } catch (error) {
     next(error);

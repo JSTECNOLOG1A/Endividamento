@@ -1031,7 +1031,7 @@ export async function refreshPayableTitlesFromErp(payload = {}) {
       // mais aprovado já tem sua própria limpeza (reopenApprovedContractForEditing
       // / cleanupOrphanedPayableTitles) — aqui não mexe pra não duplicar.
       if (patch.erp_status === "estornado" && contractStatusById.get(title.contract_id) === "aprovado") {
-        await pool.query(`DELETE FROM payable_titles WHERE id = $1`, [title.id]);
+        await pool.query(`DELETE FROM payable_titles WHERE id = $1 AND group_id = $2`, [title.id, groupIdOrThrow()]);
         consulted += 1;
         results.push({
           id: title.id,

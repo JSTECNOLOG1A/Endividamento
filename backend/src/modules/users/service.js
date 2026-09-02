@@ -8,6 +8,14 @@ import { assertCanCreateUser, assertCanWrite, assertTenantAdmin } from "../tenan
 import { issueAccountToken } from "../account/tokens.js";
 import { inviteEmail, sendMail } from "../signup/mailer.js";
 
+export function publicInvitePayload(sent, inviteUrl) {
+  const payload = { email_sent: Boolean(sent), invite_pending: true };
+  if (!sent && config.env !== "production" && inviteUrl) {
+    payload.invite_url = inviteUrl;
+  }
+  return payload;
+}
+
 function httpError(status, message, detailsOrCode) {
   const err = new Error(message);
   err.status = status;
@@ -205,11 +213,7 @@ async function sendInvite({ userId, email, fullName, createdBy }) {
   const inviteUrl = `${config.appPublicUrl.replace(/\/$/, "")}/aceitar-convite?token=${token.raw}`;
   const mail = inviteEmail({ fullName, inviteUrl, invitedBy: createdBy });
   const sent = await sendMail({ to: email, ...mail });
-  return {
-    email_sent: sent.sent,
-    invite_url: sent.sent ? undefined : inviteUrl,
-    invite_pending: true,
-  };
+  return publicInvitePayload(sent.sent, inviteUrl);
 }
 
 export async function resendInvite(id, createdBy) {

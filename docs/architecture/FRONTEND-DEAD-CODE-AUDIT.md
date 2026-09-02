@@ -56,8 +56,8 @@
 | `src/components/UserNotRegisteredError.jsx` | **REMOVIDO — B2.1** | Zero importadores; texto legado Base44 em inglês | SAFE REMOVE | Baixo |
 | `src/lib/app-params.js` | **REMOVIDO — B2.1** | Zero importadores; helpers `base44_*` / `VITE_BASE44_*` | SAFE REMOVE | Baixo |
 | `src/pages/Configuracoes.jsx` | STUB / LEGADO | Rota `/Configuracoes` sem menu; texto admite “não conectado ao backend”; duplica `Settings` | SAFE REMOVE (+ rota) | Médio — bookmark manual possível |
-| `src/components/loan/strategies/*` (5 arquivos) | ÓRFÃO / DUPLICADO | Zero importadores; motor real em `@engine` / `backend/src/engine/strategies` | SAFE REMOVE | Baixo após confirmar zero import dinâmico |
-| `src/components/loan/indexers/*` (5 arquivos) | ÓRFÃO / DUPLICADO | Zero importadores; backend tem 10 indexers canônicos | SAFE REMOVE | Baixo |
+| `src/components/loan/strategies/*` (5 arquivos) | **REMOVIDO — B2.2** | Zero importadores; motor real em `@engine` / `backend/src/engine/strategies` | SAFE REMOVE | Baixo |
+| `src/components/loan/indexers/*` (5 arquivos) | **REMOVIDO — B2.2** | Zero importadores; backend tem 10 indexers canônicos | SAFE REMOVE | Baixo |
 | `src/components/loan/roundMoney.jsx` | DUPLICADO / LEGADO | Produção usa `@engine/roundMoney.js`; cópia usada só por testes/auditoria locais | REFACTOR LATER | Médio |
 | `src/components/loan/CalculationEngine.jsx` | ATIVO (ponte) | Re-export de `@engine`; usado por suítes de teste na UI | KEEP (ponte) / REFACTOR LATER | Baixo |
 | `src/lib/runCalculation.js` | ATIVO | `Simulator` → `@engine/CalculationEngine.js` | KEEP | — |
@@ -409,4 +409,77 @@ Nenhum. Build e testes passaram na primeira execução.
 ### Resultado
 
 **B2.1 CONCLUÍDA**
+
+---
+
+## Execução — B2.2
+
+**Data:** 2026-09-02  
+**Escopo:** remoção técnica do engine duplicado no frontend (`loan/strategies`, `loan/indexers`).
+
+### Engine ativo (comprovado)
+
+| Etapa | Arquivo | Detalhe |
+|-------|---------|---------|
+| UI | `src/pages/Simulator.jsx:19` | `import { calculateAmortizationSchedule } from "../lib/runCalculation"` |
+| Ponte cliente | `src/lib/runCalculation.js:1` | `import … from "@engine/CalculationEngine.js"` |
+| Alias Vite | `vite.config.js:13` | `'@engine': path.resolve(__dirname, './backend/src/engine')` |
+| Motor executado | `backend/src/engine/CalculationEngine.js` | Importa `./strategies/*.js` e `./indexers/IndexerFactory.js` |
+| Testes UI (ponte) | `src/components/loan/CalculationEngine.jsx:17` | Re-export de `@engine/CalculationEngine.js` |
+| API | `backend/src/modules/calculate/service.js` | Mesmo `CalculationEngine.js` |
+
+**Fluxo produção Simulator:** `Simulator.jsx` → `runCalculation.js` → `@engine/CalculationEngine.js` → `backend/src/engine/*`
+
+### Cópia removida
+
+Pastas **nunca importadas** por runtime, testes de páginas ou configs. Cópias frontend eram **subconjunto desatualizado** (ex.: `PRICEStrategy.jsx` com PMT fixo inicial; backend recalcula por evento; backend inclui `SACREStrategy` e indexers IPCA/INPC/IGPM/TJLP/TR ausentes no frontend).
+
+### Arquivos removidos (10)
+
+| Arquivo | Runtime | Equivalente ativo |
+|---------|---------|-------------------|
+| `strategies/SACStrategy.jsx` | NÃO | `backend/src/engine/strategies/SACStrategy.js` |
+| `strategies/PRICEStrategy.jsx` | NÃO | `backend/src/engine/strategies/PRICEStrategy.js` |
+| `strategies/AMERICANOStrategy.jsx` | NÃO | `backend/src/engine/strategies/AMERICANOStrategy.js` |
+| `strategies/BULLETStrategy.jsx` | NÃO | `backend/src/engine/strategies/BULLETStrategy.js` |
+| `strategies/PERCENTAGE_RESIDUAL_Strategy.jsx` | NÃO | `backend/src/engine/strategies/PERCENTAGE_RESIDUAL_Strategy.js` |
+| `indexers/IndexerFactory.jsx` | NÃO | `backend/src/engine/indexers/IndexerFactory.js` |
+| `indexers/IndexerStrategy.jsx` | NÃO | `backend/src/engine/indexers/IndexerStrategy.js` |
+| `indexers/CDIIndexer.jsx` | NÃO | `backend/src/engine/indexers/CDIIndexer.js` |
+| `indexers/SELICIndexer.jsx` | NÃO | `backend/src/engine/indexers/SELICIndexer.js` |
+| `indexers/DollarIndexer.jsx` | NÃO | `backend/src/engine/indexers/DollarIndexer.js` |
+
+### Referências residuais
+
+`rg` em `src/`: **0**. Nenhuma lógica financeira exclusiva nas cópias removidas.
+
+### Validações
+
+| Gate | Resultado |
+|------|-----------|
+| Build | **PASS** — 3560 módulos, 11.62s |
+| Engine | **PASS** |
+| Secrets | **PASS** |
+| Isolation | **PASS** |
+| P0 | **PASS** |
+| Simulator smoke | **PASS** |
+| **Alteração visual** | **NENHUMA** |
+
+### Impacto pós-B2.2
+
+| Métrica | Após B2.1 | Após B2.2 |
+|---------|-----------|-----------|
+| TOTAL FRONTEND FILES | 180 | **170** (−10) |
+| ÓRFÃOS engine frontend | 10 | **0** |
+| DUPLICADOS engine frontend | 10 | **0** |
+
+### Rollback
+
+```bash
+git checkout HEAD -- src/components/loan/strategies/ src/components/loan/indexers/
+```
+
+### Resultado
+
+**B2.2 CONCLUÍDA**
 

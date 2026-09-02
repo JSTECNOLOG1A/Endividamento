@@ -52,7 +52,7 @@ export default function Onboarding() {
         codigo_filial: form.codigo_filial.trim(),
       });
       await checkAppState();
-      navigate(goToSettings ? "/Settings" : "/", { replace: true });
+      navigate(goToSettings ? "/SettingsIntegrations" : "/", { replace: true });
     } catch (err) {
       setError(err.message || "Não foi possível salvar");
     } finally {

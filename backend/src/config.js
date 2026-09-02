@@ -1,17 +1,20 @@
 import path from "node:path";
 
+const IS_PROD = (process.env.NODE_ENV || "development") === "production";
+const DEV_JWT = "dev-only-change-me-min-32-characters!!";
+const DEV_ADMIN_PASSWORD = "Endividamento!Local1";
+
 export const config = {
   env: process.env.NODE_ENV || "development",
   port: Number(process.env.API_PORT || 3001),
   databaseUrl: process.env.DATABASE_URL,
-  jwtSecret: process.env.JWT_SECRET || "dev-only-change-me-min-32-characters!!",
+  jwtSecret: process.env.JWT_SECRET || (IS_PROD ? "" : DEV_JWT),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "8h",
   credentialsEncryptionKey:
     process.env.CREDENTIALS_ENCRYPTION_KEY ||
-    process.env.JWT_SECRET ||
-    "dev-only-change-me-min-32-characters!!",
+    (IS_PROD ? "" : (process.env.JWT_SECRET || DEV_JWT)),
   adminEmail: (process.env.ADMIN_EMAIL || "admin@endividamento.local").toLowerCase(),
-  adminPassword: process.env.ADMIN_PASSWORD || "Endividamento!Local1",
+  adminPassword: process.env.ADMIN_PASSWORD || (IS_PROD ? "" : DEV_ADMIN_PASSWORD),
   corsOrigins: (process.env.CORS_ORIGINS || "http://localhost:5173")
     .split(",")
     .map((item) => item.trim())

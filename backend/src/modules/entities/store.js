@@ -18,11 +18,25 @@ import {
   CREATE_BLOCKED,
   ENTITY_SCOPE,
   WRITE_BLOCKED,
+  assertContractInTenant,
   assertEntityInTenant,
   combineWhere,
   stampGroupId,
   tenantClause,
 } from "../tenants/scope.js";
+
+export const CONTRACT_WORKFLOW_FIELDS = [
+  "status",
+  "approved_by",
+  "approved_date",
+  "status_history",
+  "exported_to_payables",
+  "exported_to_receivables",
+  "reopen_requested_by",
+  "reopen_requested_at",
+  "current_snapshot_id",
+  "approved_snapshot_id",
+];
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -406,7 +420,15 @@ export async function create(name, data, createdBy) {
   const row = splitPayload(entity, data);
   const spec = ENTITY_SCOPE[name];
   stampGroupId(row, { shared: spec?.type === "shared" });
+  if (name === "LoanContract") {
+    for (const key of CONTRACT_WORKFLOW_FIELDS) delete row[key];
+    row.status = "rascunho";
+  }
   if (row.entity_id) await assertEntityInTenant(row.entity_id);
+  if (row.contract_id && (name === "AccountMovement" || name === "NotificationLog" || name === "CalculationSnapshot")) {
+    const contract = await assertContractInTenant(row.contract_id);
+    row.group_id = contract.group_id;
+  }
   if (name === "CompanyEntity") normalizeCompanyEntityRow(row);
   if (name === "Bank" && row.bank_code !== undefined) {
     row.bank_code = normalizeBankCode(row.bank_code);
@@ -521,7 +543,11 @@ export async function update(name, id, data) {
     throw httpError(409, "Fechamento aprovado — reabra o período (admin, com justificativa) antes de alterar.");
   }
   if (name === "LoanContract") {
-    data = await applyLoanContractRules(previous, { ...(data || {}) });
+    const incoming = { ...(data || {}) };
+    for (const key of CONTRACT_WORKFLOW_FIELDS) {
+      if (key !== "status") delete incoming[key];
+    }
+    data = await applyLoanContractRules(previous, incoming);
   }
   const row = splitPayload(entity, data);
   delete row.group_id;

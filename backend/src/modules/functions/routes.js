@@ -18,7 +18,7 @@ import { sendDocumentByEmail } from "../documents/sendByEmail.js";
 import { getPTAXFromBACEN, getPTAXRangeFromBACEN, getRatesFromBACEN, getIPCAFromBACEN, getTJLPFromBACEN, getTRFromBACEN, getINPCFromBACEN, getIGPMFromBACEN, clearCDIRatesByType, clearCurrencyRates } from "./bacen.js";
 import { getHolidaysFromBrasilAPI } from "./holidays.js";
 import { calculateGuaranteedAccountStatement, renewGuaranteedAccount } from "./guaranteedAccount.js";
-import { assertCanWrite, assertOwner } from "../tenants/policy.js";
+import { assertCanWrite, assertOwner, assertPlatformAdminWithTenant, assertTenantAdmin } from "../tenants/policy.js";
 
 async function validateAllApprovedContracts(payload = {}) {
   const { group_ids = null, entity_ids = null, limit = 1000 } = payload;
@@ -163,6 +163,14 @@ const OWNER_FUNCTIONS = new Set([
   "reverseReceivableTitles",
 ]);
 
+const PLATFORM_TENANT_FUNCTIONS = new Set([
+  "cleanupOrphanedPayableTitles",
+]);
+
+const ADMIN_FUNCTIONS = new Set([
+  "deleteGuaranteedAccount",
+]);
+
 functionsRouter.post("/:name", async (req, res, next) => {
   try {
     const handler = handlers[req.params.name];
@@ -171,7 +179,11 @@ functionsRouter.post("/:name", async (req, res, next) => {
       err.status = 404;
       throw err;
     }
-    if (OWNER_FUNCTIONS.has(req.params.name)) {
+    if (PLATFORM_TENANT_FUNCTIONS.has(req.params.name)) {
+      await assertPlatformAdminWithTenant();
+    } else if (ADMIN_FUNCTIONS.has(req.params.name)) {
+      await assertTenantAdmin("Apenas administradores podem excluir uma conta garantida.");
+    } else if (OWNER_FUNCTIONS.has(req.params.name)) {
       await assertOwner("Apenas o proprietário pode integrar ou estornar no ERP.");
     } else {
       await assertCanWrite();
