@@ -45,16 +45,16 @@
 
 | Arquivo | Status | Evidência | Ação proposta | Risco |
 |---------|--------|-----------|---------------|-------|
-| `src/components/saas/SaaSGuard.jsx` | ÓRFÃO | Zero importadores em `src/` | SAFE REMOVE | Baixo |
-| `src/components/saas/BillingHooks.jsx` | ÓRFÃO | Importado só por `SaaSGuard.jsx` | SAFE REMOVE | Baixo |
-| `src/components/saas/PlanService.jsx` | ÓRFÃO | Importado só por `saas/` | SAFE REMOVE | Baixo |
-| `src/components/saas/TenantService.jsx` | ÓRFÃO | Importado só por `saas/` | SAFE REMOVE | Baixo |
-| `src/components/saas/UserRoleService.jsx` | ÓRFÃO | Importado só por `saas/` | SAFE REMOVE | Baixo |
-| `src/components/accounting/_to_delete/*` (5 arquivos) | ÓRFÃO / LEGADO | Pasta nomeada `_to_delete`; zero importadores externos | SAFE REMOVE | Baixo |
+| `src/components/saas/SaaSGuard.jsx` | **REMOVIDO — B2.1** | Zero importadores em `src/` | SAFE REMOVE | Baixo |
+| `src/components/saas/BillingHooks.jsx` | **REMOVIDO — B2.1** | Importado só por `SaaSGuard.jsx` | SAFE REMOVE | Baixo |
+| `src/components/saas/PlanService.jsx` | **REMOVIDO — B2.1** | Importado só por `saas/` | SAFE REMOVE | Baixo |
+| `src/components/saas/TenantService.jsx` | **REMOVIDO — B2.1** | Importado só por `saas/` | SAFE REMOVE | Baixo |
+| `src/components/saas/UserRoleService.jsx` | **REMOVIDO — B2.1** | Importado só por `saas/` | SAFE REMOVE | Baixo |
+| `src/components/accounting/_to_delete/*` (5 arquivos) | **REMOVIDO — B2.1** | Pasta nomeada `_to_delete`; zero importadores externos | SAFE REMOVE | Baixo |
 | `src/components/accounting/ApprovedContractManager.jsx` | ÓRFÃO | 596 linhas; zero importadores; fluxo ativo usa `FechamentoContabil` | SAFE REMOVE | Médio — validar se há plano de reintroduzir aprovação |
-| `src/components/analytics/*` (6 arquivos) | ÓRFÃO | Zero importadores fora da pasta; testes internos apenas | SAFE REMOVE | Baixo |
-| `src/components/UserNotRegisteredError.jsx` | ÓRFÃO | Zero importadores; texto legado Base44 em inglês | SAFE REMOVE | Baixo |
-| `src/lib/app-params.js` | ÓRFÃO / LEGADO | Zero importadores; helpers `base44_*` / `VITE_BASE44_*` | SAFE REMOVE | Baixo |
+| `src/components/analytics/*` (6 arquivos) | **REMOVIDO — B2.1** | Zero importadores fora da pasta; testes internos apenas | SAFE REMOVE | Baixo |
+| `src/components/UserNotRegisteredError.jsx` | **REMOVIDO — B2.1** | Zero importadores; texto legado Base44 em inglês | SAFE REMOVE | Baixo |
+| `src/lib/app-params.js` | **REMOVIDO — B2.1** | Zero importadores; helpers `base44_*` / `VITE_BASE44_*` | SAFE REMOVE | Baixo |
 | `src/pages/Configuracoes.jsx` | STUB / LEGADO | Rota `/Configuracoes` sem menu; texto admite “não conectado ao backend”; duplica `Settings` | SAFE REMOVE (+ rota) | Médio — bookmark manual possível |
 | `src/components/loan/strategies/*` (5 arquivos) | ÓRFÃO / DUPLICADO | Zero importadores; motor real em `@engine` / `backend/src/engine/strategies` | SAFE REMOVE | Baixo após confirmar zero import dinâmico |
 | `src/components/loan/indexers/*` (5 arquivos) | ÓRFÃO / DUPLICADO | Zero importadores; backend tem 10 indexers canônicos | SAFE REMOVE | Baixo |
@@ -67,7 +67,7 @@
 | `src/components/loan/ScenarioTests.jsx` | TEST / DEV ONLY | Aba “🧪 Cenários” no Simulator | SAFE HIDE FROM PRODUCTION | Baixo |
 | `src/components/loan/SnapshotValidationTest.jsx` | TEST / DEV ONLY | Aba “🔐 Snapshot” no Simulator | SAFE HIDE FROM PRODUCTION | Baixo |
 | `src/components/loan/IntegrityValidator.jsx` | TEST / DEV ONLY | Aba “🔐 Integridade” no Simulator | SAFE HIDE FROM PRODUCTION | Baixo |
-| `src/components/loan/EngineTestSuiteEtapa3.jsx` | TEST ONLY | Sem rota/UI; comentário CLI `node -e import(...)` | SAFE REMOVE | Baixo |
+| `src/components/loan/EngineTestSuiteEtapa3.jsx` | **REMOVIDO — B2.1** | Sem rota/UI; comentário CLI `node -e import(...)` | SAFE REMOVE | Baixo |
 | `src/components/loan/FinalHardeningTests.jsx` | TEST ONLY | Sem importadores de páginas | SAFE REMOVE | Baixo |
 | `src/components/loan/SnapshotRegressionTest.jsx` | TEST ONLY | Sem UI | SAFE REMOVE | Baixo |
 | `src/components/loan/SnapshotRegressionTestEtapa4A.jsx` | TEST ONLY | Sem UI | SAFE REMOVE | Baixo |
@@ -286,6 +286,127 @@ Cadeia contábil **ativa:** `Accounting.jsx` → `AccountingReading` → `Fecham
 
 ## Status Etapa B1
 
-**AUDITORIA CONCLUÍDA — aguardando aprovação para Etapa B2 (execução).**
+**AUDITORIA CONCLUÍDA** — execução B2 iniciada.
 
-Nenhum arquivo foi alterado nesta fase.
+---
+
+## Execução B2.1
+
+**Data:** 2026-09-02
+
+### Arquivos removidos
+
+**Quantidade:** 19
+
+| # | Arquivo | Categoria original | Última referência conhecida | Status atual |
+|---|---------|-------------------|----------------------------|--------------|
+| 1 | `src/components/saas/SaaSGuard.jsx` | ÓRFÃO (SaaS stub) | Importado só por `saas/` | **REMOVIDO — B2.1** |
+| 2 | `src/components/saas/BillingHooks.jsx` | ÓRFÃO (SaaS stub) | Importado só por `SaaSGuard.jsx` | **REMOVIDO — B2.1** |
+| 3 | `src/components/saas/PlanService.jsx` | ÓRFÃO (SaaS stub) | Importado só por `saas/` | **REMOVIDO — B2.1** |
+| 4 | `src/components/saas/TenantService.jsx` | ÓRFÃO (SaaS stub) | Importado só por `saas/` | **REMOVIDO — B2.1** |
+| 5 | `src/components/saas/UserRoleService.jsx` | ÓRFÃO (SaaS stub) | Importado só por `SaaSGuard.jsx` | **REMOVIDO — B2.1** |
+| 6 | `src/components/accounting/_to_delete/AccountingAnalysis.jsx` | ÓRFÃO / LEGADO | Zero importadores externos | **REMOVIDO — B2.1** |
+| 7 | `src/components/accounting/_to_delete/DebtAnalyticsDashboard.jsx` | ÓRFÃO / LEGADO | Só `_to_delete/` | **REMOVIDO — B2.1** |
+| 8 | `src/components/accounting/_to_delete/DebtMapByMonth.jsx` | ÓRFÃO / LEGADO | Só `_to_delete/` | **REMOVIDO — B2.1** |
+| 9 | `src/components/accounting/_to_delete/DebtMapHierarchical.jsx` | ÓRFÃO / LEGADO | Só `_to_delete/` | **REMOVIDO — B2.1** |
+| 10 | `src/components/accounting/_to_delete/debtMapUtils.jsx` | ÓRFÃO / LEGADO | Só `_to_delete/` | **REMOVIDO — B2.1** |
+| 11 | `src/components/analytics/DebtAnalyticsService.jsx` | ÓRFÃO | Só `analytics/` | **REMOVIDO — B2.1** |
+| 12 | `src/components/analytics/DebtAnalytics4CTests.jsx` | ÓRFÃO / TEST | Só `analytics/` | **REMOVIDO — B2.1** |
+| 13 | `src/components/analytics/DebtPositionFact.jsx` | ÓRFÃO | Só `analytics/` | **REMOVIDO — B2.1** |
+| 14 | `src/components/analytics/FinancialAlertHooks.jsx` | ÓRFÃO | Só `analytics/` | **REMOVIDO — B2.1** |
+| 15 | `src/components/analytics/GovernanceStatusService.jsx` | ÓRFÃO | Só `analytics/` | **REMOVIDO — B2.1** |
+| 16 | `src/components/analytics/SnapshotHealthMonitor.jsx` | ÓRFÃO | Só `analytics/` | **REMOVIDO — B2.1** |
+| 17 | `src/components/UserNotRegisteredError.jsx` | ÓRFÃO / LEGADO Base44 | Zero importadores | **REMOVIDO — B2.1** |
+| 18 | `src/lib/app-params.js` | ÓRFÃO / LEGADO Base44 | Zero importadores | **REMOVIDO — B2.1** |
+| 19 | `src/components/loan/EngineTestSuiteEtapa3.jsx` | TEST ONLY (CLI) | Comentário auto-referência | **REMOVIDO — B2.1** |
+
+**Filesystem:** 19/19 confirmados ausentes (`GONE` em verificação pós-remoção).
+
+### Validação final B2.1
+
+| Gate | Resultado | Detalhe |
+|------|-----------|---------|
+| **Build** | **PASS** | 3560 módulos, 8.91s; warning pré-existente chunk >500 kB |
+| **Engine** | **PASS** | `engine smoke OK`, exit 0 |
+| **Secrets** | **PASS** | `validateSecrets ok`, exit 0 |
+| **Isolation** | **PASS** | `isolamento ok`, exit 0 |
+| **P0** | **PASS** | `p0 tenant-isolation + auth + billing + reset ok`, exit 0 |
+| **Smoke frontend** | **PASS** | 16 rotas/assets HTTP 200 (menu completo + FechamentoContabil + PlanPanel) |
+| **Referências residuais** | **0** runtime | `rg` em `src/` sem matches; apenas histórico em `docs/` |
+| **Erros de import/build** | **0** | Sem `Failed to resolve`, `Module not found`, `ChunkLoadError` |
+
+**Problemas:** nenhum.
+
+### Rollback
+
+```bash
+git checkout HEAD -- \
+  src/components/saas/ \
+  src/components/accounting/_to_delete/ \
+  src/components/analytics/ \
+  src/components/UserNotRegisteredError.jsx \
+  src/lib/app-params.js \
+  src/components/loan/EngineTestSuiteEtapa3.jsx
+```
+
+(Arquivos recuperáveis via histórico Git se já commitados; caso contrário `git restore` do working tree.)
+
+### Impacto — antes vs depois B2.1
+
+| Métrica | Antes B2.1 (B1) | Depois B2.1 |
+|---------|-----------------|-------------|
+| **TOTAL FRONTEND FILES** | 199 | **180** (−19; excl. untracked logo) |
+| **ATIVOS** | 138 | **138** (inalterado — removidos eram mortos) |
+| **ÓRFÃOS COMPROVADOS** | 29 | **10** (−19: restam `strategies/`×5 + `indexers/`×5) |
+| **STUBS** | 7 | **7** (inalterado) |
+| **DEBUG/TEST EXPOSTO** | 5 | **5** (Simulator inalterado) |
+| **DUPLICADOS** | 11 | **11** (engine frontend ainda presente) |
+| **NÃO COMPROVADOS** | 29 | **29** (inalterado) |
+
+### Resultado validação final
+
+**B2.1 CONCLUÍDA**
+
+---
+
+## Execução — Etapa B2.1 (remoção)
+
+**Data:** 2026-09-02  
+**Escopo:** remoção de órfãos comprovados de baixo risco (primeira leva).
+
+### Revalidação pré-remoção
+
+Para cada candidato: `rg` em `src/`, configs, testes e rotas — **zero** imports externos, dynamic imports, `React.lazy`, rotas ou feature flags. Referências restantes apenas dentro das próprias pastas ou em documentação.
+
+### Arquivos removidos (19)
+
+| Grupo | Arquivos |
+|-------|----------|
+| `src/components/saas/` | `SaaSGuard.jsx`, `BillingHooks.jsx`, `PlanService.jsx`, `TenantService.jsx`, `UserRoleService.jsx` |
+| `src/components/accounting/_to_delete/` | `AccountingAnalysis.jsx`, `DebtAnalyticsDashboard.jsx`, `DebtMapByMonth.jsx`, `DebtMapHierarchical.jsx`, `debtMapUtils.jsx` |
+| `src/components/analytics/` | `DebtAnalyticsService.jsx`, `DebtAnalytics4CTests.jsx`, `DebtPositionFact.jsx`, `FinancialAlertHooks.jsx`, `GovernanceStatusService.jsx`, `SnapshotHealthMonitor.jsx` |
+| Raiz / lib / loan | `UserNotRegisteredError.jsx`, `src/lib/app-params.js`, `EngineTestSuiteEtapa3.jsx` |
+
+**Não removidos (conforme escopo):** `ApprovedContractManager`, `Configuracoes`, `loan/strategies/*`, `loan/indexers/*`, abas de teste do Simulator.
+
+### Validações
+
+| Gate | Resultado |
+|------|-----------|
+| Frontend build (`docker run endividamento-git-web npm run build`) | **PASS** — built in 9.18s |
+| `test:engine` | **PASS** |
+| `test:secrets` | **PASS** |
+| `test:isolation` | **PASS** |
+| `test:p0` | **PASS** |
+| Smoke frontend (`/`, `/Simulator`, `/Contracts`, `/Accounting`, `/Settings`, assets Vite) | **PASS** — HTTP 200 |
+| API health / login | **PASS** — health 200, login 400 (validação) |
+| Referências runtime pós-remoção | **0** em `src/` |
+
+### Problemas encontrados
+
+Nenhum. Build e testes passaram na primeira execução.
+
+### Resultado
+
+**B2.1 CONCLUÍDA**
+
