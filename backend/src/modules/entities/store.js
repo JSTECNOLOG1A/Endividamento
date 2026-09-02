@@ -4,6 +4,25 @@ import { logger } from "../../logger.js";
 import { allowedColumns, getEntity, SYSTEM_FIELDS } from "./catalog.js";
 import { entityMatchesNature, normalizeEmpresaCode } from "../natures/entityMatch.js";
 import { normalizeBankCode } from "../bankAccounts/bankMatch.js";
+import { groupIdOrNull, groupIdOrThrow, isPlatformAdmin } from "../tenants/access.js";
+import {
+  assertCanCreateContract,
+  assertCanWrite,
+  assertOwner,
+  bumpContractsUsed,
+  actorEmail,
+  assertCanApproveContract,
+  resolveContractReopen,
+} from "../tenants/policy.js";
+import {
+  CREATE_BLOCKED,
+  ENTITY_SCOPE,
+  WRITE_BLOCKED,
+  assertEntityInTenant,
+  combineWhere,
+  stampGroupId,
+  tenantClause,
+} from "../tenants/scope.js";
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -118,12 +137,18 @@ function splitPayload(entity, data = {}) {
 function rowToObject(entity, row) {
   if (!row) return null;
   const obj = {};
+  let extra = null;
   for (const [key, value] of Object.entries(row)) {
     if (key === "extra_json") {
-      if (value && typeof value === "object") Object.assign(obj, value);
+      extra = value && typeof value === "object" ? value : null;
       continue;
     }
     obj[key] = fromDbValue(entity, key, value);
+  }
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) {
+      if (obj[key] === undefined || obj[key] === null || obj[key] === "") obj[key] = value;
+    }
   }
   return obj;
 }
@@ -167,9 +192,10 @@ export async function list(name, sort, limit = 100) {
   const entity = getEntity(name);
   const { column, dir } = parseSort(entity, sort);
   const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 20000);
+  const scope = tenantClause(name);
   const result = await pool.query(
-    `SELECT * FROM ${entity.table} ORDER BY ${column} ${dir} LIMIT $1`,
-    [safeLimit]
+    `SELECT * FROM ${entity.table} WHERE ${scope.sql} ORDER BY ${column} ${dir} LIMIT $${scope.params.length + 1}`,
+    [...scope.params, safeLimit]
   );
   return result.rows.map((row) => rowToObject(entity, row));
 }
@@ -177,18 +203,34 @@ export async function list(name, sort, limit = 100) {
 export async function filter(name, query, sort, limit = 100) {
   const entity = getEntity(name);
   const { column, dir } = parseSort(entity, sort);
-  const { sql, params } = buildFilter(entity, query);
+  const safeQuery = { ...(query || {}) };
+  const scopedGroup = groupIdOrNull();
+  if (safeQuery.group_id) {
+    if (scopedGroup && safeQuery.group_id !== scopedGroup) {
+      return [];
+    }
+    if (scopedGroup || !isPlatformAdmin()) {
+      delete safeQuery.group_id;
+    }
+  }
+  const { sql, params } = buildFilter(entity, safeQuery);
+  const scope = tenantClause(name, { startIndex: params.length + 1 });
+  const where = combineWhere(sql, scope.sql);
   const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 20000);
   const result = await pool.query(
-    `SELECT * FROM ${entity.table} ${sql} ORDER BY ${column} ${dir} LIMIT $${params.length + 1}`,
-    [...params, safeLimit]
+    `SELECT * FROM ${entity.table} ${where} ORDER BY ${column} ${dir} LIMIT $${params.length + scope.params.length + 1}`,
+    [...params, ...scope.params, safeLimit]
   );
   return result.rows.map((row) => rowToObject(entity, row));
 }
 
 export async function getById(name, id) {
   const entity = getEntity(name);
-  const result = await pool.query(`SELECT * FROM ${entity.table} WHERE id = $1`, [id]);
+  const scope = tenantClause(name, { startIndex: 2 });
+  const result = await pool.query(
+    `SELECT * FROM ${entity.table} WHERE id = $1 AND ${scope.sql}`,
+    [id, ...scope.params]
+  );
   if (!result.rows[0]) throw httpError(404, `${name} não encontrado`);
   return rowToObject(entity, result.rows[0]);
 }
@@ -293,8 +335,8 @@ async function syncNaturesForEntity(entityId, codigoEmpresa, codigoFilial) {
   if (!entityId) return;
 
   await pool.query(
-    `UPDATE natures SET entity_id = NULL, updated_date = now() WHERE entity_id = $1`,
-    [entityId]
+    `UPDATE natures SET entity_id = NULL, updated_date = now() WHERE entity_id = $1 AND group_id = $2`,
+    [entityId, groupIdOrThrow()]
   );
 
   if (!empresa) return;
@@ -303,6 +345,7 @@ async function syncNaturesForEntity(entityId, codigoEmpresa, codigoFilial) {
     `UPDATE natures
      SET entity_id = $1, empresa = $2, filial = '', updated_date = now()
      WHERE entity_id IS NULL
+       AND group_id = $3
        AND (
          lpad(regexp_replace(COALESCE(empresa, ''), '[^0-9]', '', 'g'), 2, '0') = $2
          OR (
@@ -311,7 +354,7 @@ async function syncNaturesForEntity(entityId, codigoEmpresa, codigoFilial) {
            AND lpad(regexp_replace(filial, '[^0-9]', '', 'g'), 2, '0') = $2
          )
        )`,
-    [entityId, empresa]
+    [entityId, empresa, groupIdOrThrow()]
   );
 }
 
@@ -320,8 +363,8 @@ async function syncBankAccountsForEntity(entityId, codigoEmpresa) {
   if (!entityId) return;
 
   await pool.query(
-    `UPDATE bank_accounts SET entity_id = NULL, updated_date = now() WHERE entity_id = $1`,
-    [entityId]
+    `UPDATE bank_accounts SET entity_id = NULL, updated_date = now() WHERE entity_id = $1 AND group_id = $2`,
+    [entityId, groupIdOrThrow()]
   );
 
   if (!empresa) return;
@@ -330,6 +373,7 @@ async function syncBankAccountsForEntity(entityId, codigoEmpresa) {
     `UPDATE bank_accounts
      SET entity_id = $1, empresa = $2, filial = '', updated_date = now()
      WHERE entity_id IS NULL
+       AND group_id = $3
        AND (
          lpad(regexp_replace(COALESCE(empresa, ''), '[^0-9]', '', 'g'), 2, '0') = $2
          OR (
@@ -338,7 +382,7 @@ async function syncBankAccountsForEntity(entityId, codigoEmpresa) {
            AND lpad(regexp_replace(filial, '[^0-9]', '', 'g'), 2, '0') = $2
          )
        )`,
-    [entityId, empresa]
+    [entityId, empresa, groupIdOrThrow()]
   );
 }
 
@@ -347,25 +391,38 @@ async function syncBankAccountsForBank(bankId, bankCode) {
   const code = normalizeBankCode(bankCode);
   if (!code) return;
   await pool.query(
-    `UPDATE bank_accounts SET bank_code = $1, updated_date = now() WHERE bank_id = $2`,
-    [code, bankId]
+    `UPDATE bank_accounts SET bank_code = $1, updated_date = now() WHERE bank_id = $2 AND group_id = $3`,
+    [code, bankId, groupIdOrThrow()]
   );
 }
 
 export async function create(name, data, createdBy) {
+  if (CREATE_BLOCKED.has(name)) {
+    throw httpError(403, "Este cadastro não pode ser criado por esta via");
+  }
+  if (name === "LoanContract") await assertCanCreateContract();
+  else await assertCanWrite();
   const entity = getEntity(name);
   const row = splitPayload(entity, data);
-  if (name === "CompanyEntity" && !String(row.group_id || "").trim()) {
-    throw httpError(400, "Selecione o grupo econômico");
-  }
+  const spec = ENTITY_SCOPE[name];
+  stampGroupId(row, { shared: spec?.type === "shared" });
+  if (row.entity_id) await assertEntityInTenant(row.entity_id);
   if (name === "CompanyEntity") normalizeCompanyEntityRow(row);
   if (name === "Bank" && row.bank_code !== undefined) {
     row.bank_code = normalizeBankCode(row.bank_code);
   }
   if (name === "Nature") await stampNatureFromEntity(row);
   if (name === "BankAccount") await stampBankAccountFromEntity(row);
+  if (name === "LoanContract" && row.entity_id) {
+    const company = await assertEntityInTenant(row.entity_id);
+    row.group_id = company.group_id;
+  }
+  if (name === "CalculationSnapshot" && row.contract_id) {
+    const contract = await getById("LoanContract", row.contract_id);
+    row.group_id = contract.group_id;
+  }
   row.id = randomUUID();
-  row.created_by = data?.created_by || createdBy;
+  row.created_by = name === "LoanContract" ? (actorEmail() || createdBy) : (data?.created_by || createdBy);
   const keys = Object.keys(row);
   const values = keys.map((key) => row[key]);
   const slots = keys.map((_, idx) => `$${idx + 1}`);
@@ -381,6 +438,7 @@ export async function create(name, data, createdBy) {
     await syncNaturesForEntity(row.id, row.codigo_empresa, row.codigo_filial);
     await syncBankAccountsForEntity(row.id, row.codigo_empresa);
   }
+  if (name === "LoanContract") await bumpContractsUsed(1);
   return getById(name, row.id);
 }
 
@@ -402,28 +460,99 @@ export async function bulkCreate(name, items = [], createdBy) {
   }
 }
 
+function parseStatusHistory(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw !== "string") return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function applyLoanContractRules(previous, data) {
+  const nextStatus = data.status;
+  if (nextStatus && nextStatus !== previous.status) {
+    if (nextStatus === "aprovado") {
+      assertCanApproveContract(previous);
+      data.approved_by = actorEmail();
+      data.approved_date = new Date().toISOString().slice(0, 10);
+    }
+    if (previous.status === "aprovado" && nextStatus !== "aprovado") {
+      const decision = await resolveContractReopen(previous);
+      if (decision.action === "request") {
+        delete data.status;
+        delete data.exported_to_payables;
+        delete data.exported_to_receivables;
+        data.reopen_requested_by = decision.requestedBy;
+        data.reopen_requested_at = new Date().toISOString();
+        const history = parseStatusHistory(previous.status_history);
+        history.push({
+          from: previous.status,
+          to: previous.status,
+          event: "reopen_requested",
+          by: decision.requestedBy,
+          at: data.reopen_requested_at,
+        });
+        data.status_history = JSON.stringify(history);
+        return data;
+      }
+      data.reopen_requested_by = null;
+      data.reopen_requested_at = null;
+    }
+  }
+  return data;
+}
+
 export async function update(name, id, data) {
+  if (WRITE_BLOCKED.has(name)) {
+    throw httpError(403, "Este cadastro não pode ser alterado por esta via");
+  }
+  await assertCanWrite();
   const entity = getEntity(name);
   if (entity.immutable) throw httpError(409, `${name} é imutável`);
   const previous = await getById(name, id);
+  if (ENTITY_SCOPE[name]?.type === "shared" && !previous.group_id) {
+    throw httpError(403, "O catálogo compartilhado não pode ser alterado");
+  }
   if (name === "AccountingClosing" && previous.status === "aprovado" && data?.status !== "reaberto") {
     throw httpError(409, "Fechamento aprovado — reabra o período (admin, com justificativa) antes de alterar.");
   }
+  if (name === "LoanContract") {
+    data = await applyLoanContractRules(previous, { ...(data || {}) });
+  }
   const row = splitPayload(entity, data);
+  delete row.group_id;
+  delete row.id;
+  if (row.entity_id) await assertEntityInTenant(row.entity_id);
   if (name === "CompanyEntity") normalizeCompanyEntityRow(row);
   if (name === "Bank" && row.bank_code !== undefined) {
     row.bank_code = normalizeBankCode(row.bank_code);
   }
   if (name === "Nature") await stampNatureFromEntity(row);
   if (name === "BankAccount") await stampBankAccountFromEntity(row);
+  if (
+    name === "LoanContract"
+    && previous.status === "aprovado"
+    && data?.status
+    && data.status !== "aprovado"
+  ) {
+    const { reverseTitlesForContractReopen } = await import("../contracts/reverseOnReopen.js");
+    await reverseTitlesForContractReopen(id);
+    row.exported_to_payables = false;
+    row.exported_to_receivables = false;
+  }
   row.updated_date = new Date().toISOString();
   const keys = Object.keys(row);
   if (keys.length === 1 && keys[0] === "updated_date") return getById(name, id);
   const assignments = keys.map((key, idx) => `${key} = $${idx + 1}`).join(", ");
+  const scope = tenantClause(name, { startIndex: keys.length + 2 });
   try {
     await pool.query(
-      `UPDATE ${entity.table} SET ${assignments} WHERE id = $${keys.length + 1}`,
-      [...keys.map((key) => row[key]), id]
+      `UPDATE ${entity.table} SET ${assignments} WHERE id = $${keys.length + 1} AND ${scope.sql}`,
+      [...keys.map((key) => row[key]), id, ...scope.params]
     );
   } catch (error) {
     throw mapDbError(error);
@@ -454,13 +583,26 @@ export async function update(name, id, data) {
       logger.error({ err: error, contractId: saved.id }, "falha ao gerar contas a receber do contrato aprovado");
     }
   }
+  if (name === "LoanContract" && previous.status !== "cancelado" && saved.status === "cancelado") {
+    await bumpContractsUsed(-1);
+  }
   return saved;
 }
 
 export async function remove(name, id) {
+  if (WRITE_BLOCKED.has(name) || CREATE_BLOCKED.has(name)) {
+    throw httpError(403, "Este cadastro não pode ser excluído por esta via");
+  }
+  if (name === "CompanyEntity" || name === "Group") await assertOwner("Apenas o proprietário pode excluir empresa ou filial.");
+  else await assertCanWrite();
   const entity = getEntity(name);
   if (entity.immutable) throw httpError(409, `${name} é imutável`);
   const existing = await getById(name, id);
-  await pool.query(`DELETE FROM ${entity.table} WHERE id = $1`, [id]);
+  if (ENTITY_SCOPE[name]?.type === "shared" && !existing.group_id) {
+    throw httpError(403, "O catálogo compartilhado não pode ser excluído");
+  }
+  const scope = tenantClause(name, { startIndex: 2 });
+  await pool.query(`DELETE FROM ${entity.table} WHERE id = $1 AND ${scope.sql}`, [id, ...scope.params]);
+  if (name === "LoanContract" && existing.status !== "cancelado") await bumpContractsUsed(-1);
   return existing;
 }

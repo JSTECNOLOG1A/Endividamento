@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { base44, getToken } from '@/api/base44Client';
+import { base44, getToken, setToken } from '@/api/base44Client';
+import { setPlatformTenantId } from '@/api/platformScope';
 
 const AuthContext = createContext();
 
@@ -59,9 +60,21 @@ export const AuthProvider = ({ children }) => {
     return currentUser;
   };
 
+  const acceptSession = async (token, sessionUser) => {
+    setToken(token);
+    if (sessionUser) {
+      setUser(sessionUser);
+      setIsAuthenticated(true);
+      setAuthError(null);
+      return sessionUser;
+    }
+    return checkAppState();
+  };
+
   const logout = () => {
     setUser(null);
     setIsAuthenticated(false);
+    setPlatformTenantId("");
     base44.auth.logout();
   };
 
@@ -78,6 +91,7 @@ export const AuthProvider = ({ children }) => {
       authError,
       appPublicSettings,
       login,
+      acceptSession,
       logout,
       navigateToLogin,
       checkAppState

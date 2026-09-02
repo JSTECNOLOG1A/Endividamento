@@ -4,9 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/AuthContext";
+import { usePlatform } from "@/lib/PlatformContext";
 import IntegrationsPanel from "@/components/settings/IntegrationsPanel";
 import SchedulesPanel from "@/components/settings/SchedulesPanel";
 import AuditLogPanel from "@/components/settings/AuditLogPanel";
+import UsersPanel from "@/components/settings/UsersPanel";
+import PlanPanel from "@/components/settings/PlanPanel";
 
 const ROLE_LABELS = {
   admin: "Administrador",
@@ -17,19 +20,23 @@ const ROLE_LABELS = {
 
 export default function Settings() {
   const { user, logout } = useAuth();
+  const { viewingAll } = usePlatform();
+  const isTenantAdmin = user?.role === "admin" || user?.tenant_role === "OWNER" || user?.platform_admin;
+  const isOwner = Boolean(user?.platform_admin || user?.tenant_role === "OWNER");
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Configurações</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Conta, sessão, integrações, agendamentos e log de atividades</p>
+        <p className="text-sm text-slate-500 mt-0.5">Conta, usuários, sessão, integrações, agendamentos e log de atividades</p>
       </div>
 
       <Tabs defaultValue="integracoes">
         <TabsList className="bg-slate-100 h-auto flex-wrap">
           <TabsTrigger value="integracoes">Integrações</TabsTrigger>
           <TabsTrigger value="agendamento">Agendamento</TabsTrigger>
-          {user?.role === "admin" ? <TabsTrigger value="log">Log</TabsTrigger> : null}
+          {isTenantAdmin ? <TabsTrigger value="usuarios">Usuários</TabsTrigger> : null}
+          {isTenantAdmin ? <TabsTrigger value="log">Log</TabsTrigger> : null}
           <TabsTrigger value="conta">Conta</TabsTrigger>
         </TabsList>
 
@@ -42,7 +49,7 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <IntegrationsPanel />
+              <IntegrationsPanel canManage={isOwner} viewingAll={viewingAll} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -61,7 +68,23 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
-        {user?.role === "admin" ? (
+        {isTenantAdmin ? (
+          <TabsContent value="usuarios" className="mt-4">
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base text-slate-900">Usuários</CardTitle>
+                <CardDescription>
+                  Convide por e-mail. A pessoa define a própria senha no link (válido por 7 dias).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <UsersPanel />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        ) : null}
+
+        {isTenantAdmin ? (
           <TabsContent value="log" className="mt-4">
             <Card className="border-slate-200 shadow-sm">
               <CardHeader>
@@ -81,6 +104,18 @@ export default function Settings() {
           <div className="max-w-3xl space-y-4">
             <Card className="border-slate-200 shadow-sm">
               <CardHeader>
+                <CardTitle className="text-base text-slate-900">Plano</CardTitle>
+                <CardDescription>
+                  Alteração local sem gateway. O proprietário ou o master pode ativar Pro ou Enterprise.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PlanPanel />
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader>
                 <CardTitle className="text-base text-slate-900">Conta</CardTitle>
                 <CardDescription>Dados do usuário autenticado nesta sessão</CardDescription>
               </CardHeader>
@@ -96,8 +131,12 @@ export default function Settings() {
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Perfil</span>
                   <span className="font-medium text-slate-900">
-                    {ROLE_LABELS[user?.role] || user?.role || "—"}
+                    {user?.tenant_role === "OWNER" ? "Proprietário" : (ROLE_LABELS[user?.role] || user?.role || "—")}
                   </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-slate-500">Plano da sessão</span>
+                  <span className="font-medium text-slate-900">{user?.plan || "—"} · {user?.billing_status || "—"}</span>
                 </div>
               </CardContent>
             </Card>

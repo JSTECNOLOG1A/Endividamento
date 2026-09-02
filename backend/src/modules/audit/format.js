@@ -31,6 +31,8 @@ const ROTINA_BY_RESOURCE = {
   Integration: "Integrações",
   ScheduledJob: "Agendamento",
   User: "Autenticação",
+  Tenant: "Cadastro",
+  TenantSignup: "Cadastro",
   Function: "Processamento",
 };
 
@@ -42,6 +44,8 @@ const ACTION_LABELS = {
   STATUS: "Alteração de status",
   LOGIN: "Login",
   LOGOUT: "Logout",
+  CONTEXT_SWITCH: "Acesso a cliente",
+  CONTEXT_ALL: "Visão de todos os clientes",
   RUN: "Execução",
   CALCULATE: "Cálculo",
   INTEGRATE: "Integração",

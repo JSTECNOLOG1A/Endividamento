@@ -5,6 +5,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Send, CheckCircle, XCircle, Copy, Edit, Paperclip } from "lucide-react";
+import { useProcessing } from "@/lib/ProcessingContext";
+import { toast } from "@/lib/notify";
+
+function sameEmail(a, b) {
+  return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+}
+
+function isTenantAdmin(user) {
+  return Boolean(user?.platform_admin || user?.role === "admin" || user?.tenant_role === "OWNER");
+}
+
+function isOwner(user) {
+  return Boolean(user?.platform_admin || user?.tenant_role === "OWNER");
+}
+
+function canWrite(user) {
+  return user?.role !== "viewer" && user?.tenant_role !== "VIEWER";
+}
 
 function parseStatusHistory(raw) {
   if (!raw) return [];
@@ -26,12 +44,21 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
   const [error, setError] = useState("");
   const [pdfUrl, setPdfUrl] = useState(contract.contract_pdf_url || "");
   const [uploadingPdf, setUploadingPdf] = useState(false);
+  const { withProcessing } = useProcessing();
 
-  const canSendApproval = contract.status === "rascunho";
-  const canApprove = contract.status === "pendente_aprovacao" && user?.role === "admin";
-  const canReject = contract.status === "pendente_aprovacao" && user?.role === "admin";
-  const canReopen = contract.status === "aprovado" && user?.role === "admin";
-  const canCancel = ["rascunho", "pendente_aprovacao"].includes(contract.status);
+  const canSendApproval = contract.status === "rascunho" && canWrite(user);
+  const canApprove = contract.status === "pendente_aprovacao"
+    && isTenantAdmin(user)
+    && !sameEmail(contract.created_by, user?.email);
+  const canReject = contract.status === "pendente_aprovacao" && isTenantAdmin(user);
+  const reopenPending = Boolean(contract.reopen_requested_by);
+  const canReopen = contract.status === "aprovado"
+    && canWrite(user)
+    && (
+      isOwner(user)
+      || (isTenantAdmin(user) && (!reopenPending || !sameEmail(contract.reopen_requested_by, user?.email)))
+    );
+  const canCancel = ["rascunho", "pendente_aprovacao"].includes(contract.status) && canWrite(user);
 
   const addToHistory = (newStatus, historyComments = "") => {
     const history = parseStatusHistory(contract.status_history);
@@ -107,14 +134,33 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
         case "reopen":
           updateData = {
             status: "rascunho",
+            exported_to_payables: false,
+            exported_to_receivables: false,
             status_history: addToHistory("rascunho", comments),
           };
           break;
       }
 
-      await base44.entities.LoanContract.update(contract.id, updateData);
+      const persist = () => base44.entities.LoanContract.update(contract.id, updateData);
+      const saved = action === "reopen"
+        ? await withProcessing(
+            isOwner(user) || reopenPending
+              ? "Estornando e excluindo títulos a pagar e a receber…"
+              : "Registrando pedido de reabertura…",
+            persist
+          )
+        : await persist();
 
-      // Se é reopen, redirecionar para o Simulator com os dados
+      if (action === "reopen" && saved?.status === "aprovado") {
+        toast.info("Pedido de reabertura registrado", {
+          description: "Outro administrador precisa confirmar para estornar os títulos.",
+        });
+        setDialogOpen(false);
+        setComments("");
+        if (onStatusChange) onStatusChange();
+        return;
+      }
+
       if (action === "reopen") {
         const contractData = encodeURIComponent(JSON.stringify({
           group_id: contract.group_id,
@@ -151,7 +197,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
         if (onStatusChange) onStatusChange();
       }
     } catch (err) {
-      setError("Erro ao atualizar status: " + (err.message || "tente novamente"));
+      setError(err.data?.error || err.message || "Não foi possível atualizar o status");
     } finally {
       setLoading(false);
     }
@@ -208,7 +254,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             className="gap-1.5 text-xs"
           >
             <Edit className="w-3.5 h-3.5" />
-            Reabrir para Edição
+            {reopenPending && !isOwner(user) ? "Confirmar reabertura" : "Reabrir para Edição"}
           </Button>
         )}
          {canCancel && (
@@ -221,6 +267,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
              Cancelar Contrato
            </Button>
          )}
+        {canWrite(user) ? (
         <Button
           size="sm"
           variant="outline"
@@ -230,6 +277,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
           <Copy className="w-3.5 h-3.5" />
           Duplicar
         </Button>
+        ) : null}
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -279,7 +327,12 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             )}
             {action === "reopen" && (
               <p className="text-sm text-slate-600">
-                O contrato voltará ao status de rascunho e poderá ser editado novamente.
+                {reopenPending && !isOwner(user)
+                  ? "Outro administrador já pediu a reabertura. Confirmar estorna os títulos no ERP (se integrados) e volta o contrato a rascunho."
+                  : isOwner(user)
+                    ? "O contrato voltará a rascunho. Os títulos gerados em contas a pagar e a receber serão estornados no ERP (se integrados) e excluídos daqui."
+                    : "O pedido será registrado. Outro administrador precisa confirmar para estornar os títulos e reabrir o contrato."}
+                {" "}Títulos baixados ou com movimentação impedem a reabertura.
               </p>
             )}
             {(action === "approve" || action === "reject" || action === "cancel") && (

@@ -24,6 +24,18 @@ export const openApiDocument = {
     "/auth/login": {
       post: { summary: "Login JWT", security: [], responses: { 200: { description: "token + user" } } },
     },
+    "/public/cnpj/{cnpj}": {
+      get: { summary: "Consulta CNPJ na Receita Federal", security: [], parameters: [{ name: "cnpj", in: "path", required: true, schema: { type: "string" } }] },
+    },
+    "/public/signup": {
+      post: { summary: "Iniciar cadastro de tenant e enviar e-mail de conclusão", security: [] },
+    },
+    "/public/signup/{token}": {
+      get: { summary: "Validar token de conclusão de cadastro", security: [] },
+    },
+    "/public/signup/{token}/password": {
+      post: { summary: "Criar senha, materializar tenant e autenticar", security: [] },
+    },
     "/auth/me": {
       get: { summary: "Usuário autenticado", responses: { 200: { description: "user" } } },
     },
@@ -56,6 +68,19 @@ export const openApiDocument = {
     },
     "/schedules/run-task": {
       post: { summary: "Executar tarefa agora (manual)" },
+    },
+    "/users": {
+      get: { summary: "Listar usuários (admin)" },
+      post: { summary: "Criar usuário (admin)" },
+    },
+    "/users/{id}": {
+      put: { summary: "Atualizar usuário (admin)" },
+    },
+    "/platform/tenants": {
+      get: { summary: "Listar todos os clientes (usuário master)" },
+    },
+    "/platform/context": {
+      post: { summary: "Selecionar cliente no acesso master (registrado para LGPD)" },
     },
   },
 };

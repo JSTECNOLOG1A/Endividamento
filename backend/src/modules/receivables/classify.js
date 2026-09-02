@@ -1,5 +1,7 @@
 import { pool } from "../../db/pool.js";
 import { resolveNatureForEntity } from "../payables/natureCode.js";
+import { groupIdOrThrow } from "../tenants/access.js";
+import { assertEntityInTenant, selectByIds } from "../tenants/scope.js";
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -41,7 +43,7 @@ export async function classifyReceivableTitles(payload = {}) {
   }
 
   const selected = ids.length
-    ? (await pool.query(`SELECT * FROM receivable_titles WHERE id = ANY($1::text[])`, [ids])).rows
+    ? await selectByIds("receivable_titles", ids)
     : [];
   if (ids.length && selected.length !== ids.length) {
     throw httpError(400, "Um ou mais títulos selecionados não existem");
@@ -57,9 +59,7 @@ export async function classifyReceivableTitles(payload = {}) {
     throw httpError(400, "Os títulos selecionados não são deste tipo");
   }
 
-  const entityResult = await pool.query(`SELECT * FROM company_entities WHERE id = $1`, [entityId]);
-  const entity = entityResult.rows[0];
-  if (!entity) throw httpError(400, "A entidade informada não existe");
+  const entity = await assertEntityInTenant(entityId);
 
   const nature = await resolveNatureForEntity(natureza, entity);
   if (!nature) {
@@ -84,7 +84,8 @@ export async function classifyReceivableTitles(payload = {}) {
     sets.push(`cliente_nome = $${params.length}`);
   }
 
-  let where = `entity_id = $2 AND upper(tipo) = $3 AND integrado_erp IS NOT TRUE AND COALESCE(erp_status, 'pendente') NOT IN ('integrado', 'baixado') AND status = 'aberto'`;
+  let where = `entity_id = $2 AND group_id = $${params.length + 1} AND upper(tipo) = $3 AND integrado_erp IS NOT TRUE AND COALESCE(erp_status, 'pendente') NOT IN ('integrado', 'baixado') AND status = 'aberto'`;
+  params.push(groupIdOrThrow());
   if (!applyByType) {
     params.push(ids);
     where += ` AND id = ANY($${params.length}::text[])`;

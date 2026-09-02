@@ -1,6 +1,7 @@
 import { pool } from "../../db/pool.js";
 import { logger } from "../../logger.js";
 import { integratePayableTitles, refreshPayableTitlesFromErp, reversePayableTitles } from "./erpIntegrate.js";
+import { groupIdOrThrow } from "../tenants/access.js";
 
 function todayIsoDate(now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -42,7 +43,7 @@ function cannotConvert(title) {
 }
 
 async function loadTitle(id) {
-  const result = await pool.query(`SELECT * FROM payable_titles WHERE id = $1`, [id]);
+  const result = await pool.query(`SELECT * FROM payable_titles WHERE id = $1 AND group_id = $2`, [id, groupIdOrThrow()]);
   return result.rows[0] || null;
 }
 
@@ -52,8 +53,8 @@ async function markAsTx(id) {
      SET tipo = 'TX',
          converted_pr_tx_em = COALESCE(converted_pr_tx_em, now()),
          updated_date = now()
-     WHERE id = $1`,
-    [id]
+     WHERE id = $1 AND group_id = $2`,
+    [id, groupIdOrThrow()]
   );
 }
 
@@ -64,8 +65,9 @@ async function listPrDueThisMonth(end) {
        AND vencimento IS NOT NULL
        AND vencimento <= $1::date
        AND status = 'aberto'
+       AND group_id = $2
      ORDER BY vencimento ASC, parcela ASC`,
-    [end]
+    [end, groupIdOrThrow()]
   );
   return result.rows;
 }
@@ -77,7 +79,9 @@ async function listPendingTxConversions() {
        AND upper(btrim(tipo)) = 'TX'
        AND status = 'aberto'
        AND erp_status NOT IN ('integrado', 'baixado')
-     ORDER BY vencimento ASC, parcela ASC`
+       AND group_id = $1
+     ORDER BY vencimento ASC, parcela ASC`,
+    [groupIdOrThrow()]
   );
   return result.rows;
 }

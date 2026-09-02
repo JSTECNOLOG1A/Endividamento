@@ -24,8 +24,11 @@ import NatureImportModal from "../components/governance/NatureImportModal";
 import ChartOfAccountsForm from "../components/governance/ChartOfAccountsForm";
 import ChartImportModal from "../components/governance/ChartImportModal";
 import GovernanceList from "../components/governance/GovernanceList";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function Governance() {
+  const { user } = useAuth();
+  const canDeleteEntity = Boolean(user?.platform_admin || user?.tenant_role === "OWNER");
   const [activeTab, setActiveTab] = useState("groups");
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -523,7 +526,7 @@ export default function Governance() {
             items={selectedGroup ? entitiesByGroup : entities}
             type="entity"
             onEdit={handleEdit}
-            onDelete={(id) => deleteEntityMutation.mutate(id)}
+            onDelete={canDeleteEntity ? (id) => deleteEntityMutation.mutate(id) : undefined}
           />
         </TabsContent>
 

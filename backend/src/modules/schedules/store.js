@@ -1,6 +1,7 @@
 import { pool } from "../../db/pool.js";
 import { taskMeta } from "./tasks.js";
 import { formatHoraExecucao } from "./nextRun.js";
+import { getTenantScope, groupIdOrThrow, scopedGroupSql } from "../tenants/access.js";
 
 function httpError(status, message, details) {
   const err = new Error(message);
@@ -35,8 +36,10 @@ export function toPublic(row) {
 }
 
 export async function list() {
+  const scope = scopedGroupSql("group_id");
   const result = await pool.query(
-    `SELECT * FROM scheduled_jobs ORDER BY created_date DESC`
+    `SELECT * FROM scheduled_jobs WHERE ${scope.sql} ORDER BY created_date DESC`,
+    scope.params
   );
   return result.rows.map(toPublic);
 }
@@ -47,12 +50,23 @@ export async function listRaw() {
 }
 
 export async function findById(id) {
+  const groupId = getTenantScope()?.groupId;
+  if (groupId) {
+    const result = await pool.query(
+      `SELECT * FROM scheduled_jobs WHERE id = $1 AND group_id = $2`,
+      [id, groupId]
+    );
+    return result.rows[0] || null;
+  }
   const result = await pool.query(`SELECT * FROM scheduled_jobs WHERE id = $1`, [id]);
   return result.rows[0] || null;
 }
 
 export async function findByTarefa(tarefa) {
-  const result = await pool.query(`SELECT * FROM scheduled_jobs WHERE tarefa = $1`, [tarefa]);
+  const result = await pool.query(
+    `SELECT * FROM scheduled_jobs WHERE tarefa = $1 AND group_id = $2`,
+    [tarefa, groupIdOrThrow()]
+  );
   return result.rows[0] || null;
 }
 
@@ -61,8 +75,8 @@ export async function create(row) {
     const result = await pool.query(
       `INSERT INTO scheduled_jobs (
          id, nome, tarefa, intervalo_minutos, modo, dia_mes, hora_execucao,
-         ativo, proxima_execucao_em, created_by
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ativo, proxima_execucao_em, created_by, group_id
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         row.id,
@@ -75,6 +89,7 @@ export async function create(row) {
         row.ativo,
         row.proximaExecucaoEm,
         row.createdBy,
+        groupIdOrThrow(),
       ]
     );
     return result.rows[0];
@@ -100,6 +115,20 @@ export async function update(id, patch) {
     proximaExecucaoEm: patch.proximaExecucaoEm === undefined ? current.proxima_execucao_em : patch.proximaExecucaoEm,
   };
   try {
+    const groupId = getTenantScope()?.groupId;
+    const params = [
+      id,
+      next.nome,
+      next.tarefa,
+      next.intervaloMinutos,
+      next.modo,
+      next.diaMes,
+      next.horaExecucao,
+      next.ativo,
+      next.proximaExecucaoEm,
+    ];
+    const tenantSql = groupId ? "AND group_id = $10" : "";
+    if (groupId) params.push(groupId);
     const result = await pool.query(
       `UPDATE scheduled_jobs SET
          nome = $2,
@@ -111,19 +140,9 @@ export async function update(id, patch) {
          ativo = $8,
          proxima_execucao_em = $9,
          updated_date = now()
-       WHERE id = $1
+       WHERE id = $1 ${tenantSql}
        RETURNING *`,
-      [
-        id,
-        next.nome,
-        next.tarefa,
-        next.intervaloMinutos,
-        next.modo,
-        next.diaMes,
-        next.horaExecucao,
-        next.ativo,
-        next.proximaExecucaoEm,
-      ]
+      params
     );
     return result.rows[0];
   } catch (error) {
@@ -136,8 +155,8 @@ export async function update(id, patch) {
 
 export async function remove(id) {
   const result = await pool.query(
-    `DELETE FROM scheduled_jobs WHERE id = $1 RETURNING *`,
-    [id]
+    `DELETE FROM scheduled_jobs WHERE id = $1 AND group_id = $2 RETURNING *`,
+    [id, groupIdOrThrow()]
   );
   if (!result.rows[0]) throw httpError(404, "Agendamento não encontrado");
   return result.rows[0];
@@ -188,8 +207,8 @@ export async function finishRun(id, { ok, message, nextAt }) {
 
 export async function insertRun(row) {
   await pool.query(
-    `INSERT INTO scheduled_job_runs (job_id, tarefa, origem, ok, mensagem, detalhes, started_at, finished_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    `INSERT INTO scheduled_job_runs (job_id, tarefa, origem, ok, mensagem, detalhes, started_at, finished_at, group_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       row.jobId || null,
       row.tarefa,
@@ -199,18 +218,22 @@ export async function insertRun(row) {
       row.detalhes ? JSON.stringify(row.detalhes) : null,
       row.startedAt,
       row.finishedAt,
+      getTenantScope()?.groupId || row.groupId || null,
     ]
   );
 }
 
 export async function listRuns(jobId, limit = 10) {
-  const result = await pool.query(
-    `SELECT * FROM scheduled_job_runs
-     WHERE job_id = $1
-     ORDER BY started_at DESC
-     LIMIT $2`,
-    [jobId, limit]
-  );
+  const groupId = getTenantScope()?.groupId;
+  const result = groupId
+    ? await pool.query(
+      `SELECT * FROM scheduled_job_runs WHERE job_id = $1 AND group_id = $2 ORDER BY started_at DESC LIMIT $3`,
+      [jobId, groupId, limit]
+    )
+    : await pool.query(
+      `SELECT * FROM scheduled_job_runs WHERE job_id = $1 ORDER BY started_at DESC LIMIT $2`,
+      [jobId, limit]
+    );
   return result.rows.map((row) => ({
     id: row.id,
     origem: row.origem,

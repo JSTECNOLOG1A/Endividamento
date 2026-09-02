@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool.js";
 import { actionLabel, diffRecords, sideSummary } from "./format.js";
+import { scopedGroupSql } from "../tenants/access.js";
 
 function parseJson(value) {
   if (value == null) return null;
@@ -51,8 +52,9 @@ export function toPublic(row) {
 }
 
 export async function list(filters = {}) {
-  const where = [];
-  const params = [];
+  const scope = scopedGroupSql("group_id");
+  const where = [scope.sql];
+  const params = [...scope.params];
   const add = (sql, value) => {
     params.push(value);
     where.push(sql.replace("?", `$${params.length}`));
@@ -96,19 +98,26 @@ export async function list(filters = {}) {
 }
 
 export async function getById(id) {
-  const result = await pool.query(`SELECT * FROM audit_events WHERE id = $1`, [id]);
+  const scope = scopedGroupSql("group_id", 2);
+  const result = await pool.query(
+    `SELECT * FROM audit_events WHERE id = $1 AND ${scope.sql}`,
+    [id, ...scope.params]
+  );
   return result.rows[0] ? toPublic(result.rows[0]) : null;
 }
 
 export async function meta() {
+  const scope = scopedGroupSql("group_id");
   const [actors, actions, rotinas, types] = await Promise.all([
     pool.query(
-      `SELECT DISTINCT actor_email FROM audit_events WHERE actor_email IS NOT NULL ORDER BY 1 LIMIT 200`
+      `SELECT DISTINCT actor_email FROM audit_events WHERE actor_email IS NOT NULL AND ${scope.sql} ORDER BY 1 LIMIT 200`,
+      scope.params
     ),
-    pool.query(`SELECT DISTINCT action FROM audit_events ORDER BY 1`),
-    pool.query(`SELECT DISTINCT rotina FROM audit_events WHERE rotina IS NOT NULL ORDER BY 1`),
+    pool.query(`SELECT DISTINCT action FROM audit_events WHERE ${scope.sql} ORDER BY 1`, scope.params),
+    pool.query(`SELECT DISTINCT rotina FROM audit_events WHERE rotina IS NOT NULL AND ${scope.sql} ORDER BY 1`, scope.params),
     pool.query(
-      `SELECT DISTINCT processing_type FROM audit_events WHERE processing_type IS NOT NULL ORDER BY 1`
+      `SELECT DISTINCT processing_type FROM audit_events WHERE processing_type IS NOT NULL AND ${scope.sql} ORDER BY 1`,
+      scope.params
     ),
   ]);
   return {

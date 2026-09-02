@@ -1,6 +1,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { writeAudit } from "../../middleware/audit.js";
+import { requireOwner } from "../../middleware/rbac.js";
 import * as service from "./service.js";
 
 export const integrationsRouter = Router();
@@ -40,7 +41,7 @@ integrationsRouter.get("/", async (req, res, next) => {
   }
 });
 
-integrationsRouter.post("/test-connection", testLimiter, async (req, res, next) => {
+integrationsRouter.post("/test-connection", testLimiter, requireOwner(), async (req, res, next) => {
   try {
     const body = parseOrThrow(service.testConnectionSchema, req.body);
     res.json({ data: await service.testConnection(body) });
@@ -57,7 +58,7 @@ integrationsRouter.get("/:code", async (req, res, next) => {
   }
 });
 
-integrationsRouter.post("/", async (req, res, next) => {
+integrationsRouter.post("/", requireOwner(), async (req, res, next) => {
   try {
     const body = parseOrThrow(service.createSchema, req.body);
     const created = await service.create(body, actor(req));
@@ -75,7 +76,7 @@ integrationsRouter.post("/", async (req, res, next) => {
   }
 });
 
-integrationsRouter.put("/:code", async (req, res, next) => {
+integrationsRouter.put("/:code", requireOwner(), async (req, res, next) => {
   try {
     const body = parseOrThrow(service.updateSchema, req.body);
     const before = await service.getByCode(req.params.code);
@@ -95,7 +96,7 @@ integrationsRouter.put("/:code", async (req, res, next) => {
   }
 });
 
-integrationsRouter.patch("/:code/status", async (req, res, next) => {
+integrationsRouter.patch("/:code/status", requireOwner(), async (req, res, next) => {
   try {
     const body = parseOrThrow(service.statusSchema, req.body);
     const before = await service.getByCode(req.params.code);
@@ -115,7 +116,7 @@ integrationsRouter.patch("/:code/status", async (req, res, next) => {
   }
 });
 
-integrationsRouter.delete("/:code", async (req, res, next) => {
+integrationsRouter.delete("/:code", requireOwner(), async (req, res, next) => {
   try {
     const removed = await service.removeByCode(req.params.code);
     await writeAudit({

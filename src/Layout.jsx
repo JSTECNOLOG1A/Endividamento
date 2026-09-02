@@ -16,6 +16,7 @@ import {
   Receipt,
   Banknote,
   ChevronDown,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
@@ -25,6 +26,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAuth } from "@/lib/AuthContext";
+import { usePlatform } from "@/lib/PlatformContext";
 
 const NAV_ITEMS = [
   { name: "Simulador", page: "Simulator", icon: Calculator },
@@ -54,6 +64,8 @@ function navClass(active) {
 }
 
 export default function Layout({ children, currentPageName }) {
+  const { user, logout } = useAuth();
+  const { isMaster, tenants, tenantId, selectTenant, viewingAll } = usePlatform();
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [mobileFinanceOpen, setMobileFinanceOpen] = React.useState(
     currentPageName === "AccountsPayable" || currentPageName === "AccountsReceivable"
@@ -128,14 +140,44 @@ export default function Layout({ children, currentPageName }) {
               })}
             </nav>
 
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden h-8 w-8"
-              onClick={() => setMobileOpen(!mobileOpen)}
-            >
-              {mobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-            </Button>
+            <div className="flex items-center gap-2">
+              {isMaster ? (
+                <div className="hidden sm:flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-amber-600" />
+                  <Select value={tenantId || "all"} onValueChange={(value) => selectTenant(value)}>
+                    <SelectTrigger className="h-8 w-[200px] text-xs">
+                      <SelectValue placeholder="Cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os clientes</SelectItem>
+                      {tenants.map((tenant) => (
+                        <SelectItem key={tenant.id} value={tenant.id}>
+                          {tenant.tenant_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              {user?.email ? (
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="hidden md:inline text-[11px] text-slate-400 hover:text-slate-700 px-1"
+                  title="Sair"
+                >
+                  Sair
+                </button>
+              ) : null}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden h-8 w-8"
+                onClick={() => setMobileOpen(!mobileOpen)}
+              >
+                {mobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -193,9 +235,50 @@ export default function Layout({ children, currentPageName }) {
                 </Link>
               );
             })}
+            {isMaster ? (
+              <div className="px-3 py-2">
+                <p className="text-[11px] text-slate-400 mb-1">Cliente</p>
+                <Select value={tenantId || "all"} onValueChange={(value) => selectTenant(value)}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os clientes</SelectItem>
+                    {tenants.map((tenant) => (
+                      <SelectItem key={tenant.id} value={tenant.id}>
+                        {tenant.tenant_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => { setMobileOpen(false); logout(); }}
+              className="w-full text-left px-3 py-2.5 text-sm text-slate-500 hover:bg-slate-50 rounded-lg"
+            >
+              Sair
+            </button>
           </div>
         )}
       </header>
+
+      {isMaster ? (
+        <div className="bg-amber-50 border-b border-amber-100 text-amber-900 text-xs px-4 py-2 text-center">
+          Acesso master: {viewingAll ? "todos os clientes" : (tenants.find((item) => item.id === tenantId)?.tenant_name || "cliente")}.
+          Consultas e alterações são registradas para fins de LGPD.
+        </div>
+      ) : null}
+
+      {!isMaster && user && !user.onboarding_completed_at && currentPageName !== "Onboarding" ? (
+        <div className="bg-sky-50 border-b border-sky-100 text-sky-900 text-xs px-4 py-2 text-center">
+          Confirme os códigos Protheus da filial.{" "}
+          <Link to="/onboarding" className="font-medium underline">
+            Abrir configuração inicial
+          </Link>
+        </div>
+      ) : null}
 
       <main>{children}</main>
       <Toaster />

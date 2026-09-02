@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { writeAudit } from "../../middleware/audit.js";
+import { requireCanWrite } from "../../middleware/rbac.js";
 import * as service from "./service.js";
 import { taskMeta } from "./tasks.js";
 
@@ -36,7 +37,7 @@ schedulesRouter.get("/", async (_req, res, next) => {
   }
 });
 
-schedulesRouter.post("/run-task", async (req, res, next) => {
+schedulesRouter.post("/run-task", requireCanWrite, async (req, res, next) => {
   try {
     const body = parseOrThrow(service.runTaskSchema, req.body);
     const result = await service.executeTask(body.tarefa, "manual");
@@ -64,7 +65,7 @@ schedulesRouter.get("/:id", async (req, res, next) => {
   }
 });
 
-schedulesRouter.post("/", async (req, res, next) => {
+schedulesRouter.post("/", requireCanWrite, async (req, res, next) => {
   try {
     const body = parseOrThrow(service.createSchema, req.body);
     const created = await service.create(body, actor(req));
@@ -82,7 +83,7 @@ schedulesRouter.post("/", async (req, res, next) => {
   }
 });
 
-schedulesRouter.put("/:id", async (req, res, next) => {
+schedulesRouter.put("/:id", requireCanWrite, async (req, res, next) => {
   try {
     const body = parseOrThrow(service.updateSchema, req.body);
     const current = await service.getById(req.params.id);
@@ -102,7 +103,7 @@ schedulesRouter.put("/:id", async (req, res, next) => {
   }
 });
 
-schedulesRouter.patch("/:id/status", async (req, res, next) => {
+schedulesRouter.patch("/:id/status", requireCanWrite, async (req, res, next) => {
   try {
     const body = parseOrThrow(service.statusSchema, req.body);
     const current = await service.getById(req.params.id);
@@ -123,7 +124,7 @@ schedulesRouter.patch("/:id/status", async (req, res, next) => {
   }
 });
 
-schedulesRouter.post("/:id/run", async (req, res, next) => {
+schedulesRouter.post("/:id/run", requireCanWrite, async (req, res, next) => {
   try {
     const current = await service.getById(req.params.id);
     const result = await service.runJob(req.params.id, "manual");
@@ -143,7 +144,7 @@ schedulesRouter.post("/:id/run", async (req, res, next) => {
   }
 });
 
-schedulesRouter.delete("/:id", async (req, res, next) => {
+schedulesRouter.delete("/:id", requireCanWrite, async (req, res, next) => {
   try {
     const removed = await service.removeById(req.params.id);
     await writeAudit({

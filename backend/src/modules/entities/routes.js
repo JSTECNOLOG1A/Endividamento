@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as store from "./store.js";
 import { writeAudit } from "../../middleware/audit.js";
+import { requireCanWrite } from "../../middleware/rbac.js";
 
 export const entitiesRouter = Router();
 
@@ -25,7 +26,7 @@ entitiesRouter.post("/:name/filter", async (req, res, next) => {
   }
 });
 
-entitiesRouter.post("/:name/bulk", async (req, res, next) => {
+entitiesRouter.post("/:name/bulk", requireCanWrite, async (req, res, next) => {
   try {
     const items = Array.isArray(req.body) ? req.body : req.body?.items || [];
     const created = await store.bulkCreate(req.params.name, items, actor(req));
@@ -51,7 +52,7 @@ entitiesRouter.get("/:name/:id", async (req, res, next) => {
   }
 });
 
-entitiesRouter.post("/:name", async (req, res, next) => {
+entitiesRouter.post("/:name", requireCanWrite, async (req, res, next) => {
   try {
     const created = await store.create(req.params.name, req.body || {}, actor(req));
     await writeAudit({
@@ -67,7 +68,7 @@ entitiesRouter.post("/:name", async (req, res, next) => {
   }
 });
 
-entitiesRouter.patch("/:name/:id", async (req, res, next) => {
+entitiesRouter.patch("/:name/:id", requireCanWrite, async (req, res, next) => {
   try {
     const before = await store.getById(req.params.name, req.params.id);
     const updated = await store.update(req.params.name, req.params.id, req.body || {});
@@ -85,7 +86,7 @@ entitiesRouter.patch("/:name/:id", async (req, res, next) => {
   }
 });
 
-entitiesRouter.put("/:name/:id", async (req, res, next) => {
+entitiesRouter.put("/:name/:id", requireCanWrite, async (req, res, next) => {
   try {
     const before = await store.getById(req.params.name, req.params.id);
     const updated = await store.update(req.params.name, req.params.id, req.body || {});
@@ -103,7 +104,7 @@ entitiesRouter.put("/:name/:id", async (req, res, next) => {
   }
 });
 
-entitiesRouter.delete("/:name/:id", async (req, res, next) => {
+entitiesRouter.delete("/:name/:id", requireCanWrite, async (req, res, next) => {
   try {
     const removed = await store.remove(req.params.name, req.params.id);
     await writeAudit({

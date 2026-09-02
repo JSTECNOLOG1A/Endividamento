@@ -16,14 +16,14 @@ export const ENTITIES = {
   },
   Bank: {
     table: "banks",
-    columns: ["bank_code", "bank_name", "bank_type", "status"],
+    columns: ["group_id", "bank_code", "bank_name", "bank_type", "status"],
     booleans: [],
     numbers: [],
   },
   BankAccount: {
     table: "bank_accounts",
     columns: [
-      "entity_id", "bank_id", "empresa", "filial", "bank_code", "agencia", "conta",
+      "group_id", "entity_id", "bank_id", "empresa", "filial", "bank_code", "agencia", "conta",
       "digito", "nome", "tipo", "moeda", "conta_contabil", "natureza", "origem", "status",
     ],
     booleans: [],
@@ -31,20 +31,20 @@ export const ENTITIES = {
   },
   Nature: {
     table: "natures",
-    columns: ["entity_id", "empresa", "filial", "codigo", "descricao", "tipo_conta", "c_custo", "c_des_fat", "tipo_natureza", "gera_lcdpr", "origem", "status"],
+    columns: ["group_id", "entity_id", "empresa", "filial", "codigo", "descricao", "tipo_conta", "c_custo", "c_des_fat", "tipo_natureza", "gera_lcdpr", "origem", "status"],
     booleans: ["gera_lcdpr"],
     numbers: [],
   },
   ChartOfAccount: {
     table: "chart_of_accounts",
-    columns: ["account_code", "account_name", "account_class", "account_type", "account_nature", "origem", "status"],
+    columns: ["group_id", "account_code", "account_name", "account_class", "account_type", "account_nature", "origem", "status"],
     booleans: [],
     numbers: [],
   },
   PayableTitle: {
     table: "payable_titles",
     columns: [
-      "entity_id", "contract_id", "parcela", "titulo_numero", "tipo", "prefixo",
+      "group_id", "entity_id", "contract_id", "parcela", "titulo_numero", "tipo", "prefixo",
       "emissao", "vencimento", "valor", "saldo", "natureza", "historico", "status", "origem",
       "fornecedor", "fornecedor_loja", "fornecedor_nome", "filial", "filial_origem",
       "integrado_erp", "integrado_erp_em", "erp_mensagem", "erp_status", "erp_consultado_em",
@@ -56,7 +56,7 @@ export const ENTITIES = {
   ReceivableTitle: {
     table: "receivable_titles",
     columns: [
-      "entity_id", "contract_id", "parcela", "titulo_numero", "tipo", "prefixo",
+      "group_id", "entity_id", "contract_id", "parcela", "titulo_numero", "tipo", "prefixo",
       "emissao", "vencimento", "valor", "saldo", "natureza", "historico", "status", "origem",
       "cliente", "cliente_loja", "cliente_nome", "filial", "filial_origem",
       "integrado_erp", "integrado_erp_em", "erp_mensagem", "erp_status", "erp_consultado_em",
@@ -78,7 +78,9 @@ export const ENTITIES = {
       "principal_installments", "interest_installments", "principal_frequency", "interest_frequency",
       "calculation_system", "amortization_percentages", "percentage_base", "schedule_data",
       "contract_pdf_url", "status", "status_history", "approved_by", "approved_date",
-      "rejection_comments", "exported_to_payables", "exported_to_receivables", "current_snapshot_id", "approved_snapshot_id",
+      "rejection_comments", "exported_to_payables", "exported_to_receivables",
+      "reopen_requested_by", "reopen_requested_at",
+      "current_snapshot_id", "approved_snapshot_id",
       "last_recalculated_at", "guarantee_real_type", "guarantee_personal_type",
     ],
     booleans: [
@@ -96,7 +98,7 @@ export const ENTITIES = {
   CalculationSnapshot: {
     table: "calculation_snapshots",
     columns: [
-      "contract_id", "contract_number", "engine_version", "engine_build_id",
+      "group_id", "contract_id", "contract_number", "engine_version", "engine_build_id",
       "calculation_hash_strict", "calculation_hash_instance", "schedule_snapshot",
       "disclosure_snapshot", "risk_flags_snapshot", "audit_log_snapshot", "currency",
       "principal", "total_interest", "total_paid", "trigger_event", "calculation_parameters",
@@ -108,26 +110,26 @@ export const ENTITIES = {
   },
   CDIRate: {
     table: "cdi_rates",
-    columns: ["rate_date", "annual_rate", "daily_factor", "rate_type"],
+    columns: ["group_id", "rate_date", "annual_rate", "daily_factor", "rate_type"],
     booleans: [],
     numbers: ["annual_rate", "daily_factor"],
   },
   Holiday: {
     table: "holidays",
-    columns: ["holiday_date", "holiday_name", "day_of_week"],
+    columns: ["group_id", "holiday_date", "holiday_name", "day_of_week"],
     booleans: [],
     numbers: [],
   },
   Currency: {
     table: "currencies",
-    columns: ["currency_code", "currency_name", "exchange_rate", "rate_date", "status"],
+    columns: ["group_id", "currency_code", "currency_name", "exchange_rate", "rate_date", "status"],
     booleans: [],
     numbers: ["exchange_rate"],
   },
   AccountingClosing: {
     table: "accounting_closings",
     columns: [
-      "entity_id", "competencia", "data_base", "previous_closing_id", "status",
+      "group_id", "entity_id", "competencia", "data_base", "previous_closing_id", "status",
       "opening_snapshot", "events_snapshot", "journal_snapshot", "engine_version",
       "total_debito", "total_credito", "calculated_by", "calculated_at",
       "approved_by", "approved_at", "reopened_by", "reopened_at", "reopened_reason",
@@ -138,7 +140,7 @@ export const ENTITIES = {
   ContractSettlement: {
     table: "contract_settlements",
     columns: [
-      "contract_id", "closing_id", "parcela", "scheduled_date", "actual_payment_date", "scheduled_amount",
+      "group_id", "contract_id", "closing_id", "parcela", "scheduled_date", "actual_payment_date", "scheduled_amount",
       "principal_paid", "interest_paid", "penalty_paid", "fee_paid", "discount_amount",
       "rounding_adjustment", "other_amount", "total_paid", "bank_account_id",
       "extraordinary_amortization", "triggers_recalculation", "recalculation_snapshot_id",
@@ -152,14 +154,14 @@ export const ENTITIES = {
   },
   AccountingEventMapping: {
     table: "accounting_event_mappings",
-    columns: ["entity_id", "event_type", "debit_account_id", "credit_account_id", "status"],
+    columns: ["group_id", "entity_id", "event_type", "debit_account_id", "credit_account_id", "status"],
     booleans: [],
     numbers: [],
   },
   AccountingJournalEntry: {
     table: "accounting_journal_entries",
     columns: [
-      "closing_id", "contract_id", "event_type", "entry_date",
+      "group_id", "closing_id", "contract_id", "event_type", "entry_date",
       "account_id", "side", "amount", "historico",
     ],
     booleans: [],
@@ -169,7 +171,7 @@ export const ENTITIES = {
     table: "tenants",
     columns: [
       "group_id", "tenant_name", "plan", "billing_status", "trial_ends_at",
-      "contract_limit", "contracts_used", "owner_email", "metadata",
+      "contract_limit", "contracts_used", "owner_email", "domain", "metadata",
     ],
     booleans: [],
     numbers: ["contract_limit", "contracts_used"],

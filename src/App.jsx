@@ -4,11 +4,17 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { PlatformProvider } from '@/lib/PlatformContext';
 import { ProcessingProvider } from '@/lib/ProcessingContext';
 import Login from '@/components/Login';
+import Signup from '@/components/Signup';
+import CompleteSignup from '@/components/CompleteSignup';
+import ForgotPassword from '@/components/ForgotPassword';
+import SetPassword from '@/components/SetPassword';
+import Onboarding from '@/components/Onboarding';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -46,26 +52,38 @@ const AuthenticatedApp = () => {
 
   if (!isAuthenticated) {
     return (
-      <Login
-        error={loginError}
-        loading={loginLoading}
-        onSubmit={async (email, password) => {
-          setLoginError(null);
-          setLoginLoading(true);
-          try {
-            await login(email, password);
-          } catch (error) {
-            setLoginError(error.message || "Falha no login");
-          } finally {
-            setLoginLoading(false);
-          }
-        }}
-      />
+      <Routes>
+        <Route path="/criar-conta" element={<Signup />} />
+        <Route path="/concluir-cadastro" element={<CompleteSignup />} />
+        <Route path="/esqueci-senha" element={<ForgotPassword />} />
+        <Route path="/redefinir-senha" element={<SetPassword />} />
+        <Route path="/aceitar-convite" element={<SetPassword />} />
+        <Route
+          path="*"
+          element={(
+            <Login
+              error={loginError}
+              loading={loginLoading}
+              onSubmit={async (email, password) => {
+                setLoginError(null);
+                setLoginLoading(true);
+                try {
+                  await login(email, password);
+                } catch (error) {
+                  setLoginError(error.message || "Falha no login");
+                } finally {
+                  setLoginLoading(false);
+                }
+              }}
+            />
+          )}
+        />
+      </Routes>
     );
   }
 
-  // Render the main app
   return (
+    <PlatformProvider>
     <Routes>
       <Route path="/" element={
         <LayoutWrapper currentPageName={mainPageKey}>
@@ -83,8 +101,19 @@ const AuthenticatedApp = () => {
           }
         />
       ))}
+      <Route path="/onboarding" element={
+        <LayoutWrapper currentPageName="Onboarding">
+          <Onboarding />
+        </LayoutWrapper>
+      } />
+      <Route path="/criar-conta" element={<Navigate to="/" replace />} />
+      <Route path="/concluir-cadastro" element={<Navigate to="/" replace />} />
+      <Route path="/esqueci-senha" element={<Navigate to="/" replace />} />
+      <Route path="/redefinir-senha" element={<Navigate to="/" replace />} />
+      <Route path="/aceitar-convite" element={<Navigate to="/" replace />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+    </PlatformProvider>
   );
 };
 

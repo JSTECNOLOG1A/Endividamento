@@ -5,6 +5,7 @@ import { snapshotForAudit } from "../audit/records.js";
 import { TASKS, taskCatalog, taskMeta } from "./tasks.js";
 import * as store from "./store.js";
 import { initialRunAt, nextRunAt, formatHoraExecucao } from "./nextRun.js";
+import { loadTenantByGroupId, runWithTenant } from "../tenants/access.js";
 
 function httpError(status, message, details) {
   const err = new Error(message);
@@ -206,7 +207,18 @@ export async function runDueJobs() {
   const results = [];
   for (const job of due) {
     try {
-      results.push(await executeTask(job.tarefa, "automatico"));
+      const tenant = await loadTenantByGroupId(job.group_id);
+      const task = () => executeTask(job.tarefa, "automatico");
+      results.push(
+        tenant
+          ? await runWithTenant({
+            groupId: job.group_id,
+            tenantId: tenant.id,
+            email: "sistema",
+            fullName: "Sistema",
+          }, task)
+          : await task()
+      );
     } catch (error) {
       await store.finishRun(job.id, {
         ok: false,

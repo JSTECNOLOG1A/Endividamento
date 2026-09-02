@@ -26,6 +26,7 @@ import ClassifyTitleDialog from "../components/payables/ClassifyTitleDialog";
 import TitleViewDialog from "../components/payables/TitleViewDialog";
 import { erpStatusOf, ErpStatusBadge, ErpStatusLegend } from "@/lib/erpStatus";
 import { useProcessing } from "@/lib/ProcessingContext";
+import { useAuth } from "@/lib/AuthContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -88,6 +89,8 @@ function canSelect(item) {
 }
 
 export default function AccountsPayable() {
+  const { user } = useAuth();
+  const canManageErp = Boolean(user?.platform_admin || user?.tenant_role === "OWNER");
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [entityFilter, setEntityFilter] = useState("__all__");
@@ -486,13 +489,13 @@ export default function AccountsPayable() {
               Classificar
             </Button>
           )}
-          {selectedToIntegrate.length > 0 && (
+          {canManageErp && selectedToIntegrate.length > 0 && (
             <Button type="button" size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => handleIntegrate(selectedToIntegrate)} disabled={busy}>
               <Upload className="w-3.5 h-3.5" />
               Integrar ERP
             </Button>
           )}
-          {selectedToReverse.length > 0 && (
+          {canManageErp && selectedToReverse.length > 0 && (
             <Button type="button" size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-rose-200 text-rose-700 hover:bg-rose-50" onClick={() => askReverse(selectedToReverse)} disabled={busy}>
               <Undo2 className="w-3.5 h-3.5" />
               Estornar ERP
@@ -634,13 +637,15 @@ export default function AccountsPayable() {
                                     <Tags className="w-3.5 h-3.5 mr-2" />
                                     Classificar
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleIntegrate([item])}>
-                                    <Upload className="w-3.5 h-3.5 mr-2" />
-                                    Integrar ERP
-                                  </DropdownMenuItem>
+                                  {canManageErp ? (
+                                    <DropdownMenuItem onClick={() => handleIntegrate([item])}>
+                                      <Upload className="w-3.5 h-3.5 mr-2" />
+                                      Integrar ERP
+                                    </DropdownMenuItem>
+                                  ) : null}
                                 </>
                               )}
-                              {canReverse(item) && (
+                              {canManageErp && canReverse(item) && (
                                 <DropdownMenuItem className="text-rose-700" onClick={() => askReverse([item])}>
                                   <Undo2 className="w-3.5 h-3.5 mr-2" />
                                   Estornar ERP

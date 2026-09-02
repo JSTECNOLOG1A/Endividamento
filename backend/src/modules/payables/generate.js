@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { pool } from "../../db/pool.js";
 import { logger } from "../../logger.js";
 import { se2FilialFromSm0 } from "../integrations/protheusScope.js";
+import { groupIdOrThrow } from "../tenants/access.js";
+import { assertContractInTenant } from "../tenants/scope.js";
 
 export function titleNumberFromContract(contractNumber) {
   const digits = String(contractNumber || "").replace(/\D/g, "");
@@ -153,12 +155,15 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
     return { created: 0, skipped: true };
   }
 
+  await assertContractInTenant(contract.id);
+  const groupId = groupIdOrThrow();
   const existing = await pool.query(
-    `SELECT * FROM payable_titles WHERE contract_id = $1`,
-    [contract.id]
+    `SELECT * FROM payable_titles WHERE contract_id = $1 AND group_id = $2`,
+    [contract.id, groupId]
   );
+  const active = existing.rows.filter((row) => row.status === "aberto");
   const existingKeys = new Set(
-    existing.rows.map((row) => `${String(row.prefixo || "")}::${String(row.parcela || "")}`)
+    active.map((row) => `${String(row.prefixo || "")}::${String(row.parcela || "")}`)
   );
   const template = existing.rows.find((row) => String(row.fornecedor || "").trim()) || existing.rows[0] || null;
 
@@ -169,8 +174,8 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
   }
 
   const entityResult = await pool.query(
-    `SELECT codigo_empresa, codigo_filial FROM company_entities WHERE id = $1`,
-    [contract.entity_id]
+    `SELECT codigo_empresa, codigo_filial FROM company_entities WHERE id = $1 AND group_id = $2`,
+    [contract.entity_id, groupId]
   );
   const titles = buildPayableTitles(contract, bank, entityResult.rows[0] || null)
     .filter((title) => !existingKeys.has(`${title.prefixo}::${title.parcela}`));
@@ -196,9 +201,9 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
         `INSERT INTO payable_titles (
            id, entity_id, contract_id, parcela, titulo_numero, tipo, prefixo,
            emissao, vencimento, valor, saldo, natureza, historico, status, origem,
-           fornecedor, fornecedor_loja, fornecedor_nome, filial, filial_origem, created_by
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-         ON CONFLICT (contract_id, prefixo, parcela) DO NOTHING
+           fornecedor, fornecedor_loja, fornecedor_nome, filial, filial_origem, created_by, group_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+         ON CONFLICT (contract_id, prefixo, parcela) WHERE status = 'aberto' DO NOTHING
          RETURNING id, prefixo, titulo_numero, parcela, tipo, contract_id`,
         [
           randomUUID(),
@@ -222,13 +227,14 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
           filial,
           filialOrigem,
           createdBy,
+          groupId,
         ]
       );
       if (inserted.rows[0]) createdRows.push(inserted.rows[0]);
     }
     await client.query(
-      `UPDATE loan_contracts SET exported_to_payables = true, updated_date = now() WHERE id = $1`,
-      [contract.id]
+      `UPDATE loan_contracts SET exported_to_payables = true, updated_date = now() WHERE id = $1 AND group_id = $2`,
+      [contract.id, groupId]
     );
     await client.query("COMMIT");
     return { created: createdRows.length, skipped: false, titulos: createdRows };
@@ -261,7 +267,9 @@ export async function backfillPayableSuppliers() {
      FROM loan_contracts c
      LEFT JOIN banks b ON b.id = c.bank_id
      WHERE t.contract_id = c.id
-       AND (COALESCE(t.fornecedor, '') = '' OR COALESCE(t.fornecedor_nome, '') = '')`
+       AND t.group_id = $1
+       AND (COALESCE(t.fornecedor, '') = '' OR COALESCE(t.fornecedor_nome, '') = '')`,
+    [groupIdOrThrow()]
   );
 }
 
@@ -275,13 +283,15 @@ export async function backfillPayableFiliais() {
        updated_date = now()
      FROM company_entities e
      WHERE t.entity_id = e.id
+       AND t.group_id = $1
        AND COALESCE(e.codigo_empresa, '') <> ''
        AND COALESCE(e.codigo_filial, '') <> ''
        AND (
          COALESCE(t.filial, '') = ''
          OR COALESCE(t.filial_origem, '') = ''
          OR length(regexp_replace(COALESCE(t.filial_origem, ''), '[^0-9]', '', 'g')) <= 2
-       )`
+       )`,
+    [groupIdOrThrow()]
   );
 }
 
@@ -289,7 +299,8 @@ export async function syncPayableTitlesFromApprovedContracts() {
   await backfillPayableSuppliers();
   await backfillPayableFiliais();
   const result = await pool.query(
-    `SELECT * FROM loan_contracts WHERE status = 'aprovado'`
+    `SELECT * FROM loan_contracts WHERE status = 'aprovado' AND group_id = $1`,
+    [groupIdOrThrow()]
   );
   let created = 0;
   let contracts = 0;

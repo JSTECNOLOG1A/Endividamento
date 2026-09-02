@@ -83,9 +83,11 @@ function Actions({ item, onEdit, onDelete, onRelated, relatedTitle }) {
       <Button variant="ghost" size="icon" onClick={() => onEdit(item)} className="h-8 w-8 text-slate-400 hover:text-blue-600">
         <Edit2 className="w-3.5 h-3.5" />
       </Button>
-      <Button variant="ghost" size="icon" onClick={() => onDelete(item.id)} className="h-8 w-8 text-slate-400 hover:text-red-500">
-        <Trash2 className="w-3.5 h-3.5" />
-      </Button>
+      {onDelete ? (
+        <Button variant="ghost" size="icon" onClick={() => onDelete(item.id)} className="h-8 w-8 text-slate-400 hover:text-red-500">
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      ) : null}
     </div>
   );
 }

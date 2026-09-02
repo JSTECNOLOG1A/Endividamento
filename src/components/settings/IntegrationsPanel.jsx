@@ -46,7 +46,7 @@ import {
   prepareIntegrationPayload,
 } from "@/api/integrations";
 
-export default function IntegrationsPanel() {
+export default function IntegrationsPanel({ canManage = false, viewingAll = false }) {
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
   const [search, setSearch] = useState("");
@@ -166,6 +166,11 @@ export default function IntegrationsPanel() {
 
   return (
     <div className="space-y-4">
+      {viewingAll ? (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          Você está vendo todos os clientes. Selecione um cliente no topo para criar conexão ou integrar títulos.
+        </p>
+      ) : null}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <Input
           value={search}
@@ -184,10 +189,17 @@ export default function IntegrationsPanel() {
           </SelectContent>
         </Select>
         <div className="sm:ml-auto">
-          <Button onClick={openCreate} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Nova conexão
-          </Button>
+          {canManage ? (
+            <Button
+              onClick={openCreate}
+              className="gap-2"
+              disabled={viewingAll}
+              title={viewingAll ? "Selecione um cliente no topo para criar conexão" : undefined}
+            >
+              <Plus className="w-4 h-4" />
+              Nova conexão
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -235,25 +247,29 @@ export default function IntegrationsPanel() {
                       <Button variant="ghost" size="icon" title="Detalhes" onClick={() => openDetails(item)}>
                         <Eye className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" title="Editar" onClick={() => openEdit(item)}>
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title={item.status === "ativo" ? "Desativar" : "Ativar"}
-                        onClick={() => setConfirm({ type: "status", code: item.code, name: item.nome, status: item.status })}
-                      >
-                        <Power className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Excluir"
-                        onClick={() => setConfirm({ type: "delete", code: item.code, name: item.nome })}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {canManage ? (
+                        <>
+                          <Button variant="ghost" size="icon" title="Editar" onClick={() => openEdit(item)}>
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title={item.status === "ativo" ? "Desativar" : "Ativar"}
+                            onClick={() => setConfirm({ type: "status", code: item.code, name: item.nome, status: item.status })}
+                          >
+                            <Power className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Excluir"
+                            onClick={() => setConfirm({ type: "delete", code: item.code, name: item.nome })}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
+                      ) : null}
                     </div>
                   </TableCell>
                 </TableRow>

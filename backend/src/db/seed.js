@@ -4,17 +4,43 @@ import { pool } from "./pool.js";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
 
+async function ensurePlatformAdmin() {
+  const targeted = await pool.query(
+    `UPDATE users
+     SET platform_admin = (lower(email) = lower($1)), updated_date = now()
+     WHERE platform_admin IS TRUE OR lower(email) = lower($1)
+     RETURNING email, platform_admin`,
+    [config.adminEmail]
+  );
+  const master = targeted.rows.find((row) => row.platform_admin);
+  if (master) {
+    logger.info({ email: master.email }, "usuário master da plataforma");
+    return;
+  }
+  const first = await pool.query(
+    `UPDATE users SET platform_admin = TRUE, updated_date = now()
+     WHERE id = (SELECT id FROM users WHERE role = 'admin' ORDER BY created_date ASC LIMIT 1)
+       AND NOT EXISTS (SELECT 1 FROM users WHERE platform_admin IS TRUE)
+     RETURNING email`
+  );
+  if (first.rows[0]) {
+    logger.info({ email: first.rows[0].email }, "usuário master da plataforma (primeiro admin)");
+  }
+}
+
 export async function seed() {
   const users = await pool.query("SELECT COUNT(*)::int AS n FROM users");
   if (users.rows[0].n === 0) {
     const hash = await bcrypt.hash(config.adminPassword, config.bcryptRounds);
     await pool.query(
-      `INSERT INTO users (id, email, password_hash, full_name, role, status, created_by)
-       VALUES ($1, $2, $3, $4, 'admin', 'active', 'system')`,
+      `INSERT INTO users (id, email, password_hash, full_name, role, status, platform_admin, created_by)
+       VALUES ($1, $2, $3, $4, 'admin', 'active', TRUE, 'system')`,
       [randomUUID(), config.adminEmail.toLowerCase(), hash, "Administrador"]
     );
-    logger.info({ email: config.adminEmail }, "usuário admin criado");
+    logger.info({ email: config.adminEmail }, "usuário master criado");
   }
+
+  await ensurePlatformAdmin();
 
   const groups = await pool.query("SELECT COUNT(*)::int AS n FROM groups");
   if (groups.rows[0].n > 0) return;

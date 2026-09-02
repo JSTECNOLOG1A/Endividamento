@@ -1,3 +1,5 @@
+import { getPlatformTenantId } from "./platformScope";
+
 const API = "/api";
 const TOKEN_KEY = "endividamento_token";
 
@@ -14,6 +16,8 @@ async function request(path, options = {}) {
   const headers = { ...(options.headers || {}) };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  const tenantId = getPlatformTenantId();
+  if (tenantId) headers["X-Tenant-Id"] = tenantId;
   const isForm = options.body instanceof FormData;
   if (!isForm && options.body && typeof options.body !== "string") {
     headers["Content-Type"] = "application/json";

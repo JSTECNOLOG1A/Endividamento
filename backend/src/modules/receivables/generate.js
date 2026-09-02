@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { pool } from "../../db/pool.js";
 import { logger } from "../../logger.js";
 import { se2FilialFromSm0 } from "../integrations/protheusScope.js";
+import { groupIdOrThrow } from "../tenants/access.js";
+import { assertContractInTenant } from "../tenants/scope.js";
 import {
   parseContractSchedule,
   parcelaCode,
@@ -82,21 +84,24 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
     return { created: 0, skipped: true };
   }
 
+  await assertContractInTenant(contract.id);
+  const groupId = groupIdOrThrow();
   const existing = await pool.query(
-    `SELECT id, erp_status, integrado_erp
+    `SELECT id, status, erp_status, integrado_erp
        FROM receivable_titles
-      WHERE contract_id = $1
+      WHERE contract_id = $1 AND group_id = $2
       ORDER BY parcela ASC`,
-    [contract.id]
+    [contract.id, groupId]
   );
-  const locked = existing.rows.some((row) => (
+  const active = existing.rows.filter((row) => row.status === "aberto");
+  const locked = active.some((row) => (
     row.integrado_erp === true || ["integrado", "baixado"].includes(String(row.erp_status || ""))
   ));
-  if (existing.rows.length === 1) {
+  if (active.length === 1) {
     return { created: 0, skipped: true };
   }
-  if (existing.rows.length > 1 && locked) {
-    logger.warn({ contractId: contract.id, count: existing.rows.length }, "contas a receber com várias parcelas já integradas; não regrava");
+  if (active.length > 1 && locked) {
+    logger.warn({ contractId: contract.id, count: active.length }, "contas a receber com várias parcelas já integradas; não regrava");
     return { created: 0, skipped: true };
   }
 
@@ -107,8 +112,8 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
   }
 
   const entityResult = await pool.query(
-    `SELECT codigo_empresa, codigo_filial FROM company_entities WHERE id = $1`,
-    [contract.entity_id]
+    `SELECT codigo_empresa, codigo_filial FROM company_entities WHERE id = $1 AND group_id = $2`,
+    [contract.entity_id, groupId]
   );
   const titles = buildReceivableTitles(contract, bank, entityResult.rows[0] || null);
   if (!titles.length) {
@@ -119,8 +124,8 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    if (existing.rows.length > 1) {
-      await client.query(`DELETE FROM receivable_titles WHERE contract_id = $1`, [contract.id]);
+    if (active.length > 1) {
+      await client.query(`DELETE FROM receivable_titles WHERE contract_id = $1 AND status = 'aberto' AND group_id = $2`, [contract.id, groupId]);
     }
     const createdRows = [];
     for (const title of titles) {
@@ -129,8 +134,8 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
         `INSERT INTO receivable_titles (
            id, entity_id, contract_id, parcela, titulo_numero, tipo, prefixo,
            emissao, vencimento, valor, saldo, natureza, historico, status, origem,
-           cliente, cliente_loja, cliente_nome, filial, filial_origem, created_by
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+           cliente, cliente_loja, cliente_nome, filial, filial_origem, created_by, group_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
         [
           id,
           title.entity_id,
@@ -153,6 +158,7 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
           title.filial,
           title.filial_origem,
           createdBy,
+          groupId,
         ]
       );
       createdRows.push({
@@ -165,8 +171,8 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
       });
     }
     await client.query(
-      `UPDATE loan_contracts SET exported_to_receivables = true, updated_date = now() WHERE id = $1`,
-      [contract.id]
+      `UPDATE loan_contracts SET exported_to_receivables = true, updated_date = now() WHERE id = $1 AND group_id = $2`,
+      [contract.id, groupId]
     );
     await client.query("COMMIT");
     return { created: createdRows.length, skipped: false, titulos: createdRows };
@@ -181,14 +187,15 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
 export async function syncReceivableTitlesFromApprovedContracts() {
   const result = await pool.query(
     `SELECT * FROM loan_contracts
-     WHERE status = 'aprovado'
+     WHERE status = 'aprovado' AND group_id = $1
        AND (
          exported_to_receivables IS NOT TRUE
          OR NOT EXISTS (SELECT 1 FROM receivable_titles r WHERE r.contract_id = loan_contracts.id)
          OR (
            SELECT COUNT(*) FROM receivable_titles r WHERE r.contract_id = loan_contracts.id
          ) > 1
-       )`
+       )`,
+    [groupIdOrThrow()]
   );
   let created = 0;
   let contracts = 0;

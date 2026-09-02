@@ -1,4 +1,5 @@
 import { pool } from "../../db/pool.js";
+import { groupIdOrNull, groupIdOrThrow, isPlatformAdmin, scopedGroupSql } from "../tenants/access.js";
 
 function httpError(status, message, details) {
   const err = new Error(message);
@@ -48,9 +49,10 @@ const LIST_SELECT = `
 `;
 
 export async function list({ search, status, page = 1, limit = 10 }) {
-  const where = [];
-  const params = [];
-  let i = 1;
+  const scope = scopedGroupSql("i.group_id");
+  const where = [scope.sql];
+  const params = [...scope.params];
+  let i = params.length + 1;
   if (search) {
     where.push(`(i.nome ILIKE $${i} OR COALESCE(i.erp_nome, '') ILIKE $${i} OR i.base_url ILIKE $${i})`);
     params.push(`%${search}%`);
@@ -86,13 +88,43 @@ export async function list({ search, status, page = 1, limit = 10 }) {
   };
 }
 
+function scopedByCode(code) {
+  const scope = scopedGroupSql("i.group_id", 2);
+  return {
+    sql: `${LIST_SELECT} WHERE i.code = $1 AND ${scope.sql}`,
+    params: [code, ...scope.params],
+  };
+}
+
+function scopedById(id) {
+  const scope = scopedGroupSql("i.group_id", 2);
+  return {
+    sql: `${LIST_SELECT} WHERE i.id = $1 AND ${scope.sql}`,
+    params: [id, ...scope.params],
+  };
+}
+
+function groupIdForRow(existing) {
+  const scoped = groupIdOrNull();
+  if (scoped) {
+    if (existing?.group_id && existing.group_id !== scoped) {
+      throw httpError(404, "Conexão não encontrada");
+    }
+    return scoped;
+  }
+  if (isPlatformAdmin() && existing?.group_id) return existing.group_id;
+  return groupIdOrThrow();
+}
+
 export async function findByCode(code) {
-  const result = await pool.query(`${LIST_SELECT} WHERE i.code = $1`, [code]);
+  const query = scopedByCode(code);
+  const result = await pool.query(query.sql, query.params);
   return result.rows[0] || null;
 }
 
 export async function findById(id) {
-  const result = await pool.query(`${LIST_SELECT} WHERE i.id = $1`, [id]);
+  const query = scopedById(id);
+  const result = await pool.query(query.sql, query.params);
   return result.rows[0] || null;
 }
 
@@ -105,24 +137,26 @@ export async function findEndpoints(integrationId) {
 }
 
 export async function findCredential(id) {
+  const existing = await findById(id);
+  if (!existing) return null;
   const result = await pool.query(
-    `SELECT id, credential_encrypted FROM integrations WHERE id = $1`,
-    [id]
+    `SELECT id, credential_encrypted FROM integrations WHERE id = $1 AND group_id = $2`,
+    [id, groupIdForRow(existing)]
   );
   return result.rows[0] || null;
 }
 
 export async function findByCadastroKeyAndMetodo(cadastroKey, metodo, excludeIntegrationId) {
-  const params = [cadastroKey, metodo];
+  const params = [cadastroKey, metodo, groupIdOrThrow()];
   let sql = `
     SELECT e.nome, e.metodo, e.cadastro_key, i.nome AS integration_nome
     FROM integration_endpoints e
     JOIN integrations i ON i.id = e.integration_id
-    WHERE e.cadastro_key = $1 AND e.metodo = $2
+    WHERE e.cadastro_key = $1 AND e.metodo = $2 AND i.group_id = $3
   `;
   if (excludeIntegrationId) {
     params.push(excludeIntegrationId);
-    sql += ` AND e.integration_id <> $3`;
+    sql += ` AND e.integration_id <> $4`;
   }
   const result = await pool.query(sql, params);
   return result.rows[0] || null;
@@ -150,10 +184,10 @@ export async function findLinkedCadastro(cadastroKey, metodo = "GET") {
        i.status
      FROM integration_endpoints e
      JOIN integrations i ON i.id = e.integration_id
-     WHERE e.cadastro_key = $1 AND e.metodo = $2
+     WHERE e.cadastro_key = $1 AND e.metodo = $2 AND i.group_id = $3
      ORDER BY i.status ASC, e.sort_order ASC
      LIMIT 1`,
-    [cadastroKey, metodo]
+    [cadastroKey, metodo, groupIdOrThrow()]
   );
   const row = result.rows[0];
   if (!row) return null;
@@ -207,8 +241,8 @@ export async function create(row, endpoints, createdBy) {
     const inserted = await client.query(
       `INSERT INTO integrations (
         code, nome, descricao, erp_nome, base_url, auth_type, auth_header, username,
-        credential_encrypted, grupo_empresas, empresa, filial, timeout_seconds, status, created_by
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'ativo',$14)
+        credential_encrypted, grupo_empresas, empresa, filial, timeout_seconds, status, created_by, group_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'ativo',$14,$15)
       RETURNING *`,
       [
         row.code,
@@ -225,6 +259,7 @@ export async function create(row, endpoints, createdBy) {
         row.filial ?? "",
         row.timeoutSeconds,
         createdBy,
+        groupIdOrThrow(),
       ]
     );
     await replaceEndpoints(client, inserted.rows[0].id, endpoints);
@@ -269,10 +304,13 @@ export async function update(id, row, endpoints) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const existing = await findById(id);
+    if (!existing) throw httpError(404, "Conexão não encontrada");
+    const groupId = groupIdForRow(existing);
     if (params.length > 0) {
-      params.push(id);
+      params.push(id, groupId);
       await client.query(
-        `UPDATE integrations SET ${assignments.join(", ")} WHERE id = $${i}`,
+        `UPDATE integrations SET ${assignments.join(", ")} WHERE id = $${i} AND group_id = $${i + 1}`,
         params
       );
     }
@@ -295,7 +333,7 @@ export async function update(id, row, endpoints) {
 export async function remove(id) {
   const existing = await findById(id);
   if (!existing) throw httpError(404, "Conexão não encontrada");
-  await pool.query("DELETE FROM integrations WHERE id = $1", [id]);
+  await pool.query("DELETE FROM integrations WHERE id = $1 AND group_id = $2", [id, groupIdForRow(existing)]);
   return toPublic(existing);
 }
 

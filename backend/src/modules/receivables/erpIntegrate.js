@@ -6,6 +6,8 @@ import { applyProtheusContext, isProtheusErp } from "../integrations/protheus.js
 import { fetchSm0Records, matchSm0ByEntity, resolveTitleBranch } from "../integrations/protheusScope.js";
 import { resolveNatureForEntity } from "../payables/natureCode.js";
 import { logger } from "../../logger.js";
+import { groupIdOrThrow } from "../tenants/access.js";
+import { selectByIds, selectEntitiesByIds } from "../tenants/scope.js";
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -270,17 +272,11 @@ export async function integrateReceivableTitles(payload = {}) {
   if (!ids.length) throw httpError(400, "Selecione ao menos um título para integrar");
 
   const { linked, credential } = await loadLinkedReceivableEndpoint();
-  const titlesResult = await pool.query(
-    `SELECT * FROM receivable_titles WHERE id = ANY($1::text[]) ORDER BY vencimento ASC, parcela ASC`,
-    [ids]
-  );
+  const titlesResult = { rows: await selectByIds("receivable_titles", ids, { order: "ORDER BY vencimento ASC, parcela ASC" }) };
   if (!titlesResult.rows.length) throw httpError(400, "Nenhum título encontrado");
 
   const entityIds = [...new Set(titlesResult.rows.map((row) => row.entity_id))];
-  const entitiesResult = await pool.query(
-    `SELECT * FROM company_entities WHERE id = ANY($1::text[])`,
-    [entityIds]
-  );
+  const entitiesResult = { rows: await selectEntitiesByIds(entityIds) };
   const entityById = new Map(entitiesResult.rows.map((row) => [row.id, row]));
 
   let sm0Records = [];
@@ -524,17 +520,11 @@ export async function reverseReceivableTitles(payload = {}) {
   } catch (error) {
     logger.warn({ err: error }, "consulta prévia do estorno indisponível; o Protheus ainda valida movimentação");
   }
-  const titlesResult = await pool.query(
-    `SELECT * FROM receivable_titles WHERE id = ANY($1::text[]) ORDER BY vencimento ASC, parcela ASC`,
-    [ids]
-  );
+  const titlesResult = { rows: await selectByIds("receivable_titles", ids, { order: "ORDER BY vencimento ASC, parcela ASC" }) };
   if (!titlesResult.rows.length) throw httpError(400, "Nenhum título encontrado");
 
   const entityIds = [...new Set(titlesResult.rows.map((row) => row.entity_id))];
-  const entitiesResult = await pool.query(
-    `SELECT * FROM company_entities WHERE id = ANY($1::text[])`,
-    [entityIds]
-  );
+  const entitiesResult = { rows: await selectEntitiesByIds(entityIds) };
   const entityById = new Map(entitiesResult.rows.map((row) => [row.id, row]));
 
   let sm0Records = [];
@@ -730,7 +720,7 @@ function titleAlteredInErp(title, data) {
     return { ok: true, alreadyDeleted: true, message: "Título já não existe no Protheus" };
   }
   if (encontrado == null) {
-    return { ok: false, message: "Resposta de consulta do ERP sem situação do título" };
+    return { ok: true, alreadyDeleted: false };
   }
 
   const situacao = String(data.situacao || "").trim().toLowerCase();
@@ -900,12 +890,12 @@ export async function refreshReceivableTitlesFromErp(payload = {}) {
     throw error;
   }
 
-  const params = [];
+  const params = [groupIdOrThrow()];
   let sql = `SELECT * FROM receivable_titles
-     WHERE (integrado_erp IS TRUE OR erp_status IN ('integrado', 'baixado'))`;
+     WHERE group_id = $1 AND (integrado_erp IS TRUE OR erp_status IN ('integrado', 'baixado'))`;
   if (ids.length) {
     params.push(ids);
-    sql += ` AND id = ANY($1::text[])`;
+    sql += ` AND id = ANY($2::text[])`;
   }
   sql += ` ORDER BY vencimento ASC, parcela ASC`;
 
@@ -915,10 +905,7 @@ export async function refreshReceivableTitlesFromErp(payload = {}) {
   }
 
   const entityIds = [...new Set(titlesResult.rows.map((row) => row.entity_id))];
-  const entitiesResult = await pool.query(
-    `SELECT * FROM company_entities WHERE id = ANY($1::text[])`,
-    [entityIds]
-  );
+  const entitiesResult = { rows: await selectEntitiesByIds(entityIds) };
   const entityById = new Map(entitiesResult.rows.map((row) => [row.id, row]));
 
   let sm0Records = [];

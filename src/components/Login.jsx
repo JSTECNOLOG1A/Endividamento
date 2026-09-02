@@ -1,10 +1,11 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function Login({ onSubmit, error, loading }) {
-  const [email, setEmail] = useState("admin@endividamento.local");
+  const [email, setEmail] = useState("admin@fincalc.local");
   const [password, setPassword] = useState("");
 
   const handleSubmit = (event) => {
@@ -17,7 +18,7 @@ export default function Login({ onSubmit, error, loading }) {
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 bg-white border border-slate-200 rounded-xl p-6">
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Endividamento</h1>
-          <p className="text-sm text-slate-500 mt-1">Entre com a conta local para acessar o sistema.</p>
+          <p className="text-sm text-slate-500 mt-1">Entre com sua conta para acessar o sistema.</p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="email">E-mail</Label>
@@ -28,9 +29,20 @@ export default function Login({ onSubmit, error, loading }) {
           <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </div>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        <div className="flex justify-end">
+          <Link to="/esqueci-senha" className="text-xs font-medium text-slate-700 underline">
+            Esqueci a senha
+          </Link>
+        </div>
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Entrando..." : "Entrar"}
         </Button>
+        <p className="text-center text-sm text-slate-500">
+          Primeiro acesso?{" "}
+          <Link to="/criar-conta" className="font-medium text-slate-900 underline">
+            Criar conta
+          </Link>
+        </p>
       </form>
     </div>
   );

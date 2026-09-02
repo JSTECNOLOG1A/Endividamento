@@ -14,6 +14,7 @@ import { lookupPayableErp } from "../payables/erpLookup.js";
 import { syncReceivableTitlesFromApprovedContracts } from "../receivables/generate.js";
 import { classifyReceivableTitles } from "../receivables/classify.js";
 import { integrateReceivableTitles, reverseReceivableTitles, refreshReceivableTitlesFromErp } from "../receivables/erpIntegrate.js";
+import { assertCanWrite, assertOwner } from "../tenants/policy.js";
 
 function toIsoDate(date) {
   return date.toISOString().slice(0, 10);
@@ -193,6 +194,16 @@ const handlers = {
 
 export const functionsRouter = Router();
 
+const OWNER_FUNCTIONS = new Set([
+  "integrateNatures",
+  "integrateBankAccounts",
+  "integrateChartAccounts",
+  "integratePayableTitles",
+  "reversePayableTitles",
+  "integrateReceivableTitles",
+  "reverseReceivableTitles",
+]);
+
 functionsRouter.post("/:name", async (req, res, next) => {
   try {
     const handler = handlers[req.params.name];
@@ -200,6 +211,11 @@ functionsRouter.post("/:name", async (req, res, next) => {
       const err = new Error(`Função não encontrada: ${req.params.name}`);
       err.status = 404;
       throw err;
+    }
+    if (OWNER_FUNCTIONS.has(req.params.name)) {
+      await assertOwner("Apenas o proprietário pode integrar ou estornar no ERP.");
+    } else {
+      await assertCanWrite();
     }
     const result = await handler(req.body || {}, req);
     const audit = FUNCTION_AUDIT[req.params.name];
