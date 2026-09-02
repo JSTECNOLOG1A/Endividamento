@@ -117,16 +117,4 @@ INSERT INTO banks (id, bank_code, bank_name, bank_type, status) VALUES
   ('bank_752', '752', 'Banco BNP Paribas Brasil S.A.', 'estrangeiro', 'ativo'),
   ('bank_755', '755', 'Bank of America Merrill Lynch Banco Múltiplo S.A.', 'estrangeiro', 'ativo'),
   ('bank_756', '756', 'Sicoob (Sistema de Cooperativas de Crédito do Brasil)', 'privado', 'ativo')
-ON CONFLICT (bank_code) DO NOTHING;
-
--- Novo grupo econômico para as 3 empresas abaixo (não reaproveita o 'Grupo Demo' de teste).
-INSERT INTO groups (id, group_name, cnpj_group, description, status) VALUES
-  ('grp_cangaia', 'Grupo Cangaia', NULL, NULL, 'ativo')
-ON CONFLICT (id) DO NOTHING;
-
--- Entidades componentes do Grupo Cangaia.
-INSERT INTO company_entities (id, group_id, entity_name, document_number, document_type, entity_type, status) VALUES
-  ('ent_agro_cangaia', 'grp_cangaia', 'Agro Cangaia Armazém Ltda.', '38.539.559/0001-67', 'CNPJ', 'empresa', 'ativa'),
-  ('ent_terminal_amazonia_para', 'grp_cangaia', 'Terminal Amazônia Pará Ltda.', '36.940.852/0001-06', 'CNPJ', 'empresa', 'ativa'),
-  ('ent_guilherme_frota_carvalho', 'grp_cangaia', 'Guilherme Frota Carvalho', '104.435.156-03', 'CPF', 'pf', 'ativa')
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (bank_code) WHERE group_id IS NULL DO NOTHING;
