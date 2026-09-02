@@ -1,3 +1,6 @@
+# Git bundle backups (manual); allow versioned copies under archive/
+/*.bundle
+
 #env
 .env
 .env.local
