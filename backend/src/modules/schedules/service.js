@@ -14,7 +14,13 @@ function httpError(status, message, details) {
   return err;
 }
 
-const TAREFA_ENUM = ["consultar_titulos_pagar", "consultar_titulos_receber", "converter_titulos_pr_tx"];
+const TAREFA_ENUM = [
+  "consultar_titulos_pagar",
+  "consultar_titulos_receber",
+  "converter_titulos_pr_tx",
+  "atualizar_ptax_bacen",
+  "atualizar_indices_bacen",
+];
 const MODO_ENUM = ["intervalo", "mensal"];
 
 function normalizeSchedule(data = {}) {

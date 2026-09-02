@@ -1,37 +1,158 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Building2, FileText, Trash2, Copy, ChevronRight } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { FileText, Trash2, Copy, MoreHorizontal, Download, Mail } from "lucide-react";
+import { useSortableRows, SortIcon } from "@/components/ui/sortable-table";
 import { statusLabel, statusBadgeClass, EDITABLE_STATUSES } from "@/lib/contractStatus";
+import { combineGuaranteeLabel, operationCategoryLabel } from "@/lib/contractOptions";
+import { computeContractCET } from "@/lib/cetFromSchedule";
+import { sanitizeFilename, downloadRenamed } from "@/lib/documentActions";
+import { getContractCirculanteSplit } from "../accounting/debtAnalytics";
+import EmailDialog from "../shared/EmailDialog";
+import { createPageUrl } from "@/utils";
 
 function formatCurrency(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,
-  }).format(value || 0);
+  }).format(n);
 }
 
-const systemLabels = {
-  SAC: "SAC",
-  PRICE: "Price",
-  AMERICANO: "Americano",
-  BULLET: "Bullet",
+function formatPercent(value, maxDigits = 4) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: maxDigits })}%`;
+}
+
+// "Juros a.a.": taxa fixa quando prefixado (indexer N/A ou vazio), ou
+// indexador + spread quando a operação é pós-fixada — mesma regra usada no
+// cabeçalho da tela de revisão do contrato (Contracts.jsx).
+function jurosLabel(contract) {
+  if (!contract.indexer || contract.indexer === "NA") {
+    return `${formatPercent(contract.fixed_rate)} a.a.`;
+  }
+  if (contract.indexer_mode === "PERCENTAGE") {
+    return `${formatPercent(contract.indexer_percentage)} do ${contract.indexer}`;
+  }
+  return `${contract.indexer} + ${formatPercent(contract.indexer_spread)} a.a.`;
+}
+
+// Parseia o cronograma salvo e deriva, a partir dele, o CET Anual, o split
+// Circulante/Não Circulante e os rótulos já resolvidos (Grupo/Entidade/Banco/
+// Categoria/Garantia) — tudo o que a tabela precisa tanto pra exibir quanto
+// pra ordenar por coluna, calculado uma única vez por linha.
+function deriveRow(contract, today, groups, entities, banks) {
+  let schedule = [];
+  if (contract.schedule_data) {
+    try {
+      const parsed = JSON.parse(contract.schedule_data);
+      schedule = parsed.schedule || [];
+    } catch {
+      schedule = [];
+    }
+  }
+  const { cet } = computeContractCET(contract, schedule);
+  const { shortTerm, longTerm } = getContractCirculanteSplit(contract, today);
+  return {
+    cet,
+    shortTerm,
+    longTerm,
+    groupName: groups?.find((g) => g.id === contract.group_id)?.group_name || "—",
+    entityName: entities?.find((e) => e.id === contract.entity_id)?.entity_name || "—",
+    bankName: banks?.find((b) => b.id === contract.bank_id)?.bank_name || "—",
+    categoryLabel: operationCategoryLabel(contract.operation_category),
+    guaranteeLabel: combineGuaranteeLabel(contract.guarantee_real_type, contract.guarantee_personal_type),
+  };
+}
+
+// Colunas ordenáveis por clique no título — cada uma aponta pra um campo já
+// resolvido em `rows` (ver deriveRow acima). `numeric: true` ordena como
+// número em vez de string.
+const SORTABLE_COLUMNS = {
+  groupName: {},
+  entityName: {},
+  bankName: {},
+  contract_number: { getValue: (row) => row.contract.contract_number },
+  categoryLabel: {},
+  guaranteeLabel: {},
+  operation_value: { numeric: true, getValue: (row) => row.contract.operation_value },
+  fixed_rate: { numeric: true, getValue: (row) => row.contract.fixed_rate },
+  cet: { numeric: true },
+  shortTerm: { numeric: true },
+  longTerm: { numeric: true },
+  status: { getValue: (row) => row.contract.status },
 };
 
-export default function ContractsList({ contracts, banks, onView, onEdit, onDelete, onDuplicate, isLoading }) {
+// Cabeçalho de coluna ordenável — versão LOCAL desta tabela (não a de
+// sortable-table.jsx): padding e fonte mais compactos, porque essa tabela
+// tem muitas colunas e precisa caber na largura da tela sem rolar.
+const HEAD_CLASS = "text-[11px] font-bold text-slate-700 uppercase tracking-wide whitespace-nowrap px-2 py-2 bg-slate-50 border-b-2 border-slate-200";
+const CELL_CLASS = "whitespace-nowrap px-2 py-1.5 text-[11px] text-slate-700";
+const CELL_CLASS_RIGHT = `${CELL_CLASS} text-right`;
+// Colunas de texto livre (nomes, categoria, garantia) são as que mais
+// alargam a tabela — os rótulos completos ("Financiamentos
+// (Investimento/CAPEX)", "Alienação Fiduciária + Aval") não cabem numa
+// largura razoável. Trunca com reticências (continua em 1 linha só) e
+// mostra o texto inteiro no tooltip nativo (`title`).
+function truncateClass(maxWidth) {
+  return `${CELL_CLASS} truncate ${maxWidth}`;
+}
+
+function CompactHead({ sortField, sortKey, sortDir, onSort, right, className = "", children }) {
+  return (
+    <TableHead
+      className={`${HEAD_CLASS}${right ? " text-right" : ""}${sortField ? " cursor-pointer select-none hover:bg-slate-100" : ""} ${className}`}
+      onClick={sortField ? () => onSort(sortField) : undefined}
+    >
+      {children}
+      {sortField && <SortIcon active={sortKey === sortField} dir={sortDir} />}
+    </TableHead>
+  );
+}
+
+export default function ContractsList({ contracts, banks, groups, entities, onView, onEdit, onDelete, onDuplicate, isLoading }) {
+  const today = React.useMemo(() => new Date().toISOString().split("T")[0], []);
+  const [emailTarget, setEmailTarget] = React.useState(null);
+
+  // Deriva CET, Circulante/Não Circulante e os rótulos uma vez por lista (não
+  // a cada re-render) — envolve reprocessar o cronograma inteiro de cada
+  // contrato.
+  const rows = React.useMemo(() => {
+    return (contracts || []).map((c) => ({ contract: c, ...deriveRow(c, today, groups, entities, banks) }));
+  }, [contracts, today, groups, entities, banks]);
+
+  // Ordenação por coluna (clique no título alterna asc → desc → sem
+  // ordenação) — mesma configuração usada em toda a ferramenta, ver
+  // src/components/ui/sortable-table.jsx.
+  const { sortKey, sortDir, toggleSort, sortedRows } = useSortableRows(rows, SORTABLE_COLUMNS);
+
   if (isLoading) {
     return (
-      <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <Card key={i} className="border-slate-200 animate-pulse">
-            <CardContent className="p-4">
-              <div className="h-16 bg-slate-100 rounded" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <Card className="border-slate-200">
+        <CardContent className="p-4 space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-10 bg-slate-100 rounded animate-pulse" />
+          ))}
+        </CardContent>
+      </Card>
     );
   }
 
@@ -40,100 +161,147 @@ export default function ContractsList({ contracts, banks, onView, onEdit, onDele
       <Card className="border-slate-200 border-dashed">
         <CardContent className="p-12 text-center">
           <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Nenhum contrato encontrado</p>
-          <p className="text-xs text-slate-400 mt-1">Ajuste os filtros ou crie uma nova simulação</p>
+          <p className="text-sm text-slate-600">Nenhum contrato encontrado</p>
+          <p className="text-xs text-slate-500 mt-1">Ajuste os filtros ou crie uma nova simulação</p>
         </CardContent>
       </Card>
     );
   }
 
+  const cellClass = CELL_CLASS;
+  const cellClassRight = CELL_CLASS_RIGHT;
+
   return (
-    <div className="space-y-3">
-      {contracts.map((c) => {
-        const bankName = banks?.find(b => b.id === c.bank_id)?.bank_name || "N/A";
-        const isEditable = EDITABLE_STATUSES.includes(c.status || "rascunho");
-        // Clicar no card sempre "dá andamento" no contrato: rascunho/devolvido
-        // abrem no Simulador para continuar editando; pendente/aprovado abrem
-        // a tela de revisão (com os botões de Aprovar/Devolver, se aplicável).
-        const openContract = () => (isEditable ? onEdit(c) : onView(c));
-        return (
-          <Card
-            key={c.id}
-            role="button"
-            tabIndex={0}
-            onClick={openContract}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                openContract();
-              }
-            }}
-            className="border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-shadow cursor-pointer"
-          >
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-100 flex-shrink-0">
-                    <Building2 className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-semibold text-slate-800 truncate">{bankName}</h3>
-                      <Badge variant="outline" className="text-xs font-mono">{c.contract_number}</Badge>
-                      <Badge className={`text-xs border ${statusBadgeClass(c.status)}`}>
-                        {statusLabel(c.status)}
-                      </Badge>
+    <Card className="border-slate-200 shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <CompactHead sortField="groupName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Grupo</CompactHead>
+              <CompactHead sortField="entityName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Entidade</CompactHead>
+              <CompactHead sortField="bankName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Banco</CompactHead>
+              <CompactHead sortField="contract_number" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Nº Contrato</CompactHead>
+              <CompactHead sortField="categoryLabel" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Categoria</CompactHead>
+              <CompactHead sortField="guaranteeLabel" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Garantia</CompactHead>
+              <CompactHead sortField="operation_value" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Valor</CompactHead>
+              <CompactHead sortField="fixed_rate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Juros a.a.</CompactHead>
+              <CompactHead sortField="cet" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>CET a.a.</CompactHead>
+              <CompactHead sortField="shortTerm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Circulante</CompactHead>
+              <CompactHead sortField="longTerm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Não Circ.</CompactHead>
+              <CompactHead sortField="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Status</CompactHead>
+              <TableHead className={HEAD_CLASS} />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedRows.map(({ contract: c, cet, shortTerm, longTerm, groupName, entityName, bankName, categoryLabel, guaranteeLabel }) => {
+              const isEditable = EDITABLE_STATUSES.includes(c.status || "rascunho");
+              const hasPdf = !!c.contract_pdf_url;
+              // Clicar na linha sempre "dá andamento" no contrato: rascunho/devolvido
+              // abrem na Calculadora para continuar editando; pendente/aprovado abrem
+              // a tela de revisão (com os botões de Aprovar/Devolver, se aplicável).
+              // Conta garantida é um produto diferente (sem cronograma de
+              // amortização) — tem tela própria, não passa pela Calculadora/
+              // revisão tradicional (que quebrava tentando ler um cronograma
+              // que nunca existiu para esse tipo de contrato).
+              const isGuaranteedAccount = c.calculation_system === "CONTA_GARANTIDA";
+              const openContract = () => {
+                if (isGuaranteedAccount) {
+                  window.location.href = createPageUrl("GuaranteedAccounts") + "?open=" + c.id;
+                  return;
+                }
+                isEditable ? onEdit(c) : onView(c);
+              };
+              const handleDownload = () => {
+                const filename = `${sanitizeFilename(bankName)}_${sanitizeFilename(c.contract_number)}.pdf`;
+                downloadRenamed(c.contract_pdf_url, filename);
+              };
+              const openEmailDialog = () => {
+                setEmailTarget({
+                  documentType: "contract_pdf",
+                  id: c.id,
+                  label: `Contrato — ${bankName} nº ${c.contract_number}`,
+                });
+              };
+
+              return (
+                <TableRow
+                  key={c.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={openContract}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openContract();
+                    }
+                  }}
+                  className="cursor-pointer hover:bg-slate-50"
+                >
+                  <TableCell className={truncateClass("max-w-[100px]")} title={groupName}>{groupName}</TableCell>
+                  <TableCell className={truncateClass("max-w-[120px]")} title={entityName}>{entityName}</TableCell>
+                  <TableCell className={truncateClass("max-w-[115px]")} title={bankName}>{bankName}</TableCell>
+                  <TableCell className={cellClass}>{c.contract_number}</TableCell>
+                  <TableCell className={truncateClass("max-w-[125px]")} title={categoryLabel}>{categoryLabel}</TableCell>
+                  <TableCell className={truncateClass("max-w-[110px]")} title={guaranteeLabel}>{guaranteeLabel}</TableCell>
+                  <TableCell className={cellClassRight}>{formatCurrency(c.operation_value)}</TableCell>
+                  <TableCell className={cellClassRight}>{jurosLabel(c)}</TableCell>
+                  <TableCell className={cellClassRight}>{formatPercent(cet, 2)}</TableCell>
+                  <TableCell className={cellClassRight}>{formatCurrency(shortTerm)}</TableCell>
+                  <TableCell className={cellClassRight}>{formatCurrency(longTerm)}</TableCell>
+                  <TableCell className={cellClass}>
+                    <Badge className={`text-[10px] border px-1.5 py-0 leading-4 ${statusBadgeClass(c.status)}`}>
+                      {statusLabel(c.status)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className={cellClassRight}>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="icon" className="h-6 w-6" title="Ações">
+                            <MoreHorizontal className="w-3.5 h-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {hasPdf && (
+                            <DropdownMenuItem onClick={handleDownload}>
+                              <Download className="w-3.5 h-3.5 mr-2" />
+                              Baixar
+                            </DropdownMenuItem>
+                          )}
+                          {hasPdf && (
+                            <DropdownMenuItem onClick={openEmailDialog}>
+                              <Mail className="w-3.5 h-3.5 mr-2" />
+                              Enviar por e-mail
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => onDuplicate(c)}>
+                            <Copy className="w-3.5 h-3.5 mr-2" />
+                            Duplicar
+                          </DropdownMenuItem>
+                          {isEditable && onDelete && (
+                            <DropdownMenuItem
+                              className="text-red-600 focus:text-red-600"
+                              onClick={() => {
+                                if (window.confirm("⚠️ Tem certeza que deseja excluir este contrato?\n\nEsta ação não poderá ser desfeita.")) {
+                                  onDelete(c.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
-                      <span className="font-mono font-medium text-slate-700">{formatCurrency(c.operation_value)}</span>
-                      <span>•</span>
-                      <span>{systemLabels[c.calculation_system] || c.calculation_system}</span>
-                      <span>•</span>
-                      <span>{c.fixed_rate}% a.a.</span>
-                      {c.indexer !== "NA" && (
-                        <>
-                          <span>+</span>
-                          <span>{c.indexer}</span>
-                        </>
-                      )}
-                      <span>•</span>
-                      <span>{c.principal_installments}x</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => { e.stopPropagation(); onDuplicate(c); }}
-                    className="h-8 w-8 text-slate-400 hover:text-purple-600"
-                    title="Duplicar"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </Button>
-                  {isEditable && onDelete && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm("⚠️ Tem certeza que deseja excluir este contrato?\n\nEsta ação não poderá ser desfeita.")) {
-                          onDelete(c.id);
-                        }
-                      }}
-                      className="h-8 w-8 text-slate-400 hover:text-red-500"
-                      title="Excluir"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  )}
-                  <ChevronRight className="w-4 h-4 text-slate-300" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+      <EmailDialog open={!!emailTarget} onOpenChange={(open) => !open && setEmailTarget(null)} document={emailTarget} />
+    </Card>
   );
 }

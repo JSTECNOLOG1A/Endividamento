@@ -73,7 +73,7 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Grupo econômico *</Label>
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Grupo econômico *</Label>
             {groups.length === 0 ? (
               <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
                 Cadastre um grupo econômico na aba Grupos antes de criar a entidade.
@@ -90,7 +90,7 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
             )}
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo de Entidade *</Label>
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Tipo de Entidade *</Label>
             <Select
               value={form.entity_type}
               onValueChange={(v) => setForm({
@@ -107,19 +107,19 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
               {form.document_type === "CPF" ? "CPF" : "CNPJ"} *
             </Label>
             <Input
               value={form.document_number}
               onChange={(e) => setForm({ ...form, document_number: e.target.value })}
               placeholder={form.document_type === "CPF" ? "000.000.000-00" : "00.000.000/0000-00"}
-              className="h-9 font-mono"
+              className="h-9"
               required
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nome *</Label>
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nome *</Label>
             <Input
               value={form.entity_name}
               onChange={(e) => setForm({ ...form, entity_name: e.target.value })}
@@ -130,31 +130,31 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Empresa Protheus</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Empresa Protheus</Label>
               <Input
                 value={form.codigo_empresa}
                 onChange={(e) => setForm({ ...form, codigo_empresa: e.target.value })}
                 placeholder="02"
-                className="h-9 font-mono"
+                className="h-9"
                 maxLength={10}
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Filial Protheus</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Filial Protheus</Label>
               <Input
                 value={form.codigo_filial}
                 onChange={(e) => setForm({ ...form, codigo_filial: e.target.value })}
                 placeholder="01"
-                className="h-9 font-mono"
+                className="h-9"
                 maxLength={10}
               />
             </div>
           </div>
-          <p className="-mt-2 text-xs text-slate-400">
+          <p className="-mt-2 text-xs text-slate-500">
             Código da empresa no Protheus (M0_CODIGO). Em naturezas (ED_FILIAL) e contas bancárias (A6_FILIAL) esse código é a empresa; a filial fica em branco.
           </p>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</Label>
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Status</Label>
             <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -165,12 +165,12 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
           </div>
 
           <div className="pt-2 border-t border-slate-100">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
+            <p className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-3">
               Fechamento contábil desta empresa
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Modo de contabilização</Label>
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Modo de contabilização</Label>
                 <Select value={form.accounting_mode} onValueChange={(v) => setForm({ ...form, accounting_mode: v })}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -182,7 +182,7 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Origem dos pagamentos</Label>
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Origem dos pagamentos</Label>
                 <Select value={form.payment_source} onValueChange={(v) => setForm({ ...form, payment_source: v })}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -194,7 +194,7 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Aprovação do lote</Label>
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Aprovação do lote</Label>
                 <Select value={form.posting_approval} onValueChange={(v) => setForm({ ...form, posting_approval: v })}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -204,7 +204,7 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
                 </Select>
               </div>
             </div>
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-2 text-xs text-slate-500">
               Define como o Fechamento Contábil se comporta para esta empresa — a tela nunca é suprimida, só os
               componentes mudam (transmissão ao ERP, exportação de arquivo ou digitação manual dos lançamentos).
             </p>

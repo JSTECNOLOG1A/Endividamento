@@ -51,7 +51,7 @@ export function ErpStatusBadge({ item }) {
 
 export function ErpStatusLegend() {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600">
       {Object.entries(ERP_STATUS_META).map(([key, meta]) => (
         <span key={key} className="inline-flex items-center gap-1.5">
           <span className={`inline-block size-2 rounded-full ${meta.dot}`} />

@@ -25,10 +25,10 @@ export default function Settings() {
   const isOwner = Boolean(user?.platform_admin || user?.tenant_role === "OWNER");
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+    <div className="w-full px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Configurações</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Conta, usuários, sessão, integrações, agendamentos e log de atividades</p>
+        <p className="text-sm text-slate-500 mt-0.5">Conta, usuários, plano, sessão, integrações, agendamentos e log de atividades</p>
       </div>
 
       <Tabs defaultValue="integracoes">
@@ -59,7 +59,7 @@ export default function Settings() {
             <CardHeader>
               <CardTitle className="text-base text-slate-900">Agendamento</CardTitle>
               <CardDescription>
-                Cadastre cada tarefa (consultar pagar, consultar receber ou converter PR→TX) e escolha o dia ou o intervalo. Nas rotinas também há execução manual.
+                Cadastre cada tarefa (consultar pagar, consultar receber ou converter PR→JUR) e escolha o dia ou o intervalo. Nas rotinas também há execução manual.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -101,7 +101,7 @@ export default function Settings() {
         ) : null}
 
         <TabsContent value="conta" className="mt-4">
-          <div className="max-w-3xl space-y-4">
+          <div className="space-y-4">
             <Card className="border-slate-200 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base text-slate-900">Plano</CardTitle>
@@ -121,15 +121,15 @@ export default function Settings() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Nome</span>
+                  <span className="text-slate-600">Nome</span>
                   <span className="font-medium text-slate-900">{user?.full_name || "—"}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">E-mail</span>
+                  <span className="text-slate-600">E-mail</span>
                   <span className="font-medium text-slate-900">{user?.email || "—"}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Perfil</span>
+                  <span className="text-slate-600">Perfil</span>
                   <span className="font-medium text-slate-900">
                     {user?.tenant_role === "OWNER" ? "Proprietário" : (ROLE_LABELS[user?.role] || user?.role || "—")}
                   </span>

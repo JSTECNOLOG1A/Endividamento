@@ -43,7 +43,10 @@ const upload = multer({
       cb(null, `${Date.now()}-${safe}`);
     },
   }),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  // 50MB: contratos digitalizados/anexos costumam vir com várias páginas
+  // escaneadas (imagem, não texto) e passam fácil dos 20MB antigos, que
+  // geravam um "Erro interno" genérico em vez de avisar sobre o tamanho.
+  limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype === "application/pdf") cb(null, true);
     else cb(new Error("Apenas PDF"));

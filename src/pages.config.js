@@ -55,6 +55,7 @@ import Configuracoes from './pages/Configuracoes';
 import Consolidation from './pages/Consolidation';
 import Contracts from './pages/Contracts';
 import Governance from './pages/Governance';
+import GuaranteedAccounts from './pages/GuaranteedAccounts';
 import Settings from './pages/Settings';
 import Simulator from './pages/Simulator';
 import UserManual from './pages/UserManual';
@@ -70,6 +71,7 @@ export const PAGES = {
     "Consolidation": Consolidation,
     "Contracts": Contracts,
     "Governance": Governance,
+    "GuaranteedAccounts": GuaranteedAccounts,
     "Settings": Settings,
     "Simulator": Simulator,
     "UserManual": UserManual,

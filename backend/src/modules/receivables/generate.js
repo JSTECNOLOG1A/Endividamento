@@ -4,6 +4,7 @@ import { logger } from "../../logger.js";
 import { se2FilialFromSm0 } from "../integrations/protheusScope.js";
 import { groupIdOrThrow } from "../tenants/access.js";
 import { assertContractInTenant } from "../tenants/scope.js";
+import { writeAudit } from "../../middleware/audit.js";
 import {
   parseContractSchedule,
   parcelaCode,
@@ -11,6 +12,10 @@ import {
   supplierFromBank,
   titleNumberFromContract,
 } from "../payables/generate.js";
+
+function titleIsIntegrated(title) {
+  return title.integrado_erp === true || ["integrado", "baixado"].includes(String(title.erp_status || ""));
+}
 
 function money(value) {
   const amount = Number(value);
@@ -182,6 +187,72 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
   } finally {
     client.release();
   }
+}
+
+// Espelha reversePayableTitles/cleanupOrphanedPayableTitles do lado de
+// contas a pagar (ver backend/src/modules/payables/generate.js) — mesmo bug,
+// mesmo fix: título a receber gerado num contrato aprovado também fica
+// órfão se o contrato for reaberto pra edição (só é regerado quando volta a
+// 'aprovado' — ver syncReceivableTitlesFromApprovedContracts). Título já
+// integrado ao ERP não é tocado aqui.
+export async function reverseNonIntegratedReceivableTitles(contractId) {
+  const result = await pool.query(`SELECT * FROM receivable_titles WHERE contract_id = $1`, [contractId]);
+  const integrated = result.rows.filter(titleIsIntegrated);
+  const toReverse = result.rows.filter((t) => !titleIsIntegrated(t));
+  if (toReverse.length) {
+    await pool.query(`DELETE FROM receivable_titles WHERE id = ANY($1::text[])`, [toReverse.map((t) => t.id)]);
+  }
+  return { reversed: toReverse, integrated };
+}
+
+// Limpeza retroativa: cobre títulos a receber que já ficaram órfãos ANTES
+// desse fix existir (contrato saiu de 'aprovado' sem que reopenApprovedContractForEditing
+// tivesse a parte de contas a receber) — mesmo padrão de cleanupOrphanedPayableTitles.
+export async function cleanupOrphanedReceivableTitles(req = null) {
+  const result = await pool.query(
+    `SELECT t.* FROM receivable_titles t
+       JOIN loan_contracts c ON c.id = t.contract_id
+      WHERE c.status != 'aprovado'`
+  );
+
+  const integrated = result.rows.filter(titleIsIntegrated);
+  const toDelete = result.rows.filter((t) => !titleIsIntegrated(t));
+
+  const byContract = new Map();
+  for (const t of toDelete) {
+    if (!byContract.has(t.contract_id)) byContract.set(t.contract_id, []);
+    byContract.get(t.contract_id).push(t);
+  }
+
+  if (toDelete.length) {
+    await pool.query(`DELETE FROM receivable_titles WHERE id = ANY($1::text[])`, [toDelete.map((t) => t.id)]);
+
+    if (req) {
+      for (const [contractId, rows] of byContract) {
+        await writeAudit({
+          req,
+          action: "REVERSE",
+          resourceType: "ReceivableTitle",
+          resourceId: contractId,
+          rotina: "Contas a receber",
+          registro: `${rows.length} título(s) órfão(s) estornado(s) — limpeza retroativa (contrato fora de 'aprovado')`,
+          before: { titulos: rows },
+          after: { contractId },
+          payload: { contractId, titulosEstornados: rows.length },
+        });
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    titulosEstornados: toDelete.length,
+    contratosAfetados: byContract.size,
+    titulosIntegradosPendentes: integrated.length,
+    detalhesIntegrados: integrated.map((t) => ({
+      id: t.id, contractId: t.contract_id, parcela: t.parcela, prefixo: t.prefixo, valor: t.valor,
+    })),
+  };
 }
 
 export async function syncReceivableTitlesFromApprovedContracts() {

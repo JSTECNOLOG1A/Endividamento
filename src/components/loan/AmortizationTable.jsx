@@ -59,7 +59,7 @@ function getDaysUntil(dateStr) {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
-export default function AmortizationTable({ result, params, onRecalculate }) {
+export default function AmortizationTable({ result, params, onRecalculate, highlightParcela }) {
   const [page, setPage] = useState(0);
   const [editMode, setEditMode] = useState(false);
   const [editedSchedule, setEditedSchedule] = useState(null);
@@ -179,6 +179,18 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
       };
     });
   }, [schedule, isUSD, viewMode, params, result, row0]);
+
+  // Modo recálculo (reabertura por divergência no Fechamento Contábil): ao
+  // carregar, pula direto para a página que contém a parcela sinalizada, pra
+  // o usuário não precisar caçá-la manualmente entre várias páginas de 100
+  // linhas. Só reposiciona quando a parcela sinalizada muda (ex.: ao entrar
+  // na tela) — não força a página de volta se o usuário já navegou por
+  // conta própria depois disso.
+  React.useEffect(() => {
+    if (!highlightParcela || !schedule?.length) return;
+    const idx = schedule.findIndex((r) => r.parcela === highlightParcela);
+    if (idx >= 0) setPage(Math.floor(idx / PAGE_SIZE));
+  }, [highlightParcela, schedule]);
 
   // Early return AFTER all hooks
   if (!result || !result.schedule) return null;
@@ -398,7 +410,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
         `# Currency: BRL`,
         `# Snapshot Status: N/A (BRL)`,
         `# Generated At: ${new Date().toISOString()}`,
-        `# Source Version: Endividamento Simulator v1.0`,
+        `# Source Version: AllDebt Simulator v1.0`,
         ``,
       ];
       
@@ -446,7 +458,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
       `# Interest Source: ${result.snapshot?.interest_source || "USD_NATIVE"}`,
       `# `,
       `# Generated At: ${new Date().toISOString()}`,
-      `# Source Version: Endividamento Simulator v1.0`,
+      `# Source Version: AllDebt Simulator v1.0`,
       `# Engine Version: ${result.calculation_metadata?.engine_version || "1.2.1"}`,
       `# Engine Build ID: ${result.calculation_metadata?.engine_build_id || "N/A"}`,
       `# `,
@@ -542,7 +554,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                   <div key={change.parcela} className="flex justify-between text-xs border-b border-slate-200 pb-2 last:border-b-0">
                     <span className="font-semibold text-slate-700">Parcela {change.parcela}:</span>
                     <div className="text-right">
-                      <span className="text-slate-500 line-through">{formatDate(change.original)}</span>
+                      <span className="text-slate-600 line-through">{formatDate(change.original)}</span>
                       <span className="text-emerald-600 font-semibold ml-2">→ {formatDate(change.alterada)}</span>
                     </div>
                   </div>
@@ -615,7 +627,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                 {params?.calculation_system}
               </Badge>
               {result?.calculation_metadata?.engine_version && (
-                <Badge variant="outline" className="ml-2 text-[10px] font-mono">
+                <Badge variant="outline" className="ml-2 text-[10px]">
                   motor {result.calculation_metadata.engine_version}
                 </Badge>
               )}
@@ -749,18 +761,18 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
         </CardHeader>
         <CardContent className="p-0">
           <div className="w-full">
-            <Table className="w-full text-[10px]">
+            <Table className="w-full text-[11px]">
               <TableHeader>
                 <TableRow className="bg-slate-50">
-                  <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5">Mês</TableHead>
-                  <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5">Venc.</TableHead>
+                  <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5">Mês</TableHead>
+                  <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5">Venc.</TableHead>
                   
                   {/* FASE 2: VISÃO FINANCEIRA (fxAtual) */}
                   {isUSD && viewMode === "financeiro" && (
                     <>
                       <TableHead className="font-semibold text-blue-600 whitespace-nowrap px-1 py-1.5 text-right">SD Ini USD</TableHead>
                       <TableHead className="font-semibold text-blue-600 whitespace-nowrap px-1 py-1.5 text-right">PTAX Atual</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">
                         <TooltipProvider>
                           <Tooltip delayDuration={200}>
                             <TooltipTrigger asChild>
@@ -812,7 +824,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                         </TooltipProvider>
                       </TableHead>
                       <TableHead className="font-semibold text-blue-600 whitespace-nowrap px-1 py-1.5 text-right">SD Fin USD</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">
                         <TooltipProvider>
                           <Tooltip delayDuration={200}>
                             <TooltipTrigger asChild>
@@ -833,7 +845,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                       <TableHead className="font-semibold text-blue-600 whitespace-nowrap px-1 py-1.5 text-right">SD Ini USD</TableHead>
                       <TableHead className="font-semibold text-slate-600 whitespace-nowrap px-1 py-1.5 text-right">PTAX Ant.</TableHead>
                       <TableHead className="font-semibold text-blue-600 whitespace-nowrap px-1 py-1.5 text-right">PTAX Fim</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">
                         <TooltipProvider>
                           <Tooltip delayDuration={200}>
                             <TooltipTrigger asChild>
@@ -871,7 +883,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                         </TooltipProvider>
                       </TableHead>
                       <TableHead className="font-semibold text-blue-600 whitespace-nowrap px-1 py-1.5 text-right">Amort Paga BRL</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">
                         <TooltipProvider>
                           <Tooltip delayDuration={200}>
                             <TooltipTrigger asChild>
@@ -889,21 +901,21 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                   {/* BRL (sem USD) - visão única */}
                   {!isUSD && (
                     <>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">SD Ini BRL</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">DC</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">DU</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">Tx.Fixa%</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">J.Fixos</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">Idx%</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">J.Var</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">Tot.J</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">SD Ini BRL</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">DC</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">DU</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">Tx.Fixa%</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">J.Fixos</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">Idx%</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">J.Var</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">Tot.J</TableHead>
                       {displaySchedule.some(r => (r.jurosAcruados || 0) > 0) && (
                         <TableHead className="font-semibold text-purple-600 whitespace-nowrap px-1 py-1.5 text-right">J.Balloon</TableHead>
                       )}
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">SD Atual</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">Amort BRL</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right font-bold">PMT BRL</TableHead>
-                      <TableHead className="font-semibold text-slate-500 whitespace-nowrap px-1 py-1.5 text-right">SD Fin BRL</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">SD Atual</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">Amort BRL</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right font-bold">PMT BRL</TableHead>
+                      <TableHead className="font-bold text-slate-700 whitespace-nowrap px-1 py-1.5 text-right">SD Fin BRL</TableHead>
                     </>
                   )}
                 </TableRow>
@@ -912,7 +924,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                 {/* LINHA 0 (OPERAÇÃO) - Apenas visão contábil USD */}
                 {isUSD && viewMode === "contabil" && page === 0 && row0 && (
                   <TableRow className="bg-slate-50 border-l-4 border-slate-300">
-                    <TableCell className="font-mono text-center text-slate-600 px-1 py-0.5">
+                    <TableCell className="text-center text-slate-600 px-1 py-0.5">
                       <TooltipProvider>
                         <Tooltip delayDuration={200}>
                           <TooltipTrigger asChild>
@@ -926,31 +938,31 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                         </Tooltip>
                       </TooltipProvider>
                     </TableCell>
-                    <TableCell className="font-mono whitespace-nowrap text-slate-600 px-1 py-0.5">
+                    <TableCell className="whitespace-nowrap text-slate-600 px-1 py-0.5">
                       {formatDate(row0.dataVencimento)}
                     </TableCell>
-                    <TableCell className="font-mono text-right text-blue-700 px-1 py-0.5 bg-blue-50/30">
+                    <TableCell className="text-right text-blue-700 px-1 py-0.5 bg-blue-50/30">
                       ${row0.sdInicial_USD?.toLocaleString('en-US', {minimumFractionDigits: 2})}
                     </TableCell>
-                    <TableCell className="font-mono text-right text-slate-600 px-1 py-0.5">
+                    <TableCell className="text-right text-slate-600 px-1 py-0.5">
                       {row0.ptax_anterior?.toFixed(4)}
                     </TableCell>
-                    <TableCell className="font-mono text-right text-blue-600 px-1 py-0.5">
+                    <TableCell className="text-right text-blue-600 px-1 py-0.5">
                       {row0.ptax_atual?.toFixed(4)}
                     </TableCell>
-                    <TableCell className="font-mono text-right text-slate-700 px-1 py-0.5">
+                    <TableCell className="text-right text-slate-700 px-1 py-0.5">
                       {formatCurrency(row0.aberturaBRL)}
                     </TableCell>
-                    <TableCell className="font-mono text-right text-slate-400 px-1 py-0.5">
+                    <TableCell className="text-right text-slate-500 px-1 py-0.5">
                       —
                     </TableCell>
-                    <TableCell className="font-mono text-right text-slate-400 px-1 py-0.5">
+                    <TableCell className="text-right text-slate-500 px-1 py-0.5">
                       —
                     </TableCell>
-                    <TableCell className="font-mono text-right text-slate-400 px-1 py-0.5">
+                    <TableCell className="text-right text-slate-500 px-1 py-0.5">
                       —
                     </TableCell>
-                    <TableCell className="font-mono text-right text-slate-700 px-1 py-0.5">
+                    <TableCell className="text-right text-slate-700 px-1 py-0.5">
                       {formatCurrency(row0.fechamento)}
                     </TableCell>
                   </TableRow>
@@ -959,7 +971,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                 {/* Aviso se PTAX da operação não existe */}
                 {isUSD && viewMode === "contabil" && page === 0 && row0Warning && (
                   <TableRow className="bg-amber-50">
-                    <TableCell colSpan={10} className="text-center text-xs text-amber-700 py-2">
+                    <TableCell colSpan={10} className="text-center text-[11px] text-amber-700 py-2">
                       ⚠️ {row0Warning} — Linha 0 não renderizada
                     </TableCell>
                   </TableRow>
@@ -973,20 +985,29 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                    const daysUntil = getDaysUntil(row.dataVencimento);
                    const isShortTerm = daysUntil <= 365; // até 12 meses
 
+                   // Modo recálculo: parcela sinalizada como divergente no
+                   // Fechamento Contábil — destaque até o novo cálculo ser salvo.
+                   const isHighlighted = highlightParcela && row.parcela === highlightParcela;
+
                    return (
                     <TableRow
                       key={row.parcela}
                       className={`${
-                        isNegativeAmortization 
-                          ? "bg-red-50 hover:bg-red-100/60" 
-                          : idx % 2 === 0 
-                            ? "bg-white" 
+                        isHighlighted
+                          ? "bg-amber-100 hover:bg-amber-100"
+                          : isNegativeAmortization
+                          ? "bg-red-50 hover:bg-red-100/60"
+                          : idx % 2 === 0
+                            ? "bg-white"
                             : "bg-slate-50/50"
-                      } hover:bg-blue-50/40 transition-colors ${isNegativeAmortization ? "border-l-4 border-red-500" : ""}`}
+                      } hover:bg-blue-50/40 transition-colors ${isNegativeAmortization ? "border-l-4 border-red-500" : ""} ${isHighlighted ? "border-l-4 border-amber-500" : ""}`}
                     >
-                    <TableCell className="font-mono text-center font-medium text-slate-600 px-1 py-0.5">
+                    <TableCell className="text-center font-medium text-slate-600 px-1 py-0.5">
                       <div className="flex items-center justify-center gap-1">
                         <span>{row.parcela}</span>
+                        {isHighlighted && (
+                          <Badge variant="outline" className="text-[8px] px-1.5 py-0 border-amber-500 text-amber-700 bg-amber-100">Divergência</Badge>
+                        )}
                         {isShortTerm && (
                           <Badge variant="default" className="text-[8px] px-1.5 py-0 bg-blue-600">CP</Badge>
                         )}
@@ -995,7 +1016,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono whitespace-nowrap text-slate-700 px-1 py-0.5">
+                    <TableCell className="whitespace-nowrap text-slate-700 px-1 py-0.5">
                       {editMode ? (
                         <input
                           type="date"
@@ -1011,37 +1032,37 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                     {/* FASE 2 PASSO 2: VISÃO FINANCEIRA (usar campos fxAtual) */}
                     {isUSD && viewMode === "financeiro" && (
                       <>
-                        <TableCell className="font-mono text-right text-blue-700 px-1 py-0.5 bg-blue-50/30">
+                        <TableCell className="text-right text-blue-700 px-1 py-0.5 bg-blue-50/30">
                           ${row.sdInicial_USD?.toLocaleString('en-US', {minimumFractionDigits: 2})}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-blue-600 px-1 py-0.5">
+                        <TableCell className="text-right text-blue-600 px-1 py-0.5">
                           {row.ptax_rate?.toFixed(4)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-slate-700 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-700 px-1 py-0.5">
                           {formatCurrency(row.sdInicial_BRL_fxAtual || row.sdInicial)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-amber-700 px-1 py-0.5">
+                        <TableCell className="text-right text-amber-700 px-1 py-0.5">
                           ${row.jurosTotal_USD?.toLocaleString('en-US', {minimumFractionDigits: 2})}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-amber-700 px-1 py-0.5">
+                        <TableCell className="text-right text-amber-700 px-1 py-0.5">
                           {formatCurrency(row.jurosTotal_BRL_fxAtual || (row.jurosFixosMes + row.jurosVariaveisMes))}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-blue-700 px-1 py-0.5 bg-blue-50/30">
+                        <TableCell className="text-right text-blue-700 px-1 py-0.5 bg-blue-50/30">
                           ${row.amortizacao_USD?.toLocaleString('en-US', {minimumFractionDigits: 2})}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-blue-700 font-medium px-1 py-0.5">
+                        <TableCell className="text-right text-blue-700 font-medium px-1 py-0.5">
                           {formatCurrency(row.amortizacao_BRL_fxAtual || row.amortizacao)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-emerald-700 px-1 py-0.5 bg-emerald-50/30">
+                        <TableCell className="text-right text-emerald-700 px-1 py-0.5 bg-emerald-50/30">
                           ${row.prestacao_USD?.toLocaleString('en-US', {minimumFractionDigits: 2})}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-emerald-700 font-bold px-1 py-0.5 border-l border-emerald-200">
+                        <TableCell className="text-right text-emerald-700 font-bold px-1 py-0.5 border-l border-emerald-200">
                           {formatCurrency(row.prestacao_BRL_fxAtual || row.prestacao)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-blue-700 px-1 py-0.5 bg-blue-50/30">
+                        <TableCell className="text-right text-blue-700 px-1 py-0.5 bg-blue-50/30">
                           ${row.sdFinal_USD?.toLocaleString('en-US', {minimumFractionDigits: 2})}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-slate-700 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-700 px-1 py-0.5">
                           {formatCurrency(row.sdFinal_BRL_fxAtual || row.sdFinal)}
                         </TableCell>
                       </>
@@ -1050,28 +1071,28 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                     {/* FASE 2 PASSO 3: VISÃO CONTÁBIL (usar blocoContabil) */}
                     {isUSD && viewMode === "contabil" && (
                       <>
-                        <TableCell className="font-mono text-right text-blue-700 px-1 py-0.5 bg-blue-50/30">
+                        <TableCell className="text-right text-blue-700 px-1 py-0.5 bg-blue-50/30">
                           ${row.sdInicial_USD?.toLocaleString('en-US', {minimumFractionDigits: 2})}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-slate-600 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-600 px-1 py-0.5">
                           {row.blocoContabil?.ptax_anterior?.toFixed(4) || "—"}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-blue-600 px-1 py-0.5">
+                        <TableCell className="text-right text-blue-600 px-1 py-0.5">
                           {row.blocoContabil?.ptax_atual?.toFixed(4) || row.ptax_rate?.toFixed(4)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-slate-700 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-700 px-1 py-0.5">
                           {formatCurrency(row.blocoContabil?.valorAberturaBRL || row.sdInicial)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-orange-700 px-1 py-0.5 bg-orange-50/30">
+                        <TableCell className="text-right text-orange-700 px-1 py-0.5 bg-orange-50/30">
                           {formatCurrency(row.blocoContabil?.ajusteCambialMes || row.varCambial)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-amber-700 px-1 py-0.5">
+                        <TableCell className="text-right text-amber-700 px-1 py-0.5">
                           {formatCurrency(row.blocoContabil?.jurosCapitalizadosBRL || (row.jurosFixosMes + row.jurosVariaveisMes))}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-blue-700 font-medium px-1 py-0.5">
+                        <TableCell className="text-right text-blue-700 font-medium px-1 py-0.5">
                           {formatCurrency(row.blocoContabil?.amortizacaoPagaBRL || row.amortizacao)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-slate-700 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-700 px-1 py-0.5">
                           {formatCurrency(row.blocoContabil?.valorFechamentoBRL || row.sdFinal)}
                         </TableCell>
                       </>
@@ -1080,45 +1101,45 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                     {/* BRL (sem USD) - visão única */}
                     {!isUSD && (
                       <>
-                        <TableCell className="font-mono text-right text-slate-700 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-700 px-1 py-0.5">
                           {formatCurrency(row.sdInicial)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-slate-500 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-600 px-1 py-0.5">
                           {row.diasCorridos}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-slate-500 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-600 px-1 py-0.5">
                           {row.diasUteis}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-slate-600 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-600 px-1 py-0.5">
                           {formatPercent(((Math.pow(1 + params?.fixed_rate / 100, row.diasCorridos / calculationBase) - 1) * 100))}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-amber-700 px-1 py-0.5">
+                        <TableCell className="text-right text-amber-700 px-1 py-0.5">
                           {formatCurrency(row.jurosFixosMes)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-slate-600 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-600 px-1 py-0.5">
                           {formatPercent(row.indexadorPercent)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-amber-600 px-1 py-0.5">
+                        <TableCell className="text-right text-amber-600 px-1 py-0.5">
                           {formatCurrency(row.jurosVariaveisMes)}
                         </TableCell>
-                        <TableCell className="font-mono text-right font-semibold text-amber-700 px-1 py-0.5 border-l border-amber-200">
+                        <TableCell className="text-right font-semibold text-amber-700 px-1 py-0.5 border-l border-amber-200">
                           {formatCurrency(row.jurosFixosMes + row.jurosVariaveisMes)}
                         </TableCell>
                         {displaySchedule.some(r => (r.jurosAcruados || 0) > 0) && (
-                          <TableCell className="font-mono text-right text-purple-700 font-semibold px-1 py-0.5 bg-purple-50/50">
+                          <TableCell className="text-right text-purple-700 font-semibold px-1 py-0.5 bg-purple-50/50">
                             {formatCurrency(row.jurosAcruados || 0)}
                           </TableCell>
                         )}
-                        <TableCell className="font-mono text-right text-slate-700 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-700 px-1 py-0.5">
                           {formatCurrency(row.sdAtualizado)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-blue-700 font-medium px-1 py-0.5">
+                        <TableCell className="text-right text-blue-700 font-medium px-1 py-0.5">
                           {formatCurrency(row.amortizacao)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-emerald-700 font-bold px-1 py-0.5 border-l border-emerald-200">
+                        <TableCell className="text-right text-emerald-700 font-bold px-1 py-0.5 border-l border-emerald-200">
                           {formatCurrency(row.prestacao)}
                         </TableCell>
-                        <TableCell className="font-mono text-right text-slate-700 px-1 py-0.5">
+                        <TableCell className="text-right text-slate-700 px-1 py-0.5">
                           {formatCurrency(row.sdFinal)}
                         </TableCell>
                       </>
@@ -1137,26 +1158,26 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                          <TableCell /> {/* SD Ini USD */}
                          <TableCell /> {/* PTAX */}
                          <TableCell /> {/* SD Ini BRL */}
-                         <TableCell className="font-mono text-right font-bold text-amber-700 px-1 py-1.5 bg-amber-50/30">
+                         <TableCell className="text-right font-bold text-amber-700 px-1 py-1.5 bg-amber-50/30">
                            ${(schedule.reduce((s, r) => s + (r.jurosTotal_USD || 0), 0)).toLocaleString('en-US', {minimumFractionDigits: 2})}
                          </TableCell>
-                         <TableCell className="font-mono text-right font-bold text-amber-700 px-1 py-1.5">
+                         <TableCell className="text-right font-bold text-amber-700 px-1 py-1.5">
                            {formatCurrency(schedule.reduce((s, r) => s + (r.jurosTotal_BRL_fxAtual || (r.jurosFixosMes + r.jurosVariaveisMes)), 0))}
                          </TableCell>
-                         <TableCell className="font-mono text-right font-bold text-blue-700 px-1 py-1.5 bg-blue-50/30">
+                         <TableCell className="text-right font-bold text-blue-700 px-1 py-1.5 bg-blue-50/30">
                            ${schedule.reduce((s, r) => s + (r.amortizacao_USD || 0), 0).toLocaleString('en-US', {minimumFractionDigits: 2})}
                          </TableCell>
-                         <TableCell className="font-mono text-right font-bold text-blue-700 px-1 py-1.5">
+                         <TableCell className="text-right font-bold text-blue-700 px-1 py-1.5">
                            {formatCurrency(schedule.reduce((s, r) => s + (r.amortizacao_BRL_fxAtual || r.amortizacao), 0))}
                          </TableCell>
-                         <TableCell className="font-mono text-right font-bold text-emerald-700 px-1 py-1.5 bg-emerald-50/30">
+                         <TableCell className="text-right font-bold text-emerald-700 px-1 py-1.5 bg-emerald-50/30">
                            ${schedule.reduce((s, r) => s + (r.prestacao_USD || 0), 0).toLocaleString('en-US', {minimumFractionDigits: 2})}
                          </TableCell>
-                         <TableCell className="font-mono text-right font-bold text-emerald-700 px-1 py-1.5 border-l border-emerald-200">
+                         <TableCell className="text-right font-bold text-emerald-700 px-1 py-1.5 border-l border-emerald-200">
                            {formatCurrency(totalPrestacao)}
                          </TableCell>
                          <TableCell /> {/* SD Fin USD */}
-                         <TableCell className="font-mono text-right font-bold text-slate-700 px-1 py-1.5">{formatCurrency(0)}</TableCell>
+                         <TableCell className="text-right font-bold text-slate-700 px-1 py-1.5">{formatCurrency(0)}</TableCell>
                        </>
                      )}
                      
@@ -1168,18 +1189,18 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                         <TableCell /> {/* PTAX Ant */}
                         <TableCell /> {/* PTAX Atual */}
                         <TableCell /> {/* Abertura BRL */}
-                        <TableCell className="font-mono text-right font-bold text-orange-700 px-1 py-1.5 bg-orange-50/30">
+                        <TableCell className="text-right font-bold text-orange-700 px-1 py-1.5 bg-orange-50/30">
                           {formatCurrency(
                             (scheduleAdjusted || schedule).reduce((s, r) => s + (r.blocoContabil?.ajusteCambialMes || r.varCambial || 0), 0)
                           )}
                         </TableCell>
-                        <TableCell className="font-mono text-right font-bold text-amber-700 px-1 py-1.5">
+                        <TableCell className="text-right font-bold text-amber-700 px-1 py-1.5">
                           {formatCurrency((scheduleAdjusted || schedule).reduce((s, r) => s + (r.blocoContabil?.jurosCapitalizadosBRL || (r.jurosFixosMes + r.jurosVariaveisMes)), 0))}
                         </TableCell>
-                        <TableCell className="font-mono text-right font-bold text-blue-700 px-1 py-1.5">
+                        <TableCell className="text-right font-bold text-blue-700 px-1 py-1.5">
                           {formatCurrency((scheduleAdjusted || schedule).reduce((s, r) => s + (r.blocoContabil?.amortizacaoPagaBRL || r.amortizacao), 0))}
                         </TableCell>
-                        <TableCell className="font-mono text-right font-bold text-slate-700 px-1 py-1.5">{formatCurrency(0)}</TableCell>
+                        <TableCell className="text-right font-bold text-slate-700 px-1 py-1.5">{formatCurrency(0)}</TableCell>
                       </>
                      )}
                      
@@ -1187,29 +1208,29 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                      {!isUSD && (
                        <>
                          <TableCell colSpan={6} className="font-bold text-slate-700 text-right px-1 py-1.5">TOTAL →</TableCell>
-                         <TableCell className="font-mono text-right font-bold text-amber-700 px-1 py-1.5">
+                         <TableCell className="text-right font-bold text-amber-700 px-1 py-1.5">
                            {formatCurrency(schedule.reduce((s, r) => s + r.jurosFixosMes, 0))}
                          </TableCell>
                          <TableCell />
-                         <TableCell className="font-mono text-right font-bold text-amber-600 px-1 py-1.5">
+                         <TableCell className="text-right font-bold text-amber-600 px-1 py-1.5">
                            {formatCurrency(schedule.reduce((s, r) => s + r.jurosVariaveisMes, 0))}
                          </TableCell>
-                         <TableCell className="font-mono text-right font-bold text-amber-700 px-1 py-1.5 border-l border-amber-200">
+                         <TableCell className="text-right font-bold text-amber-700 px-1 py-1.5 border-l border-amber-200">
                            {formatCurrency(schedule.reduce((s, r) => s + r.jurosFixosMes + r.jurosVariaveisMes, 0))}
                          </TableCell>
                          {displaySchedule.some(r => (r.jurosAcruados || 0) > 0) && (
-                           <TableCell className="font-mono text-right font-bold text-purple-700 px-1 py-1.5 bg-purple-50/50">
+                           <TableCell className="text-right font-bold text-purple-700 px-1 py-1.5 bg-purple-50/50">
                              {formatCurrency(schedule.reduce((s, r) => s + (r.jurosAcruados || 0), 0))}
                            </TableCell>
                          )}
                          <TableCell />
-                         <TableCell className="font-mono text-right font-bold text-blue-700 px-1 py-1.5">
+                         <TableCell className="text-right font-bold text-blue-700 px-1 py-1.5">
                            {formatCurrency(schedule.reduce((s, r) => s + r.amortizacao, 0))}
                          </TableCell>
-                         <TableCell className="font-mono text-right font-bold text-emerald-700 px-1 py-1.5 border-l border-emerald-200">
+                         <TableCell className="text-right font-bold text-emerald-700 px-1 py-1.5 border-l border-emerald-200">
                            {formatCurrency(totalPrestacao)}
                          </TableCell>
-                         <TableCell className="font-mono text-right font-bold text-slate-700 px-1 py-1.5">{formatCurrency(0)}</TableCell>
+                         <TableCell className="text-right font-bold text-slate-700 px-1 py-1.5">{formatCurrency(0)}</TableCell>
                        </>
                      )}
                      </TableRow>
@@ -1220,7 +1241,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t bg-white">
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-slate-600">
                 Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, schedule.length)} de {schedule.length}
               </span>
               <div className="flex items-center gap-1">
@@ -1251,7 +1272,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
           </CardHeader>
           <CardContent>
             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-              <p className="text-xs text-slate-600 mb-3 font-mono">
+              <p className="text-xs text-slate-600 mb-3">
                 <strong>Identidade Contábil:</strong>
                 <br />
                 Fechamento BRL = Abertura BRL + Ajuste Cambial + Juros Apropriados BRL − Amortização Paga BRL
@@ -1262,7 +1283,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                 {row0 && (
                   <div className="flex items-center justify-between text-[10px] p-2 rounded bg-slate-50 border border-slate-200">
                     <span className="font-semibold text-slate-600">Parcela 0 (Abertura):</span>
-                    <span className="font-mono text-slate-600">
+                    <span className="text-slate-600">
                       {formatCurrency(row0.fechamento)} = {formatCurrency(row0.aberturaBRL)} (não reconhece variação)
                     </span>
                     <Badge variant="outline" className="text-[8px] px-1.5 py-0">
@@ -1285,7 +1306,7 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                   return (
                     <div key={idx} className={`flex items-center justify-between text-[10px] p-2 rounded ${isValid ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-300"}`}>
                       <span className="font-semibold text-slate-700">Parcela {row.parcela}:</span>
-                      <span className="font-mono text-slate-600">
+                      <span className="text-slate-600">
                         {formatCurrency(fechamento)} = {formatCurrency(abertura)} + {formatCurrency(ajuste)} + {formatCurrency(juros)} − {formatCurrency(amort)}
                       </span>
                       <Badge variant={isValid ? "default" : "destructive"} className="text-[8px] px-1.5 py-0">
@@ -1296,14 +1317,14 @@ export default function AmortizationTable({ result, params, onRecalculate }) {
                 })}
                 
                 {schedule.length > 5 && (
-                  <p className="text-[10px] text-slate-400 text-center mt-2">
+                  <p className="text-[10px] text-slate-500 text-center mt-2">
                     ... mostrando primeiras 5 parcelas. Veja CSV Contábil para tabela completa.
                   </p>
                 )}
               </div>
               
               <div className="mt-4 pt-3 border-t border-slate-200">
-                <p className="text-[10px] text-slate-500 leading-relaxed">
+                <p className="text-[10px] text-slate-600 leading-relaxed">
                   <strong>✅ Critério de validação:</strong> Delta ≤ R$ 0,10 (arredondamento contábil aceitável)
                   <br />
                   <strong className="text-emerald-700">Status:</strong> OK (delta ≤ 0,10) | ALERTA (delta &gt; 0,10)
@@ -1427,7 +1448,7 @@ function SummaryCard({ icon, label, value, color, subtitle }) {
         <Icon className="w-4 h-4 opacity-60" />
         <span className="text-xs font-medium uppercase tracking-wider opacity-70">{label}</span>
       </div>
-      <p className="text-lg font-bold font-mono">{value}</p>
+      <p className="text-lg font-bold">{value}</p>
       {subtitle && <p className="text-[10px] opacity-70 mt-1">{subtitle}</p>}
     </div>
   );

@@ -1,4 +1,4 @@
-# Endividamento — Endividamento
+# AllDebt
 
 Cálculo e gestão de empréstimos/financiamentos, com API Node, PostgreSQL e Docker.
 

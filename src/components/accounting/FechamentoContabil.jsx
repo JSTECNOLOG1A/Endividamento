@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "@/lib/notify";
 import { useAuth } from "@/lib/AuthContext";
+import { createPageUrl } from "../../utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,14 +24,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { CheckCircle2, AlertTriangle, Lock, RotateCcw, Calculator, ClipboardCheck, Settings2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Lock, RotateCcw, Calculator, ClipboardCheck, Settings2, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useSortableRows, SortableTh } from "@/components/ui/sortable-table";
 import AccountingMatrixConfig from "./AccountingMatrixConfig";
 import {
   EVENT_TYPE_LABELS,
   sumSettlementCashBuckets,
   validateSettlement,
   settlementTriggersRecalculation,
-  checkRoundingMateriality,
+  evaluateSettlementMateriality,
   calculateClosingReconciliation,
   buildJournalEntries,
   canApproveClosing,
@@ -69,6 +72,27 @@ function formatCurrency(value) {
   return `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// Ícone de "i" com tooltip explicativo — mesmo padrão usado no formulário de
+// contrato (ContractForm.jsx), só para colar ao lado de labels não óbvias.
+function InfoTip({ text, side = "right" }) {
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={200}>
+        <TooltipTrigger asChild>
+          <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+        </TooltipTrigger>
+        <TooltipContent side={side} className="max-w-xs">
+          <p className="text-xs">{text}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function round2(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
 function lastDayOfMonth(year, month) {
   return new Date(year, month, 0).toISOString().split("T")[0];
 }
@@ -76,6 +100,33 @@ function lastDayOfMonth(year, month) {
 function competenciaDate(year, month) {
   return `${year}-${String(month).padStart(2, "0")}-01`;
 }
+
+// Mesma configuração de reordenação por clique no título da tabela de
+// Contratos, aplicada às 3 tabelas do fechamento contábil (Passo 1/2/3).
+const STEP1_SORT_COLUMNS = {
+  contrato: { getValue: (r) => r.contract.contract_number },
+  vencimento: { numeric: true, getValue: (r) => (r.row.dataVencimento ? new Date(r.row.dataVencimento).getTime() : 0) },
+  principal: { numeric: true, getValue: (r) => r.row.amortizacao || 0 },
+  juros: { numeric: true, getValue: (r) => r.row.jurosPagos || 0 },
+  totalPago: { numeric: true, getValue: (r) => (r.settlement && !r.isEstornado ? r.settlement.total_paid || 0 : -1) },
+  situacao: {
+    getValue: (r) =>
+      !r.settlement || r.isEstornado ? "0-pendente" : r.settlement.triggers_recalculation ? "1-recalculo" : "2-liquidada",
+  },
+};
+
+const STEP2_SORT_COLUMNS = {
+  evento: { getValue: (r) => r.label },
+  valor: { numeric: true, getValue: (r) => r.amount },
+};
+
+const STEP3_SORT_COLUMNS = {
+  data: { numeric: true, getValue: (r) => (r.entry_date ? new Date(r.entry_date).getTime() : 0) },
+  evento: { getValue: (r) => r.eventLabel },
+  conta: { getValue: (r) => r.accountLabel },
+  debito: { numeric: true, getValue: (r) => (r.side === "debito" ? r.amount || 0 : -1) },
+  credito: { numeric: true, getValue: (r) => (r.side === "credito" ? r.amount || 0 : -1) },
+};
 
 function extractScheduleRows(contract) {
   if (!contract.schedule_data) return [];
@@ -89,6 +140,7 @@ function extractScheduleRows(contract) {
 
 const EMPTY_SETTLEMENT_FORM = {
   actual_payment_date: "",
+  valor_pago: "",
   principal_paid: "",
   interest_paid: "",
   penalty_paid: "0",
@@ -101,11 +153,20 @@ const EMPTY_SETTLEMENT_FORM = {
 };
 
 function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing, bankAccounts, dataBase, onSave, saving }) {
+  // Principal e juros previstos pelo cronograma — a referência que a régua
+  // de materialidade usa pra dizer se o valor pago bate "dentro do
+  // esperado" ou não (ver SETTLEMENT_MATERIALITY_CONFIG).
+  const scheduledPrincipal = round2(scheduleRow?.amortizacao || 0);
+  const scheduledInterest = round2(
+    scheduleRow?.jurosPagos ?? ((scheduleRow?.jurosFixosMes || 0) + (scheduleRow?.jurosVariaveisMes || 0))
+  );
+
   const [form, setForm] = useState(() => ({
     ...EMPTY_SETTLEMENT_FORM,
     actual_payment_date: existing?.actual_payment_date || scheduleRow?.dataVencimento || "",
-    principal_paid: String(existing?.principal_paid ?? scheduleRow?.amortizacao ?? 0),
-    interest_paid: String(existing?.interest_paid ?? scheduleRow?.jurosPagos ?? 0),
+    valor_pago: existing ? String(existing.total_paid ?? "") : "",
+    principal_paid: String(existing?.principal_paid ?? scheduledPrincipal ?? 0),
+    interest_paid: String(existing?.interest_paid ?? scheduledInterest ?? 0),
     penalty_paid: String(existing?.penalty_paid ?? 0),
     fee_paid: String(existing?.fee_paid ?? 0),
     discount_amount: String(existing?.discount_amount ?? 0),
@@ -114,6 +175,28 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
     bank_account_id: existing?.bank_account_id || "",
     observacao: existing?.observacao || "",
   }));
+
+  // O usuário só precisa informar o valor total pago (extrato do banco) —
+  // o sistema assume que principal e juros previstos estão certos e joga a
+  // diferença automaticamente em "ajuste de arredondamento". Se a
+  // diferença for grande demais (fora da margem de materialidade), o botão
+  // de salvar fica bloqueado até o usuário reclassificar manualmente nos
+  // campos abaixo (multa/tarifa/outros, ou principal/juros se o pagamento
+  // realmente foi diferente do programado).
+  const handleValorPagoChange = (value) => {
+    const valorPagoNum = Number(String(value).replace(",", ".")) || 0;
+    const diferenca = round2(valorPagoNum - scheduledPrincipal - scheduledInterest);
+    setForm((prev) => ({
+      ...prev,
+      valor_pago: value,
+      principal_paid: String(scheduledPrincipal),
+      interest_paid: String(scheduledInterest),
+      penalty_paid: "0",
+      fee_paid: "0",
+      other_amount: "0",
+      rounding_adjustment: String(diferenca),
+    }));
+  };
 
   const num = (key) => Number(String(form[key]).replace(",", ".")) || 0;
   const draftSettlement = {
@@ -131,11 +214,16 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
   const totalPaid = sumSettlementCashBuckets(draftSettlement);
   draftSettlement.total_paid = totalPaid;
 
+  const valorPagoNum = num("valor_pago");
+  const materiality = evaluateSettlementMateriality(valorPagoNum, scheduledPrincipal, scheduledInterest);
   const validation = validateSettlement(draftSettlement, scheduleRow, dataBase);
-  const materiality = checkRoundingMateriality(draftSettlement);
   const willTriggerRecalc = settlementTriggersRecalculation(draftSettlement, scheduleRow);
 
   const handleSave = () => {
+    if (!form.valor_pago) {
+      toast.warning("Informe o valor total pago (conforme o extrato bancário).");
+      return;
+    }
     if (!validation.valid) {
       toast.warning(validation.blockers[0]);
       return;
@@ -156,7 +244,7 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Baixa de parcela — {contract.contract_number}</DialogTitle>
+          <DialogTitle>Baixa de parcela — {contract?.contract_number}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2 max-h-[70vh] overflow-y-auto pr-1">
           <div className="grid grid-cols-2 gap-3">
@@ -176,40 +264,61 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
             </div>
           </div>
 
+          <div className="space-y-1">
+            <Label className="text-xs">Valor total pago (conforme extrato bancário) *</Label>
+            <Input className="h-9" value={form.valor_pago} onChange={(e) => handleValorPagoChange(e.target.value)} />
+            <p className="text-[11px] text-slate-600">
+              Previsto: {formatCurrency(scheduledPrincipal)} de principal + {formatCurrency(scheduledInterest)} de juros = {formatCurrency(scheduledPrincipal + scheduledInterest)}.
+              {" "}Diferença:{" "}
+              <span className={materiality.withinMargin ? "text-emerald-600 font-medium" : "text-red-600 font-semibold"}>
+                {formatCurrency(materiality.diferenca)} ({(materiality.percentual * 100).toFixed(2)}%)
+              </span>
+              {materiality.withinMargin
+                ? " — dentro da margem aceitável, tratada automaticamente como ajuste de arredondamento."
+                : " — acima da margem aceitável. Reclassifique abaixo antes de salvar (multa, tarifa, outros, ou principal/juros se o pagamento realmente foi diferente do previsto)."}
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Principal pago</Label>
-              <Input className="h-9 font-mono" value={form.principal_paid} onChange={(e) => setForm({ ...form, principal_paid: e.target.value })} />
+              <Input className="h-9" value={form.principal_paid} onChange={(e) => setForm({ ...form, principal_paid: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Juros pago</Label>
-              <Input className="h-9 font-mono" value={form.interest_paid} onChange={(e) => setForm({ ...form, interest_paid: e.target.value })} />
+              <Input className="h-9" value={form.interest_paid} onChange={(e) => setForm({ ...form, interest_paid: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Multa / mora</Label>
-              <Input className="h-9 font-mono" value={form.penalty_paid} onChange={(e) => setForm({ ...form, penalty_paid: e.target.value })} />
+              <Input className="h-9" value={form.penalty_paid} onChange={(e) => setForm({ ...form, penalty_paid: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Tarifa bancária</Label>
-              <Input className="h-9 font-mono" value={form.fee_paid} onChange={(e) => setForm({ ...form, fee_paid: e.target.value })} />
+              <Input className="h-9" value={form.fee_paid} onChange={(e) => setForm({ ...form, fee_paid: e.target.value })} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Ajuste de arredondamento</Label>
-              <Input className="h-9 font-mono" value={form.rounding_adjustment} onChange={(e) => setForm({ ...form, rounding_adjustment: e.target.value })} />
+              <Label className="text-xs">
+                Ajuste de arredondamento
+                <InfoTip text="Pequena diferença de centavos entre o previsto e o pago (arredondamento de taxa, por exemplo). Dentro da margem aceitável, o sistema já preenche isso sozinho." />
+              </Label>
+              <Input className="h-9" value={form.rounding_adjustment} onChange={(e) => setForm({ ...form, rounding_adjustment: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Outros</Label>
-              <Input className="h-9 font-mono" value={form.other_amount} onChange={(e) => setForm({ ...form, other_amount: e.target.value })} />
+              <Input className="h-9" value={form.other_amount} onChange={(e) => setForm({ ...form, other_amount: e.target.value })} />
             </div>
             <div className="space-y-1 col-span-2">
-              <Label className="text-xs">Desconto financeiro obtido (remissão — não é rotina)</Label>
-              <Input className="h-9 font-mono" value={form.discount_amount} onChange={(e) => setForm({ ...form, discount_amount: e.target.value })} />
+              <Label className="text-xs">
+                Desconto financeiro obtido (remissão — não é rotina)
+                <InfoTip text="Uso excepcional: quando o banco perdoa/reduz parte do valor devido (renegociação, acordo). Não é o campo para diferenças normais de arredondamento — para isso use 'Ajuste de arredondamento'." />
+              </Label>
+              <Input className="h-9" value={form.discount_amount} onChange={(e) => setForm({ ...form, discount_amount: e.target.value })} />
             </div>
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 flex items-center justify-between">
-            <span className="text-xs text-slate-500">Total pago (calculado)</span>
-            <span className="font-mono font-semibold text-slate-900">{formatCurrency(totalPaid)}</span>
+            <span className="text-xs text-slate-600">Total pago (calculado a partir dos campos acima)</span>
+            <span className="font-semibold text-slate-900">{formatCurrency(totalPaid)}</span>
           </div>
 
           <div className="space-y-1">
@@ -221,13 +330,7 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex gap-2">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               Principal ou juros pago diverge do previsto — esta baixa vai exigir recálculo do contrato
-              (reabra o contrato no Simulador) antes do fechamento poder ser aprovado.
-            </div>
-          )}
-          {materiality.material && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              {materiality.message}
+              (reabra o contrato na Calculadora) antes do fechamento poder ser aprovado.
             </div>
           )}
           {validation.warnings.map((w, i) => (
@@ -239,7 +342,7 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
-          <Button type="button" onClick={handleSave} disabled={saving || !validation.valid}>
+          <Button type="button" onClick={handleSave} disabled={saving || !validation.valid || !form.valor_pago}>
             {saving ? "Salvando..." : "Salvar baixa"}
           </Button>
         </DialogFooter>
@@ -251,15 +354,33 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
 export default function FechamentoContabil({ entityId, entityName }) {
   const { user } = useAuth();
   const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1);
-  const [dataBase, setDataBase] = useState(lastDayOfMonth(today.getFullYear(), today.getMonth() + 1));
+  // Se a tela foi aberta com ?month=&year= na URL (ex.: ao voltar de um
+  // recálculo reaberto pelo botão "Requer recálculo", ver
+  // handleReopenForRecalc), inicia na mesma competência de onde saiu — caso
+  // contrário mantém o padrão de sempre (mês/ano atuais).
+  const initialParams = React.useMemo(() => new URLSearchParams(window.location.search), []);
+  const [year, setYear] = useState(() => {
+    const y = Number(initialParams.get("year"));
+    return Number.isFinite(y) && y > 0 ? y : today.getFullYear();
+  });
+  const [month, setMonth] = useState(() => {
+    const m = Number(initialParams.get("month"));
+    return Number.isFinite(m) && m >= 1 && m <= 12 ? m : today.getMonth() + 1;
+  });
+  const [dataBase, setDataBase] = useState(() => lastDayOfMonth(year, month));
   const [dialogTarget, setDialogTarget] = useState(null); // { contract, scheduleRow, existing }
   const [reopenReason, setReopenReason] = useState("");
   const [reopenOpen, setReopenOpen] = useState(false);
   const [matrixOpen, setMatrixOpen] = useState(false);
   const [calcResult, setCalcResult] = useState(null);
   const [journalResult, setJournalResult] = useState(null);
+  const [recalcTarget, setRecalcTarget] = useState(null); // { contract, row, settlement }
+  const [recalcJustification, setRecalcJustification] = useState("");
+  const [recalcSubmitting, setRecalcSubmitting] = useState(false);
+  // Mesmo padrão do "Reabrir para Edição" em ContractWorkflow.jsx — se
+  // reopenApprovedContractForEditing bloquear por título já integrado ao
+  // ERP, oferece estornar lá também em vez de só travar.
+  const [recalcErpBlock, setRecalcErpBlock] = useState(null);
 
   const competencia = competenciaDate(year, month);
 
@@ -359,6 +480,48 @@ export default function FechamentoContabil({ entityId, entityName }) {
     return map;
   }, [settlements]);
 
+  // Linhas com os dados derivados (settlement/situação) já resolvidos, pra
+  // alimentar a ordenação por clique no título sem recalcular a cada render
+  // — mesma configuração visual e de reordenação da tabela de Contratos.
+  // Hooks precisam ficar antes do "if (!entityId) return" logo abaixo.
+  const step1Rows = useMemo(
+    () =>
+      scheduleRowsInMonth.map(({ contract, row }) => {
+        const settlement = settlementByKey.get(`${contract.id}|${row.parcela}`);
+        const isEstornado = settlement?.status === "estornado";
+        return { contract, row, settlement, isEstornado, _key: `${contract.id}-${row.parcela}` };
+      }),
+    [scheduleRowsInMonth, settlementByKey]
+  );
+  const step1Sort = useSortableRows(step1Rows, STEP1_SORT_COLUMNS);
+
+  const step2Rows = useMemo(
+    () =>
+      calcResult
+        ? Object.entries(calcResult.eventTotals).map(([type, amount]) => ({
+            type,
+            amount,
+            label: EVENT_TYPE_LABELS[type] || type,
+          }))
+        : [],
+    [calcResult]
+  );
+  const step2Sort = useSortableRows(step2Rows, STEP2_SORT_COLUMNS);
+
+  const step3Rows = useMemo(
+    () =>
+      journalResult
+        ? journalResult.entries.map((e, i) => ({
+            ...e,
+            _key: i,
+            eventLabel: EVENT_TYPE_LABELS[e.event_type] || e.event_type,
+            accountLabel: accountName(e.account_id),
+          }))
+        : [],
+    [journalResult, chartOfAccounts]
+  );
+  const step3Sort = useSortableRows(step3Rows, STEP3_SORT_COLUMNS);
+
   const handleOpenSettlement = async (contract, row) => {
     const activeClosing = closing || (await ensureClosing());
     if (!activeClosing) return;
@@ -412,7 +575,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
         if (!settlementsByContract.has(s.contract_id)) settlementsByContract.set(s.contract_id, []);
         settlementsByContract.get(s.contract_id).push(s);
       });
-      const reconciliation = calculateClosingReconciliation(contracts, settlementsByContract, year, month);
+      const reconciliation = calculateClosingReconciliation(contracts, settlementsByContract, year, month, dataBase);
       setCalcResult(reconciliation);
       const nextStatus = reconciliation.hasBlockingDivergence ? "divergencia" : "calculado";
       await base44.entities.AccountingClosing.update(activeClosing.id, {
@@ -494,10 +657,77 @@ export default function FechamentoContabil({ entityId, entityName }) {
     }
   };
 
+  // Atalho do badge "Requer recálculo" (Step 1): abre o diálogo de
+  // confirmação para reabrir DIRETO o contrato em modo recálculo na
+  // Calculadora — sem precisar o usuário navegar manualmente até o
+  // contrato e achar o botão "Reabrir para Edição" lá.
+  const handleOpenRecalcDialog = (contract, row, settlement) => {
+    if (!isAdmin) {
+      toast.error("Apenas administradores podem reabrir um contrato aprovado para recálculo.");
+      return;
+    }
+    setRecalcTarget({ contract, row, settlement });
+    setRecalcJustification(
+      `Divergência na baixa da parcela ${row.parcela} (venc. ${row.dataVencimento?.split("-").reverse().join("/")}) identificada no Fechamento Contábil de ${MONTHS[month - 1]}/${year}.`
+    );
+  };
+
+  const handleConfirmReopenForRecalc = async () => {
+    if (!recalcTarget) return;
+    if (!recalcJustification.trim()) {
+      toast.warning("Informe a justificativa da reabertura.");
+      return;
+    }
+    const { contract, row, settlement } = recalcTarget;
+    setRecalcSubmitting(true);
+    try {
+      // Volta para esta mesma tela (mesma empresa/competência) depois do
+      // recálculo ser salvo — ver Simulator.jsx (recalcFlag.returnTo).
+      const returnTo = `${createPageUrl("Accounting")}?tab=fechamento&entity=${encodeURIComponent(entityId || "")}&month=${month}&year=${year}`;
+
+      // Mesma função usada pelo "Reabrir para Edição" da tela de Contratos —
+      // não um PATCH direto: estorna os títulos a pagar ainda não
+      // integrados ao ERP (o recálculo muda o cronograma) e bloqueia se
+      // algum já foi integrado, pedindo estorno manual primeiro.
+      await base44.functions.invoke("reopenApprovedContractForEditing", {
+        contractId: contract.id,
+        comments: recalcJustification.trim(),
+        ...(recalcErpBlock ? { confirmErpReversal: true } : {}),
+        extraFields: {
+          // Campo dinâmico (extra_json) — não exige migração. Lido de volta
+          // em Simulator.jsx → loadContractForEdit para o "modo recálculo".
+          recalculation_flag: {
+            parcela: row.parcela,
+            dataVencimento: row.dataVencimento,
+            contractNumber: contract.contract_number,
+            settlementId: settlement?.id || null,
+            note: recalcJustification.trim(),
+            flaggedBy: user?.email,
+            flaggedAt: new Date().toISOString(),
+            returnTo,
+          },
+        },
+      });
+
+      setRecalcTarget(null);
+      setRecalcJustification("");
+      setRecalcErpBlock(null);
+      window.location.href = `${createPageUrl("Simulator")}?edit=${contract.id}`;
+    } catch (err) {
+      if (err.data?.code === "TITULOS_INTEGRADOS_PENDENTES" || err.data?.code === "ESTORNO_ERP_FALHOU") {
+        setRecalcErpBlock({ code: err.data.code, details: err.data.details, message: err.message });
+      } else {
+        toast.error("Erro ao reabrir contrato: " + (err.message || "tente novamente"));
+      }
+    } finally {
+      setRecalcSubmitting(false);
+    }
+  };
+
   if (!entityId) {
     return (
       <Card className="border-slate-200 shadow-sm">
-        <CardContent className="py-10 text-center text-sm text-slate-500">
+        <CardContent className="py-10 text-center text-sm text-slate-600">
           Selecione uma empresa específica no filtro acima — o fechamento contábil é sempre individual, por empresa.
         </CardContent>
       </Card>
@@ -515,11 +745,11 @@ export default function FechamentoContabil({ entityId, entityName }) {
           <div className="flex flex-wrap items-end gap-4 justify-between">
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1">
-                <Label className="text-xs text-slate-500 uppercase tracking-wider">Empresa</Label>
+                <Label className="text-xs text-slate-600 uppercase tracking-wider">Empresa</Label>
                 <p className="text-sm font-semibold text-slate-800 h-9 flex items-center">{entityName}</p>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-slate-500 uppercase tracking-wider">Competência</Label>
+                <Label className="text-xs text-slate-600 uppercase tracking-wider">Competência</Label>
                 <div className="flex gap-1.5">
                   <Select value={String(month)} onValueChange={(v) => { setMonth(Number(v)); setDataBase(lastDayOfMonth(year, Number(v))); }} disabled={isApproved}>
                     <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
@@ -532,8 +762,24 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 </div>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-slate-500 uppercase tracking-wider">Data-base</Label>
-                <Input type="date" className="h-9" value={dataBase} onChange={(e) => setDataBase(e.target.value)} disabled={isApproved} />
+                <Label className="text-xs text-slate-600 uppercase tracking-wider">
+                  Data-base
+                  <InfoTip text="Data usada para calcular o saldo e reclassificar principal/juros entre circulante e não circulante. Normalmente é o último dia da competência selecionada." />
+                </Label>
+                <Input
+                  type="date"
+                  className="h-9"
+                  value={dataBase}
+                  onChange={(e) => {
+                    // Mesma proteção do que a tela de Leitura Contábil: o
+                    // input nativo de data emite valor vazio enquanto o
+                    // usuário digita um segmento incompleto — não deixa essa
+                    // string vazia virar dataBase (quebraria os cálculos de
+                    // fechamento mais abaixo e derrubaria a tela em branco).
+                    if (e.target.value) setDataBase(e.target.value);
+                  }}
+                  disabled={isApproved}
+                />
               </div>
             </div>
             <div className="flex flex-col items-end gap-1.5">
@@ -541,7 +787,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 {STATUS_LABELS[closing?.status] || "Não iniciado"}
               </Badge>
               {closing?.approved_by && (
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-500">
                   Aprovado por {closing.approved_by} em {closing.approved_at?.slice(0, 10).split("-").reverse().join("/")}
                 </p>
               )}
@@ -567,50 +813,56 @@ export default function FechamentoContabil({ entityId, entityName }) {
             <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-bold">1</span>
             Baixas de parcelas pagas
           </CardTitle>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-600">
             Registre os pagamentos efetivamente realizados até a data-base — usados para ajustar o saldo e gerar os lançamentos.
           </p>
         </CardHeader>
         <CardContent>
           {scheduleRowsInMonth.length === 0 ? (
-            <p className="text-sm text-slate-500 py-6 text-center">Nenhuma parcela prevista para esta competência.</p>
+            <p className="text-sm text-slate-600 py-6 text-center">Nenhuma parcela prevista para esta competência.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[820px]">
+              <table className="w-full text-[11px] min-w-[820px]">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Contrato</th>
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Vencimento</th>
-                    <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">Principal previsto</th>
-                    <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">Juros previsto</th>
-                    <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">Total pago</th>
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Situação</th>
-                    <th className="px-2 py-2" />
+                    <SortableTh sortField="contrato" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort}>Contrato</SortableTh>
+                    <SortableTh sortField="vencimento" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort}>Vencimento</SortableTh>
+                    <SortableTh sortField="principal" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort} right>Principal previsto</SortableTh>
+                    <SortableTh sortField="juros" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort} right>Juros previsto</SortableTh>
+                    <SortableTh sortField="totalPago" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort} right>Total pago</SortableTh>
+                    <SortableTh sortField="situacao" sortKey={step1Sort.sortKey} sortDir={step1Sort.sortDir} onSort={step1Sort.toggleSort}>Situação</SortableTh>
+                    <th className="px-2 py-1.5" />
                   </tr>
                 </thead>
                 <tbody>
-                  {scheduleRowsInMonth.map(({ contract, row }) => {
-                    const settlement = settlementByKey.get(`${contract.id}|${row.parcela}`);
-                    const isEstornado = settlement?.status === "estornado";
+                  {step1Sort.sortedRows.map(({ contract, row, settlement, isEstornado, _key }) => {
                     return (
-                      <tr key={`${contract.id}-${row.parcela}`} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="px-2 py-2 text-slate-700">{contract.contract_number}</td>
-                        <td className="px-2 py-2 text-slate-700">{row.dataVencimento?.split("-").reverse().join("/")}</td>
-                        <td className="px-2 py-2 text-right font-mono text-slate-700">{formatCurrency(row.amortizacao)}</td>
-                        <td className="px-2 py-2 text-right font-mono text-slate-700">{formatCurrency(row.jurosPagos)}</td>
-                        <td className="px-2 py-2 text-right font-mono text-slate-700">
+                      <tr key={_key} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="px-2 py-1.5 text-slate-700">{contract.contract_number}</td>
+                        <td className="px-2 py-1.5 text-slate-700">{row.dataVencimento?.split("-").reverse().join("/")}</td>
+                        <td className="px-2 py-1.5 text-right text-slate-700">{formatCurrency(row.amortizacao)}</td>
+                        <td className="px-2 py-1.5 text-right text-slate-700">{formatCurrency(row.jurosPagos)}</td>
+                        <td className="px-2 py-1.5 text-right text-slate-700">
                           {settlement && !isEstornado ? formatCurrency(settlement.total_paid) : "—"}
                         </td>
-                        <td className="px-2 py-2">
+                        <td className="px-2 py-1.5">
                           {!settlement || isEstornado ? (
                             <Badge variant="secondary">Pendente</Badge>
                           ) : settlement.triggers_recalculation ? (
-                            <Badge variant="destructive">Requer recálculo</Badge>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-6 text-xs gap-1 px-2"
+                              onClick={() => handleOpenRecalcDialog(contract, row, settlement)}
+                              disabled={isApproved}
+                            >
+                              <RotateCcw className="w-3 h-3" /> Requer recálculo
+                            </Button>
                           ) : (
                             <Badge variant="default">Liquidada</Badge>
                           )}
                         </td>
-                        <td className="px-2 py-2 text-right">
+                        <td className="px-2 py-1.5 text-right">
                           <div className="flex gap-1.5 justify-end">
                             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={isApproved}
                               onClick={() => handleOpenSettlement(contract, row)}>
@@ -643,7 +895,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-bold">2</span>
                 Calcular o novo saldo
               </CardTitle>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-slate-600 mt-1">
                 Concilia abertura, apropriações e pagamentos reais do período — por evento, não por diferença de saldo.
               </p>
             </div>
@@ -658,42 +910,42 @@ export default function FechamentoContabil({ entityId, entityName }) {
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 flex gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 {calcResult.pendingRecalculation.length} baixa(s) exigem recálculo do contrato antes de seguir
-                para aprovação — reabra {calcResult.pendingRecalculation.map((p) => p.contractNumber).join(", ")} no Simulador.
+                para aprovação — reabra {calcResult.pendingRecalculation.map((p) => p.contractNumber).join(", ")} na Calculadora.
               </div>
             )}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               <div className="rounded-lg border border-slate-200 px-3 py-2">
-                <p className="text-xs text-slate-500">Saldo anterior</p>
-                <p className="font-mono font-semibold">{formatCurrency(calcResult.opening.principal + calcResult.opening.interest + calcResult.opening.fx)}</p>
+                <p className="text-xs text-slate-600">Saldo anterior</p>
+                <p className="font-semibold">{formatCurrency(calcResult.opening.principal + calcResult.opening.interest + calcResult.opening.fx)}</p>
               </div>
               <div className="rounded-lg border border-slate-200 px-3 py-2">
-                <p className="text-xs text-slate-500">Saldo final</p>
-                <p className="font-mono font-semibold">{formatCurrency(calcResult.closing.principal + calcResult.closing.interest + calcResult.closing.fx)}</p>
+                <p className="text-xs text-slate-600">Saldo final</p>
+                <p className="font-semibold">{formatCurrency(calcResult.closing.principal + calcResult.closing.interest + calcResult.closing.fx)}</p>
               </div>
               <div className="rounded-lg border border-slate-200 px-3 py-2">
-                <p className="text-xs text-slate-500">Contratos no lote</p>
-                <p className="font-mono font-semibold">{calcResult.perContract.length}</p>
+                <p className="text-xs text-slate-600">Contratos no lote</p>
+                <p className="font-semibold">{calcResult.perContract.length}</p>
               </div>
               <div className="rounded-lg border border-slate-200 px-3 py-2">
-                <p className="text-xs text-slate-500">Pendências</p>
-                <p className={`font-mono font-semibold ${calcResult.hasBlockingDivergence ? "text-red-600" : "text-emerald-600"}`}>
+                <p className="text-xs text-slate-600">Pendências</p>
+                <p className={`font-semibold ${calcResult.hasBlockingDivergence ? "text-red-600" : "text-emerald-600"}`}>
                   {calcResult.pendingRecalculation.length}
                 </p>
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-[11px]">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Evento</th>
-                    <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">Valor</th>
+                    <SortableTh sortField="evento" sortKey={step2Sort.sortKey} sortDir={step2Sort.sortDir} onSort={step2Sort.toggleSort}>Evento</SortableTh>
+                    <SortableTh sortField="valor" sortKey={step2Sort.sortKey} sortDir={step2Sort.sortDir} onSort={step2Sort.toggleSort} right>Valor</SortableTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(calcResult.eventTotals).map(([type, amount]) => (
+                  {step2Sort.sortedRows.map(({ type, amount, label }) => (
                     <tr key={type} className="border-b border-slate-100">
-                      <td className="px-2 py-2 text-slate-700">{EVENT_TYPE_LABELS[type] || type}</td>
-                      <td className="px-2 py-2 text-right font-mono text-slate-700">{formatCurrency(amount)}</td>
+                      <td className="px-2 py-1.5 text-slate-700">{label}</td>
+                      <td className="px-2 py-1.5 text-right text-slate-700">{formatCurrency(amount)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -712,7 +964,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-bold">3</span>
                 Checar e validar contabilidade
               </CardTitle>
-              <p className="text-xs text-slate-500 mt-1">Confira os lançamentos gerados e aprove o lote para finalizar o fechamento.</p>
+              <p className="text-xs text-slate-600 mt-1">Confira os lançamentos gerados e aprove o lote para finalizar o fechamento.</p>
             </div>
             <Button size="sm" variant="outline" className="gap-1.5" disabled={!calcResult || isApproved} onClick={handleBuildJournal}>
               <ClipboardCheck className="w-3.5 h-3.5" /> Gerar lançamentos
@@ -722,32 +974,32 @@ export default function FechamentoContabil({ entityId, entityName }) {
         {journalResult && (
           <CardContent className="space-y-4">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[700px]">
+              <table className="w-full text-[11px] min-w-[700px]">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Data</th>
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Evento</th>
-                    <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Conta</th>
-                    <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">Débito</th>
-                    <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">Crédito</th>
+                    <SortableTh sortField="data" sortKey={step3Sort.sortKey} sortDir={step3Sort.sortDir} onSort={step3Sort.toggleSort}>Data</SortableTh>
+                    <SortableTh sortField="evento" sortKey={step3Sort.sortKey} sortDir={step3Sort.sortDir} onSort={step3Sort.toggleSort}>Evento</SortableTh>
+                    <SortableTh sortField="conta" sortKey={step3Sort.sortKey} sortDir={step3Sort.sortDir} onSort={step3Sort.toggleSort}>Conta</SortableTh>
+                    <SortableTh sortField="debito" sortKey={step3Sort.sortKey} sortDir={step3Sort.sortDir} onSort={step3Sort.toggleSort} right>Débito</SortableTh>
+                    <SortableTh sortField="credito" sortKey={step3Sort.sortKey} sortDir={step3Sort.sortDir} onSort={step3Sort.toggleSort} right>Crédito</SortableTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {journalResult.entries.map((e, i) => (
-                    <tr key={i} className="border-b border-slate-100">
-                      <td className="px-2 py-2 text-slate-700">{e.entry_date?.split("-").reverse().join("/")}</td>
-                      <td className="px-2 py-2 text-slate-700">{EVENT_TYPE_LABELS[e.event_type] || e.event_type}</td>
-                      <td className="px-2 py-2 text-slate-700">{accountName(e.account_id)}</td>
-                      <td className="px-2 py-2 text-right font-mono text-slate-700">{e.side === "debito" ? formatCurrency(e.amount) : ""}</td>
-                      <td className="px-2 py-2 text-right font-mono text-slate-700">{e.side === "credito" ? formatCurrency(e.amount) : ""}</td>
+                  {step3Sort.sortedRows.map((e) => (
+                    <tr key={e._key} className="border-b border-slate-100">
+                      <td className="px-2 py-1.5 text-slate-700">{e.entry_date?.split("-").reverse().join("/")}</td>
+                      <td className="px-2 py-1.5 text-slate-700">{e.eventLabel}</td>
+                      <td className="px-2 py-1.5 text-slate-700">{e.accountLabel}</td>
+                      <td className="px-2 py-1.5 text-right text-slate-700">{e.side === "debito" ? formatCurrency(e.amount) : ""}</td>
+                      <td className="px-2 py-1.5 text-right text-slate-700">{e.side === "credito" ? formatCurrency(e.amount) : ""}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-300 font-semibold">
-                    <td className="px-2 py-2" colSpan={3}>Totais</td>
-                    <td className="px-2 py-2 text-right font-mono">{formatCurrency(journalResult.totalDebito)}</td>
-                    <td className="px-2 py-2 text-right font-mono">{formatCurrency(journalResult.totalCredito)}</td>
+                    <td className="px-2 py-1.5" colSpan={3}>Totais</td>
+                    <td className="px-2 py-1.5 text-right">{formatCurrency(journalResult.totalDebito)}</td>
+                    <td className="px-2 py-1.5 text-right">{formatCurrency(journalResult.totalCredito)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -800,6 +1052,57 @@ export default function FechamentoContabil({ entityId, entityName }) {
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setReopenOpen(false)}>Cancelar</Button>
             <Button type="button" variant="destructive" onClick={handleReopen}>Confirmar reabertura</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!recalcTarget} onOpenChange={(open) => { if (!open) { setRecalcTarget(null); setRecalcJustification(""); setRecalcErpBlock(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><RotateCcw className="w-4 h-4" /> Reabrir contrato para recálculo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-slate-600">
+              O contrato {recalcTarget?.contract?.contract_number} volta para rascunho e abre direto na Calculadora,
+              em modo recálculo, com a parcela {recalcTarget?.row?.parcela} destacada. Ao salvar o novo cálculo lá,
+              você volta automaticamente para esta mesma tela.
+            </p>
+            <div className="space-y-1">
+              <Label className="text-xs">Justificativa *</Label>
+              <Textarea className="min-h-20" value={recalcJustification} onChange={(e) => setRecalcJustification(e.target.value)} />
+            </div>
+            {recalcErpBlock && (
+              <div className="space-y-2 text-sm bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                <p className="text-amber-800">{recalcErpBlock.message}</p>
+                <ul className="text-xs text-slate-700 space-y-0.5">
+                  {[...(recalcErpBlock.details?.titulos || []), ...(recalcErpBlock.details?.titulosReceber || [])].map((t) => (
+                    <li key={t.id}>
+                      {t.prefixo} {t.parcela} — {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(t.valor) || 0)}
+                      {t.erp_mensagem ? ` — ${t.erp_mensagem}` : ""}
+                    </li>
+                  ))}
+                </ul>
+                {recalcErpBlock.code === "TITULOS_INTEGRADOS_PENDENTES" ? (
+                  <p className="text-amber-800">Deseja estornar esses títulos no ERP e reabrir o contrato em seguida?</p>
+                ) : (
+                  <p className="text-red-700">
+                    O ERP recusou o estorno de um ou mais títulos — resolva manualmente em Contas a Pagar/Receber antes de tentar novamente.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => { setRecalcTarget(null); setRecalcJustification(""); setRecalcErpBlock(null); }}>Cancelar</Button>
+            {recalcErpBlock?.code !== "ESTORNO_ERP_FALHOU" && (
+              <Button type="button" variant="destructive" onClick={handleConfirmReopenForRecalc} disabled={recalcSubmitting}>
+                {recalcSubmitting
+                  ? "Reabrindo..."
+                  : recalcErpBlock?.code === "TITULOS_INTEGRADOS_PENDENTES"
+                    ? "Estornar no ERP e Reabrir"
+                    : "Reabrir e ir para a Calculadora"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

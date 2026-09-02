@@ -745,6 +745,21 @@ function consultEncontrado(data) {
 function patchFromConsult(title, data) {
   const encontrado = consultEncontrado(data);
   if (encontrado === false) {
+    // Título não existe mais no Protheus — normalmente porque foi estornado
+    // lá diretamente (fora do AllDebt). Antes disso só deixava uma
+    // mensagem e mantinha erp_status="integrado" pra sempre, travando o
+    // contrato indefinidamente (reopenApprovedContractForEditing bloqueia
+    // reabertura enquanto houver título "integrado"/"baixado" — ver
+    // backend/src/modules/payables/generate.js). Refletir o estorno aqui
+    // libera a reabertura (que então estorna o título local também, já que
+    // "estornado" não conta como integrado) sem apagar nada sozinho.
+    if (title.erp_status === "integrado" || title.integrado_erp) {
+      return {
+        erp_status: "estornado",
+        integrado_erp: false,
+        erp_mensagem: "Estornado no Protheus (não encontrado nesta consulta).",
+      };
+    }
     return {
       erp_mensagem: "Não localizado no Protheus nesta consulta. O título local foi mantido.",
     };
@@ -884,6 +899,16 @@ export async function refreshPayableTitlesFromErp(payload = {}) {
   const entitiesResult = { rows: await selectEntitiesByIds(entityIds) };
   const entityById = new Map(entitiesResult.rows.map((row) => [row.id, row]));
 
+  // Pra decidir o que fazer com um título que a consulta encontra estornado
+  // no ERP (ver bloco abaixo, perto de applyConsultPatch): busca o status
+  // atual do contrato de cada título de uma vez, evitando 1 query por título.
+  const contractIds = [...new Set(titlesResult.rows.map((row) => row.contract_id))];
+  const contractsResult = await pool.query(
+    `SELECT id, status FROM loan_contracts WHERE id = ANY($1::text[])`,
+    [contractIds]
+  );
+  const contractStatusById = new Map(contractsResult.rows.map((row) => [row.id, row.status]));
+
   let sm0Records = [];
   try {
     sm0Records = await fetchSm0Records(linked.integration, credential);
@@ -994,6 +1019,31 @@ export async function refreshPayableTitlesFromErp(payload = {}) {
       }
 
       const patch = patchFromConsult(title, response.data);
+
+      // Estornado no ERP + contrato ainda aprovado: o título local não
+      // representa mais nada real (o ERP não tem mais esse registro), então
+      // some daqui — não vira "Estornado" preso na tela pra sempre. A
+      // próxima sincronização (toda abertura de Contas a Pagar, ou a mesma
+      // tarefa agendada que rodou essa consulta) recria um título novo
+      // automaticamente, já que a chave contrato+prefixo+parcela volta a
+      // estar livre (ver generatePayableTitlesForContract em
+      // backend/src/modules/payables/generate.js). Contrato que NÃO está
+      // mais aprovado já tem sua própria limpeza (reopenApprovedContractForEditing
+      // / cleanupOrphanedPayableTitles) — aqui não mexe pra não duplicar.
+      if (patch.erp_status === "estornado" && contractStatusById.get(title.contract_id) === "aprovado") {
+        await pool.query(`DELETE FROM payable_titles WHERE id = $1`, [title.id]);
+        consulted += 1;
+        results.push({
+          id: title.id,
+          ok: true,
+          encontrado,
+          erp_status: "estornado",
+          message: "Estornado no ERP — título removido, será regerado na próxima sincronização",
+          removed: true,
+        });
+        continue;
+      }
+
       const row = await applyConsultPatch(title.id, patch);
       consulted += 1;
       results.push({

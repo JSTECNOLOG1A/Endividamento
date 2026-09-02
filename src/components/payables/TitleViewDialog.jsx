@@ -40,8 +40,8 @@ function formatDateTime(value) {
 function Field({ label, value, mono = false, span = false }) {
   return (
     <div className={span ? "sm:col-span-2" : ""}>
-      <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">{label}</p>
-      <p className={`mt-0.5 text-sm text-slate-800 break-words ${mono ? "font-mono text-xs" : ""}`}>
+      <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">{label}</p>
+      <p className={`mt-0.5 text-sm text-slate-800 break-words ${mono ? " text-xs" : ""}`}>
         {value || "—"}
       </p>
     </div>

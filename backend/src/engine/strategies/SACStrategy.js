@@ -7,7 +7,14 @@ export class SACStrategy {
   constructor(principal, principalInstallments) {
     this.principal = principal;
     this.principalInstallments = principalInstallments;
-    this.sacAmort = principal / principalInstallments;
+    // A fatia constante só é calculada no 1º evento de amortização (ver
+    // calculatePayment), usando o saldo devedor NAQUELE momento — não o
+    // principal original. Isso importa quando há carência com capitalização
+    // (CAPITALIZAR): o saldo já cresceu com os juros capitalizados antes da
+    // amortização começar, e a fatia precisa refletir esse saldo real para o
+    // contrato fechar em 0,00 no fim (senão os juros capitalizados na
+    // carência nunca são amortizados).
+    this.sacAmort = null;
   }
 
   /**
@@ -21,8 +28,14 @@ export class SACStrategy {
     let jurosAcruados = 0;
 
     if (evt.hasPrincipal) {
-      amortizacao = this.sacAmort;
-      
+      if (this.sacAmort === null) {
+        this.sacAmort = sdInicial / this.principalInstallments;
+      }
+      // REGRA DE OURO: a última parcela sempre liquida o saldo devedor total,
+      // absorvendo qualquer resíduo de capitalização/arredondamento — garante
+      // fechamento exato em 0,00.
+      amortizacao = isLastPayment ? sdInicial : this.sacAmort;
+
       // PMT = amortização + juros do mês + juros acumulados de períodos anteriores
       jurosPagos = jurosTotal + acumulatedUnpaidInterest;
       prestacao = amortizacao + jurosPagos;

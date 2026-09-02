@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SORT_HEAD_CLASS } from "@/components/ui/sortable-table";
 
 const PAGE_SIZE = 50;
 
@@ -273,7 +274,7 @@ export default function AuditLogPanel() {
         <div className="space-y-1.5 sm:col-span-2">
           <Label>Registro</Label>
           <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
             <Input
               className="pl-8"
               placeholder="Buscar por registro, usuário ou rotina"
@@ -285,7 +286,7 @@ export default function AuditLogPanel() {
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-600">
           {total === 1 ? "1 evento" : `${total} eventos`} · clique na linha para ver o de/para completo
         </p>
         <Button variant="outline" size="sm" className="gap-2" onClick={() => { loadMeta(); load(offset); }} disabled={loading}>
@@ -297,26 +298,26 @@ export default function AuditLogPanel() {
       <div className="rounded-md border border-slate-200">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="whitespace-nowrap">Data/hora</TableHead>
-              <TableHead>Usuário</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Rotina</TableHead>
-              <TableHead>Registro</TableHead>
-              <TableHead>Ação</TableHead>
-              <TableHead>De</TableHead>
-              <TableHead>Para</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className={SORT_HEAD_CLASS}>Data/hora</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Usuário</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Tipo</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Rotina</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Registro</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Ação</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>De</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Para</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading && !items.length ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-slate-500">Carregando log…</TableCell>
+                <TableCell colSpan={8} className="py-8 text-center text-slate-600">Carregando log…</TableCell>
               </TableRow>
             ) : null}
             {!loading && !items.length ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-slate-500">
+                <TableCell colSpan={8} className="py-8 text-center text-slate-600">
                   Nenhum evento encontrado para os filtros informados.
                 </TableCell>
               </TableRow>
@@ -324,26 +325,26 @@ export default function AuditLogPanel() {
             {items.map((row) => (
               <TableRow
                 key={row.id}
-                className="cursor-pointer"
+                className="cursor-pointer hover:bg-slate-50"
                 onClick={() => setSelected(row)}
               >
-                <TableCell className="whitespace-nowrap text-xs text-slate-600">{formatDateTime(row.occurredAt)}</TableCell>
+                <TableCell className="whitespace-nowrap text-[11px] text-slate-600">{formatDateTime(row.occurredAt)}</TableCell>
                 <TableCell>
-                  <div className="text-sm text-slate-900">{row.userName || row.user}</div>
-                  {row.userName ? <div className="text-[11px] text-slate-500">{row.user}</div> : null}
+                  <div className="text-[11px] text-slate-900">{row.userName || row.user}</div>
+                  {row.userName ? <div className="text-[11px] text-slate-600">{row.user}</div> : null}
                 </TableCell>
-                <TableCell className="text-xs text-slate-600">
+                <TableCell className="text-[11px] text-slate-600">
                   {PROCESSING_LABELS[row.processingType] || row.processingType}
                 </TableCell>
-                <TableCell className="text-sm">{row.rotina}</TableCell>
-                <TableCell className="max-w-[180px] truncate text-sm" title={row.registro}>{row.registro}</TableCell>
+                <TableCell className="text-[11px]">{row.rotina}</TableCell>
+                <TableCell className="max-w-[180px] truncate text-[11px]" title={row.registro}>{row.registro}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={ACTION_BADGE[row.action] || "border-slate-200 bg-slate-50 text-slate-700"}>
                     {row.actionLabel}
                   </Badge>
                 </TableCell>
-                <TableCell className="max-w-[160px] truncate font-mono text-[11px] text-slate-600" title={row.de}>{row.de}</TableCell>
-                <TableCell className="max-w-[160px] truncate font-mono text-[11px] text-slate-600" title={row.para}>{row.para}</TableCell>
+                <TableCell className="max-w-[160px] truncate text-[11px] text-slate-600" title={row.de}>{row.de}</TableCell>
+                <TableCell className="max-w-[160px] truncate text-[11px] text-slate-600" title={row.para}>{row.para}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -354,7 +355,7 @@ export default function AuditLogPanel() {
         <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => load(Math.max(0, offset - PAGE_SIZE))}>
           Anterior
         </Button>
-        <span className="text-xs text-slate-500">Página {page} de {totalPages}</span>
+        <span className="text-xs text-slate-600">Página {page} de {totalPages}</span>
         <Button variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => load(offset + PAGE_SIZE)}>
           Próxima
         </Button>
@@ -381,14 +382,14 @@ export default function AuditLogPanel() {
 
               {affectedRecords(selected).length ? (
                 <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Registros afetados</p>
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-600">Registros afetados</p>
                   <div className="rounded-md border border-slate-200">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Título</TableHead>
-                          <TableHead>Tipo</TableHead>
-                          <TableHead>Resultado</TableHead>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className={SORT_HEAD_CLASS}>Título</TableHead>
+                          <TableHead className={SORT_HEAD_CLASS}>Tipo</TableHead>
+                          <TableHead className={SORT_HEAD_CLASS}>Resultado</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -398,7 +399,7 @@ export default function AuditLogPanel() {
                               {item.label || [item.prefixo, item.numero || item.titulo_numero, item.parcela].filter(Boolean).join(" ") || item.id || "—"}
                             </TableCell>
                             <TableCell>{item.tipo || "—"}</TableCell>
-                            <TableCell className="text-xs text-slate-600">
+                            <TableCell className="text-[11px] text-slate-600">
                               {item.message || (item.ok == null ? "—" : item.ok ? "Ok" : "Erro")}
                             </TableCell>
                           </TableRow>
@@ -413,18 +414,18 @@ export default function AuditLogPanel() {
                 <div className="rounded-md border border-slate-200">
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>Campo</TableHead>
-                        <TableHead>De</TableHead>
-                        <TableHead>Para</TableHead>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className={SORT_HEAD_CLASS}>Campo</TableHead>
+                        <TableHead className={SORT_HEAD_CLASS}>De</TableHead>
+                        <TableHead className={SORT_HEAD_CLASS}>Para</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {selected.changes.map((change) => (
                         <TableRow key={change.campo}>
                           <TableCell className="font-medium">{fieldLabel(change.campo)}</TableCell>
-                          <TableCell className="whitespace-pre-wrap font-mono text-[11px] text-slate-600">{change.de}</TableCell>
-                          <TableCell className="whitespace-pre-wrap font-mono text-[11px] text-slate-600">{change.para}</TableCell>
+                          <TableCell className="whitespace-pre-wrap text-[11px] text-slate-600">{change.de}</TableCell>
+                          <TableCell className="whitespace-pre-wrap text-[11px] text-slate-600">{change.para}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -433,14 +434,14 @@ export default function AuditLogPanel() {
               ) : !affectedRecords(selected).length ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">De</p>
-                    <pre className="max-h-64 overflow-auto rounded-md bg-slate-50 p-3 font-mono text-[11px] text-slate-700">
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-600">De</p>
+                    <pre className="max-h-64 overflow-auto rounded-md bg-slate-50 p-3 text-[11px] text-slate-700">
                       {pretty(selected.before)}
                     </pre>
                   </div>
                   <div>
-                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Para</p>
-                    <pre className="max-h-64 overflow-auto rounded-md bg-slate-50 p-3 font-mono text-[11px] text-slate-700">
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-600">Para</p>
+                    <pre className="max-h-64 overflow-auto rounded-md bg-slate-50 p-3 text-[11px] text-slate-700">
                       {pretty(selected.after)}
                     </pre>
                   </div>
@@ -457,7 +458,7 @@ export default function AuditLogPanel() {
 function Detail({ label, value }) {
   return (
     <div>
-      <p className="text-xs text-slate-500">{label}</p>
+      <p className="text-xs text-slate-600">{label}</p>
       <p className="font-medium text-slate-900">{value || "—"}</p>
     </div>
   );

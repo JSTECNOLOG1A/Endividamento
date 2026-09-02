@@ -23,7 +23,7 @@ export const STATUS_BADGE_CLASSES = {
   cancelado: "bg-red-100 text-red-800 border-red-200",
 };
 
-// Status a partir dos quais o contrato pode voltar para edição no Simulador.
+// Status a partir dos quais o contrato pode voltar para edição na Calculadora.
 // "rascunho" é mantido por compatibilidade com contratos antigos; no fluxo
 // atual, um contrato só nasce no banco já como "pendente_aprovacao" (ao
 // clicar em Salvar), então na prática o estado editável mais comum é

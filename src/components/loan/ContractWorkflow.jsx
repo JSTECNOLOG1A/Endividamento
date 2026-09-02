@@ -45,6 +45,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
   const [pdfUrl, setPdfUrl] = useState(contract.contract_pdf_url || "");
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const { withProcessing } = useProcessing();
+  const [erpBlock, setErpBlock] = useState(null);
 
   const canSendApproval = contract.status === "rascunho" && canWrite(user);
   const canApprove = contract.status === "pendente_aprovacao"
@@ -131,34 +132,48 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             status_history: addToHistory("cancelado", comments),
           };
           break;
-        case "reopen":
-          updateData = {
-            status: "rascunho",
-            exported_to_payables: false,
-            exported_to_receivables: false,
-            status_history: addToHistory("rascunho", comments),
-          };
-          break;
       }
 
-      const persist = () => base44.entities.LoanContract.update(contract.id, updateData);
-      const saved = action === "reopen"
-        ? await withProcessing(
+      if (action === "reopen") {
+        try {
+          const result = await withProcessing(
             isOwner(user) || reopenPending
               ? "Estornando e excluindo títulos a pagar e a receber…"
               : "Registrando pedido de reabertura…",
-            persist
-          )
-        : await persist();
-
-      if (action === "reopen" && saved?.status === "aprovado") {
-        toast.info("Pedido de reabertura registrado", {
-          description: "Outro administrador precisa confirmar para estornar os títulos.",
-        });
-        setDialogOpen(false);
-        setComments("");
-        if (onStatusChange) onStatusChange();
-        return;
+            () => base44.functions.invoke("reopenApprovedContractForEditing", {
+              contractId: contract.id,
+              comments,
+              ...(erpBlock ? { confirmErpReversal: true } : {}),
+            })
+          );
+          setErpBlock(null);
+          if (result?.requested || result?.data?.requested || result?.status === "aprovado") {
+            toast.info("Pedido de reabertura registrado", {
+              description: "Outro administrador precisa confirmar para estornar os títulos.",
+            });
+            setDialogOpen(false);
+            setComments("");
+            if (onStatusChange) onStatusChange();
+            return;
+          }
+          const payload = result?.data || result || {};
+          const totalEstornado = (payload.titulosEstornados || 0) + (payload.titulosReceberEstornados || 0);
+          if (totalEstornado > 0) {
+            window.alert(
+              `Contrato reaberto para edição.\n\n` +
+              `${payload.titulosEstornados} título(s) a pagar e ${payload.titulosReceberEstornados} a receber estornado(s) — serão regerados quando o contrato for reaprovado.` +
+              (payload.titulosEstornadosNoErp > 0 ? `\n${payload.titulosEstornadosNoErp} também foram estornados no ERP.` : "")
+            );
+          }
+        } catch (reopenErr) {
+          if (reopenErr.data?.code === "TITULOS_INTEGRADOS_PENDENTES" || reopenErr.data?.code === "ESTORNO_ERP_FALHOU") {
+            setErpBlock({ code: reopenErr.data.code, details: reopenErr.data.details, message: reopenErr.message });
+            return;
+          }
+          throw reopenErr;
+        }
+      } else {
+        await base44.entities.LoanContract.update(contract.id, updateData);
       }
 
       if (action === "reopen") {
@@ -206,6 +221,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
   const openDialog = (actionType) => {
     setAction(actionType);
     setError("");
+    setErpBlock(null);
     setPdfUrl(contract.contract_pdf_url || "");
     setDialogOpen(true);
   };
@@ -348,6 +364,28 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
                 />
               </div>
             )}
+            {erpBlock && (
+              <div className="space-y-2 text-sm bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                <p className="text-amber-800">{erpBlock.message}</p>
+                <ul className="text-xs text-slate-700 space-y-0.5">
+                  {[...(erpBlock.details?.titulos || []), ...(erpBlock.details?.titulosReceber || [])].map((t) => (
+                    <li key={t.id}>
+                      {t.prefixo} {t.parcela} — {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(t.valor) || 0)}
+                      {t.erp_mensagem ? ` — ${t.erp_mensagem}` : ""}
+                    </li>
+                  ))}
+                </ul>
+                {erpBlock.code === "TITULOS_INTEGRADOS_PENDENTES" ? (
+                  <p className="text-amber-800">
+                    Deseja estornar esses títulos no ERP e reabrir o contrato em seguida?
+                  </p>
+                ) : (
+                  <p className="text-red-700">
+                    O ERP recusou o estorno de um ou mais títulos — resolva manualmente em Contas a Pagar/Receber antes de tentar novamente.
+                  </p>
+                )}
+              </div>
+            )}
             {error && (
               <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
                 {error}
@@ -358,9 +396,15 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)} disabled={loading}>
               Cancelar
             </Button>
-            <Button type="button" onClick={handleAction} disabled={loading || uploadingPdf}>
-              {loading ? "Processando..." : "Confirmar"}
-            </Button>
+            {erpBlock?.code === "TITULOS_INTEGRADOS_PENDENTES" ? (
+              <Button type="button" variant="destructive" onClick={handleAction} disabled={loading}>
+                {loading ? "Estornando..." : "Estornar no ERP e Reabrir"}
+              </Button>
+            ) : erpBlock?.code === "ESTORNO_ERP_FALHOU" ? null : (
+              <Button type="button" onClick={handleAction} disabled={loading || uploadingPdf}>
+                {loading ? "Processando..." : "Confirmar"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

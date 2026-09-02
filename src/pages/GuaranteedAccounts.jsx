@@ -1,0 +1,832 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Plus, Wallet, RefreshCw, AlertTriangle, Pencil, Trash2, Clock } from "lucide-react";
+import { INDEXERS } from "@/lib/contractOptions";
+import { toast } from "@/lib/notify";
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 }).format(Number(value) || 0);
+}
+function formatDate(value) {
+  if (!value) return "—";
+  return String(value).split("T")[0].split("-").reverse().join("/");
+}
+const parseBRNumber = (str) => {
+  if (!str) return 0;
+  const cleaned = String(str).replace(/\./g, "").replace(",", ".");
+  return parseFloat(cleaned) || 0;
+};
+
+// Título a pagar da conta garantida é derivado do saldo projetado (ver
+// backend/src/modules/payables/generate.js) — precisa ser recalculado
+// sempre que algo que afeta esse saldo muda (lançamento, taxa, vencimento).
+// Erro aqui não deve travar a ação principal (o lançamento/edição já foi
+// salvo) — só loga, o próximo refresh corrige.
+async function refreshGuaranteedAccountTitle(contractId, queryClient) {
+  try {
+    await base44.functions.invoke("refreshGuaranteedAccountPayableTitle", { contractId });
+    queryClient.invalidateQueries({ queryKey: ["payable-titles"] });
+  } catch (err) {
+    console.error("Erro ao atualizar título de contas a pagar da conta garantida:", err);
+  }
+}
+
+function rateLabel(contract) {
+  if (!contract.indexer || contract.indexer === "NA") return `${contract.fixed_rate}% a.a.`;
+  if (contract.indexer_mode === "PERCENTAGE") return `${contract.indexer_percentage}% do ${contract.indexer}`;
+  return `${contract.indexer} + ${contract.indexer_spread}% a.a.`;
+}
+
+const emptyForm = {
+  group_id: "", entity_id: "", bank_id: "",
+  contract_number: "", operation_value: "",
+  fixed_rate: "", indexer: "NA", indexer_spread: "",
+  operation_date: new Date().toISOString().split("T")[0],
+  final_maturity_date: "",
+};
+
+function contractToForm(contract) {
+  return {
+    group_id: contract.group_id || "",
+    entity_id: contract.entity_id || "",
+    bank_id: contract.bank_id || "",
+    contract_number: contract.contract_number || "",
+    operation_value: String(contract.operation_value ?? ""),
+    fixed_rate: String(contract.fixed_rate ?? ""),
+    indexer: contract.indexer || "NA",
+    indexer_spread: String(contract.indexer_spread ?? ""),
+    operation_date: contract.operation_date ? String(contract.operation_date).split("T")[0] : "",
+    final_maturity_date: contract.final_maturity_date ? String(contract.final_maturity_date).split("T")[0] : "",
+  };
+}
+
+function AccountFormDialog({ open, onOpenChange, groups, entities, banks, onSaved, editContract }) {
+  const isEdit = !!editContract;
+  const [form, setForm] = useState(emptyForm);
+  const update = (field, value) => setForm((f) => ({ ...f, [field]: value }));
+  const filteredEntities = form.group_id ? entities.filter((e) => e.group_id === form.group_id) : [];
+  const queryClient = useQueryClient();
+
+  React.useEffect(() => {
+    if (open) setForm(editContract ? contractToForm(editContract) : emptyForm);
+  }, [open, editContract]);
+
+  const payload = {
+    group_id: form.group_id,
+    entity_id: form.entity_id,
+    bank_id: form.bank_id,
+    contract_number: form.contract_number,
+    operation_value: parseBRNumber(form.operation_value),
+    fixed_rate: parseBRNumber(form.fixed_rate),
+    indexer: form.indexer,
+    indexer_spread: parseBRNumber(form.indexer_spread),
+    operation_date: form.operation_date,
+    final_maturity_date: form.final_maturity_date,
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: () => isEdit
+      ? base44.entities.LoanContract.update(editContract.id, payload)
+      : base44.entities.LoanContract.create({
+        ...payload,
+        operation_category: "emprestimos",
+        operation_type: "conta_garantida",
+        calculation_system: "CONTA_GARANTIDA",
+        status: "aprovado",
+      }),
+    onSuccess: async (saved) => {
+      toast.success(isEdit ? "Conta garantida atualizada" : "Conta garantida criada");
+      onOpenChange(false);
+      await queryClient.invalidateQueries({ queryKey: ["guaranteed-accounts"] });
+      if (isEdit) await queryClient.invalidateQueries({ queryKey: ["guaranteed-account-statement", editContract.id] });
+      await refreshGuaranteedAccountTitle(saved.id, queryClient);
+      onSaved(saved);
+    },
+    onError: (err) => toast.error((isEdit ? "Erro ao salvar: " : "Erro ao criar: ") + err.message),
+  });
+
+  const canSubmit = form.group_id && form.entity_id && form.bank_id && form.contract_number
+    && parseBRNumber(form.operation_value) > 0 && form.operation_date && form.final_maturity_date;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Editar Conta Garantida" : "Nova Conta Garantida"}</DialogTitle>
+          <DialogDescription>
+            {isEdit
+              ? "Ajuste os dados cadastrais desta vigência. Os lançamentos (saques/pagamentos) são editados individualmente no extrato."
+              : "Limite rotativo com vencimento — os saques e pagamentos são lançados depois, na tela do contrato."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Grupo Econômico</Label>
+              <Select value={form.group_id} onValueChange={(v) => { update("group_id", v); update("entity_id", ""); }}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  {groups.map((g) => <SelectItem key={g.id} value={g.id}>{g.group_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Entidade</Label>
+              <Select value={form.entity_id} onValueChange={(v) => update("entity_id", v)} disabled={!form.group_id}>
+                <SelectTrigger className="h-9"><SelectValue placeholder={form.group_id ? "Selecione" : "Selecione um grupo primeiro"} /></SelectTrigger>
+                <SelectContent>
+                  {filteredEntities.map((e) => <SelectItem key={e.id} value={e.id}>{e.entity_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Banco</Label>
+              <Select value={form.bank_id} onValueChange={(v) => update("bank_id", v)}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  {banks.map((b) => <SelectItem key={b.id} value={b.id}>{b.bank_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Número do Contrato</Label>
+              <Input className="h-9" value={form.contract_number} onChange={(e) => update("contract_number", e.target.value)} placeholder="000.000.000" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Limite Contratado (R$)</Label>
+            <CurrencyInput className="flex h-9 w-full border border-slate-300 px-3 py-2 text-sm" value={form.operation_value} onChange={(e) => update("operation_value", e.target.value)} placeholder="0,00" />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Indexador</Label>
+              <Select value={form.indexer} onValueChange={(v) => update("indexer", v)}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INDEXERS.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{form.indexer === "NA" ? "Taxa (% a.a.)" : "Taxa Fixa Adicional (% a.a.)"}</Label>
+              <CurrencyInput type="percent" className="flex h-9 w-full border border-slate-300 px-3 py-2 text-sm" value={form.fixed_rate} onChange={(e) => update("fixed_rate", e.target.value)} placeholder="0,00" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Spread sobre {form.indexer !== "NA" ? form.indexer : "indexador"} (% a.a.)</Label>
+              <CurrencyInput type="percent" className="flex h-9 w-full border border-slate-300 px-3 py-2 text-sm" value={form.indexer_spread} onChange={(e) => update("indexer_spread", e.target.value)} placeholder="0,00" disabled={form.indexer === "NA"} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Data de Abertura</Label>
+              <Input className="h-9" type="date" value={form.operation_date} onChange={(e) => update("operation_date", e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Vencimento</Label>
+              <Input className="h-9" type="date" value={form.final_maturity_date} onChange={(e) => update("final_maturity_date", e.target.value)} />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button disabled={!canSubmit || saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+            {saveMutation.isPending ? "Salvando..." : isEdit ? "Salvar Alterações" : "Criar Conta Garantida"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditMovementDialog({ open, onOpenChange, movement, contractId, onSaved }) {
+  const [type, setType] = useState("saque");
+  const [date, setDate] = useState("");
+  const [amount, setAmount] = useState("");
+  const [obs, setObs] = useState("");
+  const queryClient = useQueryClient();
+
+  React.useEffect(() => {
+    if (open && movement) {
+      setType(movement.type);
+      setDate(String(movement.date).split("T")[0]);
+      setAmount(String(movement.amount ?? ""));
+      setObs(movement.observacao || "");
+    }
+  }, [open, movement]);
+
+  const mutation = useMutation({
+    mutationFn: () => base44.entities.AccountMovement.update(movement.movement_id, {
+      movement_date: date,
+      movement_type: type,
+      amount: parseBRNumber(amount),
+      observacao: obs || null,
+    }),
+    onSuccess: async () => {
+      toast.success("Lançamento atualizado");
+      onOpenChange(false);
+      await queryClient.invalidateQueries({ queryKey: ["guaranteed-account-statement", contractId] });
+      await refreshGuaranteedAccountTitle(contractId, queryClient);
+      onSaved();
+    },
+    onError: (err) => toast.error("Erro ao salvar: " + err.message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Editar Lançamento</DialogTitle>
+          <DialogDescription>Alterar tipo, data, valor ou observação. O extrato é recalculado automaticamente.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Tipo</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="saque">Saque</SelectItem>
+                  <SelectItem value="pagamento">Pagamento</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Data</Label>
+              <Input className="h-9" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Valor (R$)</Label>
+            <CurrencyInput className="flex h-9 w-full border border-slate-300 px-3 py-2 text-sm" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Observação (opcional)</Label>
+            <Input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: capital de giro" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button disabled={parseBRNumber(amount) <= 0 || !date || mutation.isPending} onClick={() => mutation.mutate()}>
+            {mutation.isPending ? "Salvando..." : "Salvar Alterações"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteContractDialog({ open, onOpenChange, contract, movementCount, onDeleted }) {
+  const [deleting, setDeleting] = useState(false);
+  const queryClient = useQueryClient();
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await base44.functions.invoke("deleteGuaranteedAccount", { contractId: contract.id });
+      toast.success("Conta garantida excluída");
+      onOpenChange(false);
+      await queryClient.invalidateQueries({ queryKey: ["guaranteed-accounts"] });
+      await queryClient.invalidateQueries({ queryKey: ["payable-titles"] });
+      onDeleted();
+    } catch (err) {
+      toast.error("Erro ao excluir: " + err.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Excluir Conta Garantida</DialogTitle>
+          <DialogDescription>
+            Esta ação é irreversível. O contrato <strong>{contract.contract_number}</strong>
+            {movementCount > 0 ? ` e todos os ${movementCount} lançamento(s) do extrato serão excluídos permanentemente.` : " será excluído permanentemente."}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button variant="destructive" disabled={deleting} onClick={handleDelete}>
+            {deleting ? "Excluindo..." : "Excluir Definitivamente"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddMovementForm({ contractId, onAdded }) {
+  const [type, setType] = useState("saque");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [amount, setAmount] = useState("");
+  const [obs, setObs] = useState("");
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: () => base44.entities.AccountMovement.create({
+      contract_id: contractId,
+      movement_date: date,
+      movement_type: type,
+      amount: parseBRNumber(amount),
+      observacao: obs || null,
+    }),
+    onSuccess: async () => {
+      toast.success(type === "saque" ? "Saque lançado" : "Pagamento lançado");
+      setAmount("");
+      setObs("");
+      await refreshGuaranteedAccountTitle(contractId, queryClient);
+      onAdded();
+    },
+    onError: (err) => toast.error("Erro ao lançar: " + err.message),
+  });
+
+  return (
+    <div className="flex flex-wrap items-end gap-3 p-4 bg-slate-50 border border-slate-200">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Tipo</Label>
+        <Select value={type} onValueChange={setType}>
+          <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="saque">Saque</SelectItem>
+            <SelectItem value="pagamento">Pagamento</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Data</Label>
+        <Input className="h-9 w-40" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Valor (R$)</Label>
+        <CurrencyInput className="flex h-9 w-40 border border-slate-300 px-3 py-2 text-sm" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
+      </div>
+      <div className="space-y-1.5 flex-1 min-w-[180px]">
+        <Label className="text-xs">Observação (opcional)</Label>
+        <Input className="h-9" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: capital de giro" />
+      </div>
+      <Button
+        size="sm"
+        disabled={parseBRNumber(amount) <= 0 || mutation.isPending}
+        onClick={() => mutation.mutate()}
+      >
+        {mutation.isPending ? "Lançando..." : "Lançar"}
+      </Button>
+    </div>
+  );
+}
+
+function RenewDialog({ open, onOpenChange, contract, statement, onRenewed }) {
+  const [newLimit, setNewLimit] = useState("");
+  const [newMaturity, setNewMaturity] = useState("");
+  const [newOpenDate, setNewOpenDate] = useState(contract?.final_maturity_date?.split("T")[0] || "");
+  const queryClient = useQueryClient();
+
+  React.useEffect(() => {
+    if (open) {
+      setNewLimit("");
+      setNewMaturity("");
+      setNewOpenDate(contract?.final_maturity_date?.split("T")[0] || new Date().toISOString().split("T")[0]);
+    }
+  }, [open, contract]);
+
+  const mutation = useMutation({
+    mutationFn: () => base44.functions.invoke("renewGuaranteedAccount", {
+      contractId: contract.id,
+      newLimit: parseBRNumber(newLimit),
+      newMaturityDate: newMaturity,
+      newOperationDate: newOpenDate,
+    }),
+    onSuccess: async (res) => {
+      toast.success(`Renovado — saldo de ${formatCurrency(res.data.saldo_transferido)} transferido para o novo contrato`);
+      onOpenChange(false);
+      // O contrato antigo vira 'cancelado' — seu título (se houver) fica
+      // órfão e é limpo pela mesma rotina retroativa usada em Contas a
+      // Pagar; o novo contrato entra 'aprovado' e ganha o título dele aqui.
+      await base44.functions.invoke("cleanupOrphanedPayableTitles", {}).catch(() => {});
+      await refreshGuaranteedAccountTitle(res.data.new_contract_id, queryClient);
+      onRenewed(res.data.new_contract_id);
+    },
+    onError: (err) => toast.error("Erro ao renovar: " + err.message),
+  });
+
+  const canSubmit = parseBRNumber(newLimit) > 0 && newMaturity && newOpenDate;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Renovar Conta Garantida</DialogTitle>
+          <DialogDescription>
+            Encerra esta vigência (status "Devolvido") e cria uma nova com o saldo atual
+            {statement ? ` (${formatCurrency(statement.saldo_atual)} na data de abertura da nova vigência)` : ""} como lançamento de abertura.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Novo Limite (R$)</Label>
+            <CurrencyInput className="flex h-9 w-full border border-slate-300 px-3 py-2 text-sm" value={newLimit} onChange={(e) => setNewLimit(e.target.value)} placeholder="0,00" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Data de Abertura da Nova Vigência</Label>
+              <Input className="h-9" type="date" value={newOpenDate} onChange={(e) => setNewOpenDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Novo Vencimento</Label>
+              <Input className="h-9" type="date" value={newMaturity} onChange={(e) => setNewMaturity(e.target.value)} />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button disabled={!canSubmit || mutation.isPending} onClick={() => mutation.mutate()}>
+            {mutation.isPending ? "Renovando..." : "Confirmar Renovação"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const todayIso = () => new Date().toISOString().split("T")[0];
+
+function AccountDetail({ contract, groups, entities, banks, onBack, onSelectContract }) {
+  const [renewOpen, setRenewOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editingMovement, setEditingMovement] = useState(null);
+  const [asOfDate, setAsOfDate] = useState(todayIso());
+  const queryClient = useQueryClient();
+
+  const { data: statement, isLoading, refetch } = useQuery({
+    queryKey: ["guaranteed-account-statement", contract.id, asOfDate],
+    queryFn: async () => (await base44.functions.invoke("calculateGuaranteedAccountStatement", { contractId: contract.id, asOfDate })).data,
+  });
+
+  const bankName = banks.find((b) => b.id === contract.bank_id)?.bank_name || "—";
+  const isRenewed = contract.status === "cancelado" && contract.rejection_comments?.includes("Renovado");
+  // O extrato inclui SEMPRE todos os lançamentos reais (asOfDate só afeta a
+  // projeção final de juros — ver calculateGuaranteedAccountStatement) —
+  // então simular uma data ANTES do último lançamento real ignoraria
+  // lançamentos que já aconteceram, dando um resultado matematicamente
+  // errado. Trava o mínimo no último lançamento (ou na abertura, se nenhum).
+  const lastMovementDate = statement?.extrato?.length
+    ? statement.extrato[statement.extrato.length - 1].date
+    : contract.operation_date;
+  const minAsOfDate = lastMovementDate ? String(lastMovementDate).split("T")[0] : undefined;
+  const maxAsOfDate = contract.final_maturity_date ? String(contract.final_maturity_date).split("T")[0] : undefined;
+  const isSimulating = asOfDate !== todayIso();
+
+  const handleDeleteMovement = async (row) => {
+    if (!window.confirm(`Excluir o lançamento de ${formatCurrency(row.amount)} em ${formatDate(row.date)}? O extrato será recalculado.`)) return;
+    try {
+      await base44.entities.AccountMovement.delete(row.movement_id);
+      toast.success("Lançamento excluído");
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["guaranteed-accounts"] });
+      await refreshGuaranteedAccountTitle(contract.id, queryClient);
+    } catch (err) {
+      toast.error("Erro ao excluir: " + err.message);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <Button variant="outline" size="sm" onClick={onBack} className="gap-1.5 text-xs">
+          <ArrowLeft className="w-3.5 h-3.5" /> Voltar
+        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setEditOpen(true)}>
+            <Pencil className="w-3.5 h-3.5" /> Editar
+          </Button>
+          {!isRenewed && (
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setRenewOpen(true)}>
+              <RefreshCw className="w-3.5 h-3.5" /> Renovar
+            </Button>
+          )}
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => setDeleteOpen(true)}>
+            <Trash2 className="w-3.5 h-3.5" /> Excluir
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-3">
+              {bankName} — {contract.contract_number}
+              <Badge variant={contract.status === "aprovado" ? "default" : "secondary"}>
+                {isRenewed ? "Renovado" : contract.status === "aprovado" ? "Ativa" : contract.status}
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Limite {formatCurrency(contract.operation_value)} • {rateLabel(contract)}
+              {" "}• Abertura {formatDate(contract.operation_date)} • Vencimento {formatDate(contract.final_maturity_date)}
+            </CardDescription>
+          </div>
+        </CardHeader>
+        {isRenewed && (
+          <CardContent className="pt-0">
+            <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 px-3 py-2">{contract.rejection_comments}</div>
+          </CardContent>
+        )}
+      </Card>
+
+      {statement && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-slate-600">Saldo Utilizado</div>
+              <div className="text-xl font-bold mt-1">{formatCurrency(statement.saldo_atual)}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-slate-600">Limite Disponível</div>
+              <div className="text-xl font-bold mt-1 text-green-700">{formatCurrency(statement.limite_disponivel)}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-slate-600">Juros Acumulados</div>
+              <div className="text-xl font-bold mt-1">{formatCurrency(statement.total_juros_acumulado)}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-slate-600">IOF Acumulado</div>
+              <div className="text-xl font-bold mt-1">{formatCurrency(statement.total_iof)}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-slate-600">Simular posição em</div>
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <Input
+                  type="date"
+                  className="h-8 text-sm px-2"
+                  value={asOfDate}
+                  min={minAsOfDate}
+                  max={maxAsOfDate}
+                  onChange={(e) => setAsOfDate(e.target.value)}
+                />
+                {isSimulating && (
+                  <Button variant="ghost" size="sm" className="h-8 px-2 text-xs shrink-0" onClick={() => setAsOfDate(todayIso())}>
+                    Hoje
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {isSimulating && (
+        <div className="flex items-center gap-2 text-sm text-blue-800 bg-blue-50 border border-blue-200 px-3 py-2">
+          <Clock className="w-4 h-4 shrink-0" />
+          Simulação: juros projetados até {formatDate(statement?.as_of_date)} — o saldo atual real (hoje) não é alterado.
+        </div>
+      )}
+
+      {statement?.excedeu_limite_alguma_vez && (
+        <div className="flex items-center gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          O saldo utilizado ultrapassou o limite contratado em algum momento do período (máximo: {formatCurrency(statement.saldo_maximo_no_periodo)}).
+        </div>
+      )}
+
+      {!isRenewed && (
+        <AddMovementForm contractId={contract.id} onAdded={() => { refetch(); queryClient.invalidateQueries({ queryKey: ["guaranteed-accounts"] }); }} />
+      )}
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Extrato</CardTitle></CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="text-sm text-slate-500 py-6 text-center">Calculando...</div>
+          ) : !statement?.extrato?.length ? (
+            <div className="text-sm text-slate-500 py-6 text-center">Nenhum lançamento ainda.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead className="text-right">Juros do Período</TableHead>
+                    <TableHead className="text-right">IOF do Período</TableHead>
+                    <TableHead className="text-right">Saldo Após</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {statement.extrato.map((row) => {
+                    const isSystemGenerated = row.type === "saldo_abertura";
+                    const canEdit = !isRenewed && !isSystemGenerated;
+                    return (
+                      <TableRow key={row.movement_id} className={row.excedeu_limite ? "bg-amber-50" : ""}>
+                        <TableCell>{formatDate(row.date)}</TableCell>
+                        <TableCell className="capitalize">{row.type.replace("_", " ")}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.amount)}</TableCell>
+                        <TableCell className="text-right text-slate-500">{formatCurrency(row.juros_periodo)}</TableCell>
+                        <TableCell className="text-right text-slate-500">{formatCurrency(row.iof_periodo)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(row.saldo_apos)}</TableCell>
+                        <TableCell className="text-right">
+                          {canEdit ? (
+                            <div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" title="Editar lançamento" onClick={() => setEditingMovement(row)}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50" title="Excluir lançamento" onClick={() => handleDeleteMovement(row)}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400" title={isSystemGenerated ? "Gerado automaticamente na renovação" : "Vigência encerrada"}>—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {(statement.juros_periodo_final > 0 || statement.iof_periodo_final > 0) && (
+                    <TableRow className="bg-slate-50">
+                      <TableCell>{formatDate(statement.as_of_date)}</TableCell>
+                      <TableCell className="text-slate-500">Juros/IOF até a posição</TableCell>
+                      <TableCell className="text-right">—</TableCell>
+                      <TableCell className="text-right text-slate-500">{formatCurrency(statement.juros_periodo_final)}</TableCell>
+                      <TableCell className="text-right text-slate-500">{formatCurrency(statement.iof_periodo_final)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(statement.saldo_atual)}</TableCell>
+                      <TableCell></TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <RenewDialog
+        open={renewOpen}
+        onOpenChange={setRenewOpen}
+        contract={contract}
+        statement={statement}
+        onRenewed={(newId) => {
+          queryClient.invalidateQueries({ queryKey: ["guaranteed-accounts"] });
+          onSelectContract(newId);
+        }}
+      />
+
+      <AccountFormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        groups={groups}
+        entities={entities}
+        banks={banks}
+        editContract={contract}
+        onSaved={() => refetch()}
+      />
+
+      <EditMovementDialog
+        open={!!editingMovement}
+        onOpenChange={(v) => { if (!v) setEditingMovement(null); }}
+        movement={editingMovement}
+        contractId={contract.id}
+        onSaved={() => setEditingMovement(null)}
+      />
+
+      <DeleteContractDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        contract={contract}
+        movementCount={statement?.extrato?.length || 0}
+        onDeleted={onBack}
+      />
+    </div>
+  );
+}
+
+export default function GuaranteedAccounts() {
+  const [selectedId, setSelectedId] = useState(null);
+  const [newOpen, setNewOpen] = useState(false);
+
+  const { data: contracts, isLoading } = useQuery({
+    queryKey: ["guaranteed-accounts"],
+    queryFn: async () => (await base44.entities.LoanContract.list("-created_date", 1000))
+      .filter((c) => c.operation_type === "conta_garantida"),
+    initialData: [],
+  });
+
+  const { data: groups } = useQuery({ queryKey: ["groups"], queryFn: () => base44.entities.Group.list("", 100), initialData: [] });
+  const { data: entities } = useQuery({ queryKey: ["entities"], queryFn: () => base44.entities.CompanyEntity.list("", 100), initialData: [] });
+  const { data: banks } = useQuery({ queryKey: ["banks"], queryFn: () => base44.entities.Bank.list("", 100), initialData: [] });
+
+  // Deep-link vindo da tela de Contratos (?open=<id>) — clicar numa linha de
+  // conta garantida lá redireciona pra cá, direto no detalhe.
+  const [deepLinkHandled, setDeepLinkHandled] = useState(false);
+  React.useEffect(() => {
+    if (deepLinkHandled || !contracts.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const openId = params.get("open");
+    if (openId && contracts.some((c) => c.id === openId)) {
+      setSelectedId(openId);
+    }
+    setDeepLinkHandled(true);
+  }, [contracts, deepLinkHandled]);
+
+  const selectedContract = contracts.find((c) => c.id === selectedId);
+
+  return (
+    <div className="w-full px-4 sm:px-6 py-8">
+      {selectedContract ? (
+        <AccountDetail
+          contract={selectedContract}
+          groups={groups}
+          entities={entities}
+          banks={banks}
+          onBack={() => setSelectedId(null)}
+          onSelectContract={setSelectedId}
+        />
+      ) : (
+        <>
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                <Wallet className="w-5 h-5" /> Contas Garantidas
+              </h1>
+              <p className="text-sm text-slate-600 mt-0.5">Limites rotativos — juros sobre saldo utilizado, sem cronograma fixo</p>
+            </div>
+            <Button size="sm" className="gap-1.5" onClick={() => setNewOpen(true)}>
+              <Plus className="w-4 h-4" /> Nova Conta Garantida
+            </Button>
+          </div>
+
+          <Card>
+            <CardContent className="p-0">
+              {isLoading ? (
+                <div className="text-sm text-slate-500 py-10 text-center">Carregando...</div>
+              ) : !contracts.length ? (
+                <div className="text-sm text-slate-500 py-10 text-center">Nenhuma conta garantida cadastrada ainda.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Contrato</TableHead>
+                        <TableHead>Banco</TableHead>
+                        <TableHead className="text-right">Limite</TableHead>
+                        <TableHead>Taxa</TableHead>
+                        <TableHead>Vencimento</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {contracts.map((c) => (
+                        <TableRow key={c.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setSelectedId(c.id)}>
+                          <TableCell className="font-medium">{c.contract_number}</TableCell>
+                          <TableCell>{banks.find((b) => b.id === c.bank_id)?.bank_name || "—"}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(c.operation_value)}</TableCell>
+                          <TableCell>{rateLabel(c)}</TableCell>
+                          <TableCell>{formatDate(c.final_maturity_date)}</TableCell>
+                          <TableCell>
+                            <Badge variant={c.status === "aprovado" ? "default" : "secondary"}>
+                              {c.status === "cancelado" && c.rejection_comments?.includes("Renovado") ? "Renovado" : c.status === "aprovado" ? "Ativa" : c.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <AccountFormDialog
+            open={newOpen}
+            onOpenChange={setNewOpen}
+            groups={groups}
+            entities={entities}
+            banks={banks}
+            onSaved={(created) => setSelectedId(created.id)}
+          />
+        </>
+      )}
+    </div>
+  );
+}

@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { base44 } from "@/api/base44Client";
+import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
 
 const ALL = "__all__";
 
@@ -43,10 +44,21 @@ function rowKey(item) {
   return String(item.account_code || "").trim();
 }
 
+// Mesma configuração de reordenação por clique no título da tabela de
+// Contratos. Checkbox fica de fora (não faz sentido ordenar).
+const CHART_IMPORT_SORT_COLUMNS = {
+  codigo: { getValue: (item) => item.account_code || "" },
+  nome: { getValue: (item) => item.account_name || "" },
+  classe: { getValue: (item) => CLASS_LABELS[item.account_class] || item.account_class || "" },
+  tipo: { getValue: (item) => (item.account_type === "sintetica" ? "Sintética" : "Analítica") },
+  natureza: { getValue: (item) => (item.account_nature === "credora" ? "Credora" : "Devedora") },
+  situacao: { getValue: (item) => (item.already_exists ? "Já cadastrada" : "Nova") },
+};
+
 function FilterSelect({ label, value, onValueChange, children }) {
   return (
     <div className="space-y-1 min-w-0">
-      <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</Label>
+      <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">{label}</Label>
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
         <SelectContent>{children}</SelectContent>
@@ -116,6 +128,8 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
     });
   }, [items, search, classFilter, tipoFilter, naturezaFilter, situacaoFilter]);
 
+  const { sortKey, sortDir, toggleSort, sortedRows: sortedFiltered } = useSortableRows(filtered, CHART_IMPORT_SORT_COLUMNS);
+
   const allFilteredSelected = filtered.length > 0 && filtered.every((item) => selectedKeys.has(rowKey(item)));
   const someFilteredSelected = filtered.some((item) => selectedKeys.has(rowKey(item)));
   const hasActiveFilters =
@@ -181,11 +195,11 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
         </DialogHeader>
 
         {loading ? (
-          <p className="text-sm text-slate-500 py-8 text-center">Consultando o ERP...</p>
+          <p className="text-sm text-slate-600 py-8 text-center">Consultando o ERP...</p>
         ) : (
           <div className="space-y-3 min-h-0 flex-1 flex flex-col">
             {(preview?.grupo_empresas || preview?.empresas?.length || preview?.tabela) ? (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-600">
                 {[
                   preview.grupo_empresas ? `Grupo ${preview.grupo_empresas}` : null,
                   preview.empresas?.length ? `Empresas ${preview.empresas.join(", ")}` : null,
@@ -230,7 +244,7 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
                 {allFilteredSelected ? "Nenhum" : "Todos"}
               </Button>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-600">
               {selectedKeys.size} de {items.length} selecionadas
               {hasActiveFilters ? ` · ${filtered.length} visíveis` : ""}
             </p>
@@ -248,23 +262,23 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
                         onChange={toggleFiltered}
                       />
                     </TableHead>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Classe</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Natureza</TableHead>
-                    <TableHead>Situação</TableHead>
+                    <SortableHead sortField="codigo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Código</SortableHead>
+                    <SortableHead sortField="nome" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Nome</SortableHead>
+                    <SortableHead sortField="classe" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Classe</SortableHead>
+                    <SortableHead sortField="tipo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Tipo</SortableHead>
+                    <SortableHead sortField="natureza" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Natureza</SortableHead>
+                    <SortableHead sortField="situacao" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Situação</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.length === 0 ? (
+                  {sortedFiltered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-slate-500 py-8">
+                      <TableCell colSpan={7} className="text-center text-slate-600 py-8">
                         Nenhuma conta encontrada.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map((item) => {
+                    sortedFiltered.map((item) => {
                       const key = rowKey(item);
                       return (
                         <TableRow key={key} className="cursor-pointer" onClick={() => toggleKey(key)}>
@@ -276,12 +290,12 @@ export default function ChartImportModal({ open, onOpenChange, onImported }) {
                               onClick={(event) => event.stopPropagation()}
                             />
                           </TableCell>
-                          <TableCell className="font-mono whitespace-nowrap text-xs">{item.account_code}</TableCell>
+                          <TableCell className="whitespace-nowrap text-[11px]">{item.account_code}</TableCell>
                           <TableCell className="min-w-[220px]">{item.account_name}</TableCell>
                           <TableCell className="whitespace-nowrap">{CLASS_LABELS[item.account_class] || item.account_class}</TableCell>
                           <TableCell className="whitespace-nowrap">{item.account_type === "sintetica" ? "Sintética" : "Analítica"}</TableCell>
                           <TableCell className="whitespace-nowrap">{item.account_nature === "credora" ? "Credora" : "Devedora"}</TableCell>
-                          <TableCell className="text-slate-500 whitespace-nowrap">
+                          <TableCell className="text-slate-600 whitespace-nowrap">
                             {item.already_exists ? "Já cadastrada" : "Nova"}
                           </TableCell>
                         </TableRow>

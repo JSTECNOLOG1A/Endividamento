@@ -35,7 +35,8 @@ import {
   getPaymentFlowByBankModalityGuarantee,
   getMonthlyRollForward,
 } from "./debtAnalytics";
-import { OPERATION_TYPES } from "@/lib/contractOptions";
+import { OPERATION_TYPES, OPERATION_CATEGORIES, operationCategoryLabel } from "@/lib/contractOptions";
+import { useSortableRows, SortableTh, SORT_HEAD_CLASS } from "@/components/ui/sortable-table";
 
 const MONTHS = [
   { value: "1", label: "Janeiro" },
@@ -71,6 +72,12 @@ function operationTypeLabel(operationType) {
   return operationType || "Sem Tipo";
 }
 
+// Mesma regra usada nas linhas da tabela de Fluxo Futuro — alterna entre
+// "só principal" e "principal + juros" conforme o toggle da tela.
+function valueForFlow(bucket, flowView) {
+  return flowView === "principal" ? bucket.principal : bucket.principal + bucket.interest;
+}
+
 function KPICard({ icon: Icon, title, value, subtitle, color = "blue" }) {
   const colorClasses = {
     blue: "bg-blue-50 border-blue-200 text-blue-600",
@@ -98,7 +105,7 @@ function KPICard({ icon: Icon, title, value, subtitle, color = "blue" }) {
 // deixa a linha de Saldo (abertura/fechamento) em destaque, como uma
 // conciliação contábil de verdade.
 function RollForwardRow({ label, bucket, strong = false, sign = null }) {
-  const cellClass = `px-3 py-2 text-right font-mono ${strong ? "font-semibold text-slate-900" : "text-slate-700"}`;
+  const cellClass = `px-3 py-1.5 text-right ${strong ? "font-semibold text-slate-900" : "text-slate-700"}`;
   const fmt = (v) => {
     if (sign === "+" && v > 0) return formatCurrency(v);
     if (sign === "-" && v > 0) return `(${formatCurrency(v)})`;
@@ -106,7 +113,7 @@ function RollForwardRow({ label, bucket, strong = false, sign = null }) {
   };
   return (
     <tr className={strong ? "bg-slate-50 border-y border-slate-200" : "border-b border-slate-100"}>
-      <td className={`px-3 py-2 ${strong ? "font-semibold text-slate-900" : "text-slate-700"}`}>{label}</td>
+      <td className={`px-3 py-1.5 ${strong ? "font-semibold text-slate-900" : "text-slate-700"}`}>{label}</td>
       <td className={cellClass}>{fmt(bucket.principal)}</td>
       <td className={cellClass}>{fmt(bucket.interest)}</td>
       <td className={cellClass}>{fmt(bucket.fx)}</td>
@@ -117,11 +124,19 @@ function RollForwardRow({ label, bucket, strong = false, sign = null }) {
 
 export default function AccountingReading() {
   const today = new Date().toISOString().split("T")[0];
+  // ?tab=&entity= na URL (ex.: ao voltar de um recálculo reaberto pelo
+  // botão "Requer recálculo" do Fechamento Contábil, ver
+  // FechamentoContabil.jsx → handleReopenForRecalc / Simulator.jsx) reabrem
+  // direto na mesma aba/empresa de onde o usuário saiu. Sem esses
+  // parâmetros, mantém o padrão de sempre.
+  const initialParams = React.useMemo(() => new URLSearchParams(window.location.search), []);
+  const [activeTab, setActiveTab] = useState(() => initialParams.get("tab") || "posicao");
   const [baseDate, setBaseDate] = useState(today);
   const [exercicioStartMonth, setExercicioStartMonth] = useState("1");
-  const [entityFilter, setEntityFilter] = useState("all");
+  const [entityFilter, setEntityFilter] = useState(() => initialParams.get("entity") || "all");
   const [currencyFilter, setCurrencyFilter] = useState("all");
   const [flowView, setFlowView] = useState("principal_juros"); // "principal" | "principal_juros"
+  const [flowCategoryFilter, setFlowCategoryFilter] = useState("all");
 
   const { data: allContracts = [] } = useQuery({
     queryKey: ["contracts"],
@@ -154,7 +169,7 @@ export default function AccountingReading() {
 
   const bankName = (bankId) => banks.find((b) => b.id === bankId)?.bank_name || "Sem Banco";
 
-  // Moedas únicas por código (mesma dedupe usada no Simulador) — usadas só
+  // Moedas únicas por código (mesma dedupe usada na Calculadora) — usadas só
   // para popular as opções do filtro; BRL é sempre a opção implícita para
   // contratos sem currency_id.
   const currencyOptions = useMemo(() => {
@@ -219,14 +234,108 @@ export default function AccountingReading() {
     };
   }, [contracts, baseDate, exercicioStartMonth]);
 
+  // Linhas do Fluxo de Pagamentos Futuros filtradas por categoria — aplicado
+  // só nesta sub-aba (não afeta Posição/Competência), para permitir olhar
+  // isoladamente Empréstimos, Financiamentos, Mútuos etc.
+  const flowRows = useMemo(() => {
+    if (!analysis) return [];
+    if (flowCategoryFilter === "all") return analysis.paymentFlow.rows;
+    return analysis.paymentFlow.rows.filter((r) => (r.operationCategory || null) === flowCategoryFilter);
+  }, [analysis, flowCategoryFilter]);
+
+  // Subtotal por categoria — soma as linhas visíveis (já filtradas) agrupadas
+  // por categoria de operação, na mesma visão (Só Principal / Principal +
+  // Juros) escolhida para a tabela detalhada, para servir de nota explicativa
+  // consolidada por natureza contábil da dívida.
+  const flowCategorySubtotals = useMemo(() => {
+    if (!analysis || flowRows.length === 0) return [];
+    const years = analysis.paymentFlow.years;
+    const groups = new Map();
+    flowRows.forEach((row) => {
+      const key = row.operationCategory || "sem_categoria";
+      if (!groups.has(key)) {
+        groups.set(key, {
+          category: key,
+          label: row.operationCategory ? operationCategoryLabel(row.operationCategory) : "Sem Categoria",
+          byYear: Object.fromEntries(years.map((y) => [y, 0])),
+          catchAll: 0,
+          total: 0,
+        });
+      }
+      const g = groups.get(key);
+      years.forEach((y) => {
+        const v = valueForFlow(row.byYear[y] || { principal: 0, interest: 0 }, flowView);
+        g.byYear[y] += v;
+        g.total += v;
+      });
+      const catchAllValue = valueForFlow(row.catchAll, flowView);
+      g.catchAll += catchAllValue;
+      g.total += catchAllValue;
+    });
+    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [analysis, flowRows, flowView]);
+
+  const flowGrandTotal = useMemo(
+    () => flowCategorySubtotals.reduce((sum, g) => sum + g.total, 0),
+    [flowCategorySubtotals]
+  );
+
+  // Linha com o total já calculado, pra alimentar a ordenação por clique no
+  // título sem refazer a conta a cada render — mesma configuração de
+  // reordenação da tabela de Contratos. As colunas de ano são dinâmicas
+  // (dependem dos anos do fluxo), por isso o config é montado em runtime,
+  // mas com useMemo pra manter a referência estável entre renders.
+  const flowRowsWithTotal = useMemo(() => {
+    if (!analysis) return [];
+    return flowRows.map((row, idx) => {
+      const rowTotal =
+        analysis.paymentFlow.years.reduce(
+          (sum, y) => sum + valueForFlow(row.byYear[y] || { principal: 0, interest: 0 }, flowView),
+          0
+        ) + valueForFlow(row.catchAll, flowView);
+      return { row, rowTotal, _key: idx };
+    });
+  }, [analysis, flowRows, flowView]);
+
+  const flowSortColumns = useMemo(() => {
+    const cols = {
+      bank: { getValue: (r) => bankName(r.row.bankId) },
+      modalidade: { getValue: (r) => operationTypeLabel(r.row.operationType) },
+      garantia: { getValue: (r) => r.row.guarantee || "" },
+      catchAll: { numeric: true, getValue: (r) => valueForFlow(r.row.catchAll, flowView) },
+      total: { numeric: true, getValue: (r) => r.rowTotal },
+    };
+    (analysis?.paymentFlow?.years || []).forEach((y) => {
+      cols[`year_${y}`] = {
+        numeric: true,
+        getValue: (r) => valueForFlow(r.row.byYear[y] || { principal: 0, interest: 0 }, flowView),
+      };
+    });
+    return cols;
+  }, [analysis, flowView]);
+  const flowSort = useSortableRows(flowRowsWithTotal, flowSortColumns);
+
+  const categorySortColumns = useMemo(() => {
+    const cols = {
+      categoria: { getValue: (r) => r.label },
+      catchAll: { numeric: true, getValue: (r) => r.catchAll },
+      total: { numeric: true, getValue: (r) => r.total },
+    };
+    (analysis?.paymentFlow?.years || []).forEach((y) => {
+      cols[`year_${y}`] = { numeric: true, getValue: (r) => r.byYear[y] || 0 };
+    });
+    return cols;
+  }, [analysis]);
+  const categorySort = useSortableRows(flowCategorySubtotals, categorySortColumns);
+
   return (
     <div className="w-full px-4 sm:px-6 py-8">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="space-y-6">
         {/* Header */}
         <div>
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Módulo Contábil · Endividamento</p>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Módulo Contábil · AllDebt</p>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Leitura Contábil</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-600 mt-1">
             Posição, competência e fluxo futuro dos contratos aprovados
           </p>
         </div>
@@ -235,18 +344,27 @@ export default function AccountingReading() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardContent className="pt-6">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Data-Base</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Data-Base</Label>
               <Input
                 type="date"
                 value={baseDate}
-                onChange={(e) => setBaseDate(e.target.value)}
+                onChange={(e) => {
+                  // O input nativo de data emite valor vazio enquanto o
+                  // usuário está digitando um dos segmentos (dia/mês/ano)
+                  // incompleto — se deixarmos essa string vazia virar
+                  // baseDate, os cálculos de data mais abaixo (que assumem
+                  // baseDate sempre válido) explodem e derrubam a tela
+                  // inteira em branco. Ignora e mantém a última data válida
+                  // até o usuário terminar de digitar uma data completa.
+                  if (e.target.value) setBaseDate(e.target.value);
+                }}
                 className="h-9 mt-2"
               />
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Empresa</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Empresa</Label>
               <Select value={entityFilter} onValueChange={setEntityFilter}>
                 <SelectTrigger className="h-9 mt-2"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -258,7 +376,7 @@ export default function AccountingReading() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Moeda</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Moeda</Label>
               <Select value={currencyFilter} onValueChange={setCurrencyFilter}>
                 <SelectTrigger className="h-9 mt-2"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -273,7 +391,7 @@ export default function AccountingReading() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Início do Exercício</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Início do Exercício</Label>
               <Select value={exercicioStartMonth} onValueChange={setExercicioStartMonth}>
                 <SelectTrigger className="h-9 mt-2"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -285,7 +403,7 @@ export default function AccountingReading() {
         </div>
 
         {analysis && (
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Exercício corrente: {analysis.exercicioStart.split("-").reverse().join("/")} até {baseDate.split("-").reverse().join("/")}.
             Use Janeiro para ano civil, ou outro mês para configurar um ano-safra (ex.: Abril, Agosto etc.).
           </p>
@@ -293,10 +411,10 @@ export default function AccountingReading() {
 
         {!analysis && entityFilter === "all" ? (
           <div className="flex items-center justify-center min-h-64">
-            <p className="text-slate-500">Nenhum contrato aprovado encontrado para os filtros selecionados.</p>
+            <p className="text-slate-600">Nenhum contrato aprovado encontrado para os filtros selecionados.</p>
           </div>
         ) : (
-          <Tabs defaultValue="posicao" className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="bg-slate-100">
               <TabsTrigger value="posicao" className="text-xs sm:text-sm gap-1.5">
                 <Landmark className="w-3.5 h-3.5" /> Posição Contábil
@@ -315,7 +433,7 @@ export default function AccountingReading() {
             {/* SUB-ABA 1: POSIÇÃO CONTÁBIL */}
             <TabsContent value="posicao" className="mt-4 space-y-6">
               {!analysis ? (
-                <p className="text-sm text-slate-500 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
+                <p className="text-sm text-slate-600 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
               ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <KPICard
@@ -346,7 +464,7 @@ export default function AccountingReading() {
             {/* SUB-ABA 2: COMPETÊNCIA */}
             <TabsContent value="competencia" className="mt-4 space-y-6">
               {!analysis ? (
-                <p className="text-sm text-slate-500 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
+                <p className="text-sm text-slate-600 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
               ) : (
               <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -385,20 +503,25 @@ export default function AccountingReading() {
                   <CardTitle className="text-base font-semibold text-slate-800">
                     Movimentação Contábil do Mês
                   </CardTitle>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-600">
                     Conciliação do saldo inicial ao final — {analysis.monthLabel}/{analysis.rollForward.year}
                   </p>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm min-w-[600px]">
+                    <table className="w-full text-[11px] min-w-[600px]">
                       <thead>
+                        {/* Sem reordenação por clique: é uma conciliação
+                            (Saldo Inicial + Apropriações − Pagamentos = Saldo
+                            Final) onde a ordem das linhas é o próprio
+                            significado da tabela — só o estilo visual do
+                            cabeçalho é padronizado com o resto do app. */}
                         <tr className="border-b border-slate-200">
-                          <th className="text-left font-medium text-slate-500 uppercase text-xs px-3 py-2">Movimento</th>
-                          <th className="text-right font-medium text-slate-500 uppercase text-xs px-3 py-2">Principal</th>
-                          <th className="text-right font-medium text-slate-500 uppercase text-xs px-3 py-2">Juros</th>
-                          <th className="text-right font-medium text-slate-500 uppercase text-xs px-3 py-2">Variação Cambial</th>
-                          <th className="text-right font-medium text-slate-700 uppercase text-xs px-3 py-2">Total</th>
+                          <th className={SORT_HEAD_CLASS}>Movimento</th>
+                          <th className={`${SORT_HEAD_CLASS} text-right`}>Principal</th>
+                          <th className={`${SORT_HEAD_CLASS} text-right`}>Juros</th>
+                          <th className={`${SORT_HEAD_CLASS} text-right`}>Variação Cambial</th>
+                          <th className={`${SORT_HEAD_CLASS} text-right`}>Total</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -409,7 +532,7 @@ export default function AccountingReading() {
                       </tbody>
                     </table>
                   </div>
-                  <p className="text-xs text-slate-400 mt-3">
+                  <p className="text-xs text-slate-500 mt-3">
                     Apropriações somam juros e variação cambial reconhecidos no mês (regime de competência) e
                     eventuais novas captações; Pagamentos são amortizações e juros efetivamente pagos em caixa.
                     Saldo Inicial + Apropriações − Pagamentos = Saldo Final, em cada coluna.
@@ -423,7 +546,7 @@ export default function AccountingReading() {
             {/* SUB-ABA 3: FLUXO E NOTA EXPLICATIVA */}
             <TabsContent value="fluxo" className="mt-4">
               {!analysis ? (
-                <p className="text-sm text-slate-500 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
+                <p className="text-sm text-slate-600 py-10 text-center">Nenhum contrato aprovado para esta empresa.</p>
               ) : (
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="pb-3">
@@ -431,7 +554,16 @@ export default function AccountingReading() {
                     <CardTitle className="text-base font-semibold text-slate-800">
                       Fluxo de Pagamentos Futuros — por Banco, Modalidade e Garantia
                     </CardTitle>
-                    <div className="flex gap-1.5">
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      <Select value={flowCategoryFilter} onValueChange={setFlowCategoryFilter}>
+                        <SelectTrigger className="h-7 text-xs w-auto min-w-[160px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas as Categorias</SelectItem>
+                          {OPERATION_CATEGORIES.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Button
                         type="button"
                         size="sm"
@@ -454,66 +586,114 @@ export default function AccountingReading() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {analysis.paymentFlow.rows.length === 0 ? (
-                    <p className="text-sm text-slate-500 py-6 text-center">
-                      Nenhum pagamento futuro previsto a partir da data-base selecionada.
+                  {flowRows.length === 0 ? (
+                    <p className="text-sm text-slate-600 py-6 text-center">
+                      {analysis.paymentFlow.rows.length === 0
+                        ? "Nenhum pagamento futuro previsto a partir da data-base selecionada."
+                        : "Nenhum pagamento futuro para a categoria selecionada."}
                     </p>
                   ) : (
+                    <>
                     <div className="overflow-x-auto -mx-2">
-                      <table className="w-full text-sm min-w-[900px]">
+                      <table className="w-full text-[11px] min-w-[900px]">
                         <thead>
                           <tr className="border-b border-slate-200">
-                            <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Banco</th>
-                            <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Modalidade</th>
-                            <th className="text-left font-medium text-slate-500 uppercase text-xs px-2 py-2">Garantia</th>
+                            <SortableTh sortField="bank" sortKey={flowSort.sortKey} sortDir={flowSort.sortDir} onSort={flowSort.toggleSort}>Banco</SortableTh>
+                            <SortableTh sortField="modalidade" sortKey={flowSort.sortKey} sortDir={flowSort.sortDir} onSort={flowSort.toggleSort}>Modalidade</SortableTh>
+                            <SortableTh sortField="garantia" sortKey={flowSort.sortKey} sortDir={flowSort.sortDir} onSort={flowSort.toggleSort}>Garantia</SortableTh>
                             {analysis.paymentFlow.years.map((y) => (
-                              <th key={y} className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">{y}</th>
+                              <SortableTh key={y} sortField={`year_${y}`} sortKey={flowSort.sortKey} sortDir={flowSort.sortDir} onSort={flowSort.toggleSort} right>{y}</SortableTh>
                             ))}
-                            <th className="text-right font-medium text-slate-500 uppercase text-xs px-2 py-2">{analysis.paymentFlow.catchAllLabel}</th>
-                            <th className="text-right font-medium text-slate-700 uppercase text-xs px-2 py-2">Total</th>
+                            <SortableTh sortField="catchAll" sortKey={flowSort.sortKey} sortDir={flowSort.sortDir} onSort={flowSort.toggleSort} right>{analysis.paymentFlow.catchAllLabel}</SortableTh>
+                            <SortableTh sortField="total" sortKey={flowSort.sortKey} sortDir={flowSort.sortDir} onSort={flowSort.toggleSort} right>Total</SortableTh>
                           </tr>
                         </thead>
                         <tbody>
-                          {analysis.paymentFlow.rows.map((row, idx) => {
-                            const valueFor = (bucket) =>
-                              flowView === "principal"
-                                ? bucket.principal
-                                : bucket.principal + bucket.interest;
-
-                            const rowTotal =
-                              analysis.paymentFlow.years.reduce(
-                                (sum, y) => sum + valueFor(row.byYear[y] || { principal: 0, interest: 0 }),
-                                0
-                              ) + valueFor(row.catchAll);
-
-                            return (
-                              <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                                <td className="px-2 py-2 text-slate-700">{bankName(row.bankId)}</td>
-                                <td className="px-2 py-2 text-slate-700">{operationTypeLabel(row.operationType)}</td>
-                                <td className="px-2 py-2 text-slate-700">{row.guarantee}</td>
-                                {analysis.paymentFlow.years.map((y) => (
-                                  <td key={y} className="px-2 py-2 text-right font-mono text-slate-700">
-                                    {formatCurrency(valueFor(row.byYear[y] || { principal: 0, interest: 0 }))}
-                                  </td>
-                                ))}
-                                <td className="px-2 py-2 text-right font-mono text-slate-700">
-                                  {formatCurrency(valueFor(row.catchAll))}
+                          {flowSort.sortedRows.map(({ row, rowTotal, _key }) => (
+                            <tr key={_key} className="border-b border-slate-100 hover:bg-slate-50">
+                              <td className="px-2 py-1.5 text-slate-700">{bankName(row.bankId)}</td>
+                              <td className="px-2 py-1.5 text-slate-700">{operationTypeLabel(row.operationType)}</td>
+                              <td className="px-2 py-1.5 text-slate-700">{row.guarantee}</td>
+                              {analysis.paymentFlow.years.map((y) => (
+                                <td key={y} className="px-2 py-1.5 text-right text-slate-700">
+                                  {formatCurrency(valueForFlow(row.byYear[y] || { principal: 0, interest: 0 }, flowView))}
                                 </td>
-                                <td className="px-2 py-2 text-right font-mono font-semibold text-slate-900">
-                                  {formatCurrency(rowTotal)}
-                                </td>
-                              </tr>
-                            );
-                          })}
+                              ))}
+                              <td className="px-2 py-1.5 text-right text-slate-700">
+                                {formatCurrency(valueForFlow(row.catchAll, flowView))}
+                              </td>
+                              <td className="px-2 py-1.5 text-right font-semibold text-slate-900">
+                                {formatCurrency(rowTotal)}
+                              </td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>
+
+                    <div className="mt-6">
+                      <p className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-2">
+                        Subtotal por Categoria
+                      </p>
+                      <div className="overflow-x-auto -mx-2">
+                        <table className="w-full text-[11px] min-w-[700px]">
+                          <thead>
+                            <tr className="border-b border-slate-200">
+                              <SortableTh sortField="categoria" sortKey={categorySort.sortKey} sortDir={categorySort.sortDir} onSort={categorySort.toggleSort}>Categoria</SortableTh>
+                              {analysis.paymentFlow.years.map((y) => (
+                                <SortableTh key={y} sortField={`year_${y}`} sortKey={categorySort.sortKey} sortDir={categorySort.sortDir} onSort={categorySort.toggleSort} right>{y}</SortableTh>
+                              ))}
+                              <SortableTh sortField="catchAll" sortKey={categorySort.sortKey} sortDir={categorySort.sortDir} onSort={categorySort.toggleSort} right>{analysis.paymentFlow.catchAllLabel}</SortableTh>
+                              <SortableTh sortField="total" sortKey={categorySort.sortKey} sortDir={categorySort.sortDir} onSort={categorySort.toggleSort} right>Total</SortableTh>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {categorySort.sortedRows.map((g) => (
+                              <tr key={g.category} className="border-b border-slate-100">
+                                <td className="px-2 py-1.5 text-slate-700 font-medium">{g.label}</td>
+                                {analysis.paymentFlow.years.map((y) => (
+                                  <td key={y} className="px-2 py-1.5 text-right text-slate-700">
+                                    {formatCurrency(g.byYear[y] || 0)}
+                                  </td>
+                                ))}
+                                <td className="px-2 py-1.5 text-right text-slate-700">
+                                  {formatCurrency(g.catchAll)}
+                                </td>
+                                <td className="px-2 py-1.5 text-right font-semibold text-slate-900">
+                                  {formatCurrency(g.total)}
+                                </td>
+                              </tr>
+                            ))}
+                            {flowCategorySubtotals.length > 1 && (
+                              <tr className="bg-slate-50 border-y border-slate-200">
+                                <td className="px-2 py-1.5 font-semibold text-slate-900">Total Geral</td>
+                                {analysis.paymentFlow.years.map((y) => (
+                                  <td key={y} className="px-2 py-1.5 text-right font-semibold text-slate-900">
+                                    {formatCurrency(
+                                      flowCategorySubtotals.reduce((sum, g) => sum + (g.byYear[y] || 0), 0)
+                                    )}
+                                  </td>
+                                ))}
+                                <td className="px-2 py-1.5 text-right font-semibold text-slate-900">
+                                  {formatCurrency(flowCategorySubtotals.reduce((sum, g) => sum + g.catchAll, 0))}
+                                </td>
+                                <td className="px-2 py-1.5 text-right font-semibold text-slate-900">
+                                  {formatCurrency(flowGrandTotal)}
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    </>
                   )}
-                  <p className="text-xs text-slate-400 mt-3">
+                  <p className="text-xs text-slate-500 mt-3">
                     Nota explicativa: valores projetados a partir do cronograma vigente de cada contrato aprovado,
                     a partir da data-base selecionada. "Garantia" combina os eixos Real (Alienação Fiduciária,
                     Hipoteca, Penhor, Cessão de Recebíveis) e Pessoal/Fidejussória (Aval, Fiança); contratos sem
-                    nenhuma garantia registrada aparecem como "Não informado".
+                    nenhuma garantia registrada aparecem como "Não informado". O filtro de categoria e o subtotal
+                    consideram apenas as linhas visíveis na tabela acima.
                   </p>
                 </CardContent>
               </Card>

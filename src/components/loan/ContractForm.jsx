@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCircle, Info, Paperclip, Trash2 } from "lucide-react";
+import { Combobox } from "@/components/ui/combobox";
+import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCircle, Info, Paperclip, Trash2, Save, Send, Banknote, Receipt, LayoutList } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 
@@ -74,7 +75,31 @@ const parseBRNumber = (str) => {
   return parseFloat(cleaned) || 0;
 };
 
-export default function ContractForm({ onCalculate, onIdentificationChange, initialData, groups, entities, banks, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf, draftKey = "new" }) {
+// Numeral discreto antes do ícone de cada seção principal (Identificação /
+// Composição / Prazos) — reforça a leitura de "passo 1, 2, 3" do formulário
+// sem precisar de um wizard de verdade (o usuário continua vendo tudo numa
+// tela só, mas a numeração ajuda a orientar por onde começar).
+function SectionBadge({ n }) {
+  return (
+    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] font-bold shrink-0">
+      {n}
+    </span>
+  );
+}
+
+// Sub-título interno usado para dividir a seção "Composição e Remuneração da
+// Dívida" (a mais longa das três) em blocos menores e escaneáveis — sem criar
+// Cards separados, que quebrariam o agrupamento de 3 seções pedido.
+function SubsectionHeading({ icon: Icon, children }) {
+  return (
+    <h4 className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide">
+      <Icon className="w-3.5 h-3.5 text-blue-600" />
+      {children}
+    </h4>
+  );
+}
+
+export default function ContractForm({ onCalculate, onIdentificationChange, initialData, groups, entities, banks, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf, draftKey = "new", hasResult = false, onSaveDraft, onSubmitForReview, isSaving = false }) {
   const [form, setForm] = useState(defaultForm);
   const [initialForm, setInitialForm] = useState(defaultForm);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -242,34 +267,103 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
 
   // Calcular data final do bullet (data operação + prazo total)
   const [updatingFromDate, setUpdatingFromDate] = React.useState(false);
-  
+
+  // Lê uma data "YYYY-MM-DD" (como vem dos inputs type="date" / do form)
+  // como data LOCAL. `new Date("YYYY-MM-DD")` é interpretado pelo JS como
+  // meia-noite em UTC — em fusos atrás de UTC (ex.: Brasil, UTC-3), ao ler
+  // de volta com getDate()/getMonth() isso "volta" um dia (15 vira 14).
+  // Evita esse problema clássico.
+  const parseDateOnly = (dateStr) => {
+    if (!dateStr) return null;
+    const [y, m, d] = String(dateStr).slice(0, 10).split("-").map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d);
+  };
+
+  // Formata uma data local de volta para "YYYY-MM-DD" sem passar por UTC
+  // (evita o mesmo problema de fuso na direção contrária).
+  const toDateOnlyString = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  // Soma meses a uma data travando o fim de mês (evita overflow: 31/01 + 1
+  // mês = 28/02, não 03/03) — espelha addMonths() do CalculationEngine.js,
+  // para o rascunho de "Data Vencimento Final" aqui no formulário já bater
+  // com a data que o motor vai efetivamente gerar na última parcela.
+  const addMonthsClamped = (date, months) => {
+    const nominalDay = date.getDate();
+    const d = new Date(date.getFullYear(), date.getMonth(), 1);
+    d.setMonth(d.getMonth() + months);
+    const lastDayOfTargetMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(nominalDay, lastDayOfTargetMonth));
+    return d;
+  };
+
+  // O motor de cálculo (CalculationEngine.js) sempre ancora as parcelas no
+  // dia do "Primeiro Vencimento" (quando preenchido) ou no dia da
+  // "Data da Operação" (quando vazio) — nunca no dia da própria Data
+  // Vencimento Final. E a 1ª parcela da tabela já nasce EM CIMA dessa data
+  // âncora (não um mês depois) quando o Primeiro Vencimento está preenchido.
+  // Por isso, para a última parcela da tabela cair exatamente na Data
+  // Vencimento Final informada:
+  //   • Com Primeiro Vencimento preenchido: total de parcelas = nº de meses
+  //     entre o Primeiro Vencimento e o Vencimento Final, + 1 (a 1ª parcela
+  //     já é o próprio Primeiro Vencimento, "mês 0").
+  //   • Sem Primeiro Vencimento: total de parcelas = nº de meses entre a
+  //     Operação e o Vencimento Final (a 1ª parcela é 1 mês após a Operação,
+  //     sem +1).
   React.useEffect(() => {
     if (!isLoaded || updatingFromDate) return;
     if (form.operation_date && form.total_term_months) {
-      const operationDate = new Date(form.operation_date);
-      const finalDate = new Date(operationDate);
-      finalDate.setMonth(finalDate.getMonth() + parseInt(form.total_term_months));
+      const hasReference = !!form.first_payment_date;
+      const anchorDate = parseDateOnly(hasReference ? form.first_payment_date : form.operation_date);
+      if (!anchorDate) return;
+      const n = parseInt(form.total_term_months) || 0;
+      const monthsToAdd = hasReference ? n - 1 : n;
+      const finalDate = addMonthsClamped(anchorDate, monthsToAdd);
       setUpdatingFromDate(true);
-      update("final_maturity_date", finalDate.toISOString().split("T")[0]);
+      update("final_maturity_date", toDateOnlyString(finalDate));
       setTimeout(() => setUpdatingFromDate(false), 50);
     }
-  }, [form.operation_date, form.total_term_months, isLoaded]);
+  }, [form.operation_date, form.first_payment_date, form.total_term_months, isLoaded]);
 
-  // Recalcular prazo total quando data final é editada
+  // Recalcular prazo total quando data final é editada (ver explicação acima)
   const handleFinalDateChange = (dateStr) => {
     update("final_maturity_date", dateStr);
-    if (form.operation_date && dateStr) {
-      const operationDate = new Date(form.operation_date);
-      const finalDate = new Date(dateStr);
-      const monthsDiff = (finalDate.getFullYear() - operationDate.getFullYear()) * 12 + 
-                         (finalDate.getMonth() - operationDate.getMonth());
-      if (monthsDiff > 0) {
-        setUpdatingFromDate(true);
-        update("total_term_months", monthsDiff.toString());
-        setTimeout(() => setUpdatingFromDate(false), 50);
-      }
+    if (!dateStr) return;
+    const hasReference = !!form.first_payment_date;
+    const anchorStr = hasReference ? form.first_payment_date : form.operation_date;
+    if (!anchorStr) return;
+    const anchorDate = parseDateOnly(anchorStr);
+    const finalDate = parseDateOnly(dateStr);
+    if (!anchorDate || !finalDate) return;
+    const monthsDiff = (finalDate.getFullYear() - anchorDate.getFullYear()) * 12 +
+                       (finalDate.getMonth() - anchorDate.getMonth());
+    const totalInstallments = hasReference ? monthsDiff + 1 : monthsDiff;
+    if (totalInstallments > 0) {
+      setUpdatingFromDate(true);
+      update("total_term_months", totalInstallments.toString());
+      setTimeout(() => setUpdatingFromDate(false), 50);
     }
   };
+
+  // Texto de apoio abaixo do "Prazo Total (Meses)": só aparece quando o
+  // Primeiro Vencimento está preenchido, caso em que esse número é o total
+  // de meses/linhas do cronograma (inclui o próprio Primeiro Vencimento como
+  // 1ª linha) — 1 a mais que a duração "redonda" do contrato entre o
+  // Primeiro Vencimento e a Data Vencimento Final. Puramente informativo:
+  // não altera nenhum valor calculado ou salvo, só ajuda a entender o
+  // número exibido (e evita confundir esse total com "Quantidade de
+  // Parcelas", que é outro campo, calculado à parte na revisão).
+  const totalTermDurationHint = React.useMemo(() => {
+    if (!form.first_payment_date) return null;
+    const n = parseInt(form.total_term_months) || 0;
+    if (n <= 1) return null;
+    return `≈ ${n - 1} meses de duração (Primeiro Vencimento → Data Vencimento Final). O Prazo Total de ${n} inclui o próprio Primeiro Vencimento como 1ª linha da tabela — a Quantidade de Parcelas (na revisão) pode ser 1 a menos se houver carência sem pagamento no início.`;
+  }, [form.total_term_months, form.first_payment_date]);
 
   // Desabilitar campos conforme sistema selecionado
   const getFieldsStatus = () => {
@@ -312,6 +406,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
   const filteredEntities = form.group_id ? entities?.filter((e) => e.group_id === form.group_id) : [];
   const selectedEntity = form.entity_id ? entities?.find((e) => e.id === form.entity_id) : null;
   const missingData = !form.group_id || !form.entity_id || !form.bank_id;
+  const selectedSystem = SYSTEMS.find((s) => s.value === form.calculation_system);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -449,7 +544,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
         </div>
       )}
       {lastAutoSavedAt && !draftBanner && (
-        <p className="text-[11px] text-slate-400 -mb-2">
+        <p className="text-[11px] text-slate-500 -mb-2">
           Rascunho salvo automaticamente às {new Date(lastAutoSavedAt).toLocaleTimeString("pt-BR")}
         </p>
       )}
@@ -471,58 +566,57 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
+            <SectionBadge n={1} />
             <Building2 className="w-4 h-4 text-blue-600" />
             Identificação
           </CardTitle>
+          <CardDescription className="text-xs text-slate-600 pl-7">
+            Grupo, entidade, banco credor e garantias do contrato.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Grupo Econômico *</Label>
-              <Select 
-                value={form.group_id || ""} 
-                onValueChange={(v) => update("group_id", v)}
-              >
-                <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {groups?.map((g) => (<SelectItem key={g.id} value={g.id}>{g.group_name}</SelectItem>))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Grupo Econômico *</Label>
+              <Combobox
+                value={form.group_id || ""}
+                onChange={(v) => update("group_id", v)}
+                options={(groups || []).map((g) => ({ value: g.id, label: g.group_name }))}
+                placeholder="Selecione"
+                searchPlaceholder="Buscar grupo..."
+              />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Entidade Componente *</Label>
-              <Select 
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Entidade Componente *</Label>
+              <Combobox
                 value={form.entity_id || ""}
-                onValueChange={(v) => v && update("entity_id", v)}
+                onChange={(v) => v && update("entity_id", v)}
+                options={(filteredEntities || []).map((e) => ({ value: e.id, label: e.entity_name }))}
                 disabled={!form.group_id}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder={form.group_id ? "Selecione" : "Selecione um grupo primeiro"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredEntities?.map((e) => (<SelectItem key={e.id} value={e.id}>{e.entity_name}</SelectItem>))}
-                </SelectContent>
-              </Select>
+                placeholder={form.group_id ? "Selecione" : "Selecione um grupo primeiro"}
+                searchPlaceholder="Buscar entidade..."
+              />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Banco Credor *</Label>
-              <Select value={form.bank_id || ""} onValueChange={(v) => v && update("bank_id", v)}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {banks?.map((b) => (<SelectItem key={b.id} value={b.id}>{b.bank_name}</SelectItem>))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Banco Credor *</Label>
+              <Combobox
+                value={form.bank_id || ""}
+                onChange={(v) => v && update("bank_id", v)}
+                options={(banks || []).map((b) => ({ value: b.id, label: b.bank_name }))}
+                placeholder="Selecione"
+                searchPlaceholder="Buscar banco..."
+              />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nº Contrato *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nº Contrato *</Label>
               <Input value={form.contract_number} onChange={(e) => update("contract_number", e.target.value)} placeholder="000.000.000" className="h-9" required />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Categoria da Operação *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Categoria da Operação *</Label>
               <Select 
                 value={form.operation_category} 
                 onValueChange={(v) => {
@@ -537,7 +631,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo Específico *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Tipo Específico *</Label>
               <Select 
                 value={form.operation_type}
                 onValueChange={(v) => v && update("operation_type", v)}
@@ -556,12 +650,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Garantia Real (Opcional)
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Garantia Real
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-xs">
                       <p className="text-xs">Garantias focadas em bens e direitos (Alienação Fiduciária, Hipoteca, Penhor, Cessão de Recebíveis)</p>
@@ -578,12 +672,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Garantia Pessoal / Fidejussória (Opcional)
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Garantia Pessoal / Fidejussória
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-xs">
                       <p className="text-xs">Garantias focadas em pessoas (Aval, Fiança)</p>
@@ -613,15 +707,20 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
+            <SectionBadge n={2} />
             <CreditCard className="w-4 h-4 text-blue-600" />
             Composição e Remuneração da Dívida
           </CardTitle>
+          <CardDescription className="text-xs text-slate-600 pl-7">
+            Moeda, valores, custos da operação e como a dívida é remunerada.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           {/* Moeda e Defasagem PTAX - Primeiro Bloco */}
+          <SubsectionHeading icon={Banknote}>Moeda e Câmbio</SubsectionHeading>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Moeda (Opcional)</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Moeda (Opcional)</Label>
               <Select value={form.currency_id || ""} onValueChange={(v) => update("currency_id", v)}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="BRL (Padrão)" /></SelectTrigger>
                 <SelectContent>
@@ -632,7 +731,22 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             {form.currency_id && (
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Defasagem PTAX</Label>
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                  Defasagem PTAX
+                  <TooltipProvider>
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <p className="text-xs">
+                          Quantos dias antes da data de cada evento (vencimento, apropriação) o sistema busca a
+                          cotação PTAX usada na variação cambial. "D" usa a cotação do próprio dia.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
                 <Select value={form.exchange_lag} onValueChange={(v) => update("exchange_lag", v)}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -650,12 +764,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                     Valor em Moeda Estrangeira * 
                     <TooltipProvider>
                       <Tooltip delayDuration={200}>
                         <TooltipTrigger asChild>
-                          <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                          <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent side="right" className="max-w-xs">
                           <p className="text-xs">Valor líquido captado na moeda estrangeira (fonte de verdade)</p>
@@ -681,12 +795,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                     Cotação do Fechamento *
                     <TooltipProvider>
                       <Tooltip delayDuration={200}>
                         <TooltipTrigger asChild>
-                          <Info className="w-3 h-3 inline-block ml-1 text-slate-400 cursor-help" />
+                          <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent side="right" className="max-w-xs">
                           <p className="text-xs">Taxa fixada no fechamento da operação com o banco (pode incluir spread)</p>
@@ -728,10 +842,10 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </div>
               
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                   Valor Convertido (R$) - Calculado Automaticamente
                 </Label>
-                <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm font-mono text-slate-600">
+                <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm text-slate-600">
                   {(() => {
                     const foreign = parseBRNumber(form.amount_foreign);
                     const rate = parseBRNumber(form.exchange_rate_closing);
@@ -742,7 +856,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                     return "—";
                   })()}
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600">
                   Este valor será usado como "Valor da Operação" (R$)
                 </p>
               </div>
@@ -750,11 +864,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           )}
           
           <Separator />
-          
+
+          <SubsectionHeading icon={Receipt}>Custos da Operação</SubsectionHeading>
           {/* Valor da Operação e Sinal */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Valor da Operação (R$) *
                 {form.currency_id && (
                   <span className="ml-1 text-xs text-blue-600 font-normal">(Calculado automaticamente)</span>
@@ -770,21 +885,36 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 required 
               />
               {form.currency_id && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600">
                   Este campo é somente leitura quando operação em moeda estrangeira
                 </p>
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">(-) Sinal do Negócio (R$)</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">(-) Sinal do Negócio (R$)</Label>
               <CurrencyInput type="currency" value={form.signal_value} onChange={(e) => update("signal_value", e.target.value)} className="h-9" />
             </div>
           </div>
           <Separator />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 rounded-lg border border-slate-100 bg-slate-50/70 p-4">
             <div className="space-y-3">
               <div className="space-y-1.5">
-                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">IOF (R$)</Label>
+                 <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                   IOF (R$)
+                   <TooltipProvider>
+                     <Tooltip delayDuration={200}>
+                       <TooltipTrigger asChild>
+                         <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                       </TooltipTrigger>
+                       <TooltipContent side="right" className="max-w-xs">
+                         <p className="text-xs">
+                           Imposto sobre Operações Financeiras cobrado pelo banco na operação. Se "financiado",
+                           soma-se ao saldo devedor inicial; senão, é custo à parte, fora do cronograma.
+                         </p>
+                       </TooltipContent>
+                     </Tooltip>
+                   </TooltipProvider>
+                 </Label>
                  <CurrencyInput type="currency" value={form.iof_value} onChange={(e) => update("iof_value", e.target.value)} className="h-9" />
                </div>
               <div className="flex items-center gap-2">
@@ -794,7 +924,22 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Valor do Encargo por Concessão de Garantia (ECG) (R$)</Label>
+                 <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                   Valor do Encargo por Concessão de Garantia (ECG) (R$)
+                   <TooltipProvider>
+                     <Tooltip delayDuration={200}>
+                       <TooltipTrigger asChild>
+                         <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                       </TooltipTrigger>
+                       <TooltipContent side="right" className="max-w-xs">
+                         <p className="text-xs">
+                           Taxa cobrada pelo banco por aceitar a garantia oferecida na operação (comum em BNDES/FINAME
+                           e crédito rural). Se "financiado", soma-se ao saldo devedor inicial.
+                         </p>
+                       </TooltipContent>
+                     </Tooltip>
+                   </TooltipProvider>
+                 </Label>
                  <CurrencyInput type="currency" value={form.encargo_garantia_value} onChange={(e) => update("encargo_garantia_value", e.target.value)} className="h-9" />
                </div>
               <div className="flex items-center gap-2">
@@ -804,7 +949,22 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                 <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Taxas Diversas (R$)</Label>
+                 <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                   Taxas Diversas (R$)
+                   <TooltipProvider>
+                     <Tooltip delayDuration={200}>
+                       <TooltipTrigger asChild>
+                         <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                       </TooltipTrigger>
+                       <TooltipContent side="right" className="max-w-xs">
+                         <p className="text-xs">
+                           Outras tarifas/taxas cobradas na contratação (ex.: análise de crédito, cadastro,
+                           avaliação de garantia) que não se encaixam em IOF ou ECG.
+                         </p>
+                       </TooltipContent>
+                     </Tooltip>
+                   </TooltipProvider>
+                 </Label>
                  <CurrencyInput type="currency" value={form.other_fees} onChange={(e) => update("other_fees", e.target.value)} className="h-9" />
                </div>
               <div className="flex items-center gap-2">
@@ -814,19 +974,37 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
           </div>
           <Separator />
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Data da Operação *</Label>
-            <Input type="date" value={form.operation_date} onChange={(e) => update("operation_date", e.target.value)} className="h-9 font-mono w-64" required />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Data da Operação *
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        Data de assinatura/desembolso do contrato. Se o "Primeiro Vencimento" abaixo ficar
+                        vazio, esta data também vira o ponto de partida para contar as parcelas.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input type="date" value={form.operation_date} onChange={(e) => update("operation_date", e.target.value)} className="h-9" required />
+            </div>
           </div>
           <Separator />
+          <SubsectionHeading icon={Percent}>Taxa e Indexação</SubsectionHeading>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa Fixa (% a.a.) *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Taxa Fixa (% a.a.) *</Label>
               <CurrencyInput type="percent" value={form.fixed_rate} onChange={(e) => update("fixed_rate", e.target.value)} placeholder="0,0000" className="h-9" required />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Taxa Mensal Equivalente</Label>
-              <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm font-mono text-slate-600">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Taxa Mensal Equivalente</Label>
+              <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm text-slate-600">
                 {form.fixed_rate && !isNaN(parseFloat(form.fixed_rate)) 
                   ? `${((Math.pow(1 + parseFloat(form.fixed_rate) / 100, 1/12) - 1) * 100).toFixed(4)}% a.m.`
                   : "—"}
@@ -835,7 +1013,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Indexador</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Indexador</Label>
               <Select value={form.indexer} onValueChange={(v) => update("indexer", v)}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -847,48 +1025,31 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
             {form.indexer !== "NA" && (
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Spread (% a.a.)</Label>
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Spread (% a.a.)</Label>
                 <CurrencyInput type="percent" value={form.indexer_spread} onChange={(e) => update("indexer_spread", e.target.value)} className="h-9" />
               </div>
             )}
           </div>
           <Separator />
-          <div className="space-y-3">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Sistema de Amortização</Label>
-            <TooltipProvider>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <SubsectionHeading icon={LayoutList}>Sistema de Amortização</SubsectionHeading>
+            <Select value={form.calculation_system} onValueChange={(v) => update("calculation_system", v)}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
                 {SYSTEMS.map((s) => (
-                  <div key={s.value} className="relative">
-                    <button
-                      type="button"
-                      onClick={() => update("calculation_system", s.value)}
-                      className={`w-full p-3 pr-10 rounded-lg border-2 text-left transition-all duration-200 ${
-                        form.calculation_system === s.value
-                          ? "border-blue-600 bg-blue-50 text-blue-900"
-                          : "border-slate-200 hover:border-slate-300 text-slate-600"
-                      }`}
-                    >
-                      <span className="text-sm font-semibold">{s.value}</span>
-                      <p className="text-xs mt-0.5 opacity-70">{s.label.split("—")[1]?.trim()}</p>
-                    </button>
-                    <Tooltip delayDuration={200}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          className="absolute top-3 right-3 p-1 rounded-full hover:bg-slate-200 transition-colors"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Info className="w-4 h-4 text-slate-400 hover:text-blue-600" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="max-w-xs">
-                        <p className="text-xs leading-relaxed">{s.description}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
+                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                 ))}
-              </div>
-            </TooltipProvider>
+              </SelectContent>
+            </Select>
+            {/* Descrição do sistema escolhido: antes só aparecia num tooltip
+                ao passar o mouse sobre cada botão — agora fica sempre visível
+                abaixo do dropdown, sem depender de hover (nenhuma informação
+                perdida na troca para lista suspensa). */}
+            {selectedSystem && (
+              <p className="text-xs text-slate-600 leading-relaxed rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+                {selectedSystem.description}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -897,59 +1058,118 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
+            <SectionBadge n={3} />
             <Calendar className="w-4 h-4 text-blue-600" />
             Prazos e Periodicidades
           </CardTitle>
+          <CardDescription className="text-xs text-slate-600 pl-7">
+            Prazo total, datas de vencimento, carências e frequência de pagamento.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Prazo Total (meses) *</Label>
-              <Input 
-                type="number" 
-                min="1" 
-                value={form.total_term_months} 
-                onChange={(e) => update("total_term_months", e.target.value)} 
-                className="h-9 font-mono" 
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Prazo Total (meses) *
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        Total de meses/linhas gerados no cronograma — determina onde cai a Data Vencimento
+                        Final. Quando o Primeiro Vencimento está preenchido, a 1ª linha da tabela já nasce
+                        na própria data do Primeiro Vencimento (não um mês depois), então esse total fica 1
+                        a mais que os meses entre o Primeiro Vencimento e a Data Vencimento Final (ex.: um
+                        contrato de 5 anos = 60 meses de duração gera Prazo Total = 61). Não confundir com
+                        "Quantidade de Parcelas" (na tela de revisão): esse outro campo conta só as linhas
+                        com pagamento efetivo, que pode ser 1 a menos quando há carência sem pagamento no
+                        início.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input
+                type="number"
+                min="1"
+                value={form.total_term_months}
+                onChange={(e) => update("total_term_months", e.target.value)}
+                className="h-9"
                 disabled={!fieldsStatus.totalTerm}
-                required 
+                required
               />
               {(form.calculation_system === "BULLET" || form.calculation_system === "AMERICANO") && (
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-600 mt-1">
                   {form.calculation_system === "BULLET" ? "Define quando ocorre o pagamento único" : "Define quando cai a amortização completa"}
                 </p>
               )}
+              {totalTermDurationHint && (
+                <p className="text-xs text-slate-600 mt-1">{totalTermDurationHint}</p>
+              )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Data Vencimento Final {(form.calculation_system === "AMERICANO" || form.calculation_system === "BULLET") && "(Pagamento Final)"}
               </Label>
               <Input 
                 type="date" 
                 value={form.final_maturity_date} 
                 onChange={(e) => handleFinalDateChange(e.target.value)} 
-                className="h-9 font-mono" 
+                className="h-9" 
                 disabled={!fieldsStatus.totalTerm}
               />
-              <p className="text-xs text-slate-500">Calculado automaticamente, editável</p>
+              <p className="text-xs text-slate-600">Calculado automaticamente, editável</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Dia de Referência dos Vencimentos</Label>
-              <Input 
-                type="date" 
-                value={form.first_payment_date} 
-                onChange={(e) => update("first_payment_date", e.target.value)} 
-                className="h-9 font-mono" 
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Primeiro Vencimento
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        Data informada para fixar as datas de vencimento mensais — o cálculo da tabela usará
+                        sempre o mesmo dia informado (ex.: 10/04, 10/05…), a menos que caia em final de semana
+                        ou feriado, quando só adia aquele mês. Se deixado vazio, usa a Data da Operação como
+                        referência.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input
+                type="date"
+                value={form.first_payment_date}
+                onChange={(e) => update("first_payment_date", e.target.value)}
+                className="h-9"
                 placeholder="Se vazio, usa a Data da Operação"
               />
-              <p className="text-xs text-slate-500">Se preenchido, ancora neste dia (ex.: 10/04, 10/05…). Se vazio, usa a Data da Operação. Fim de semana/feriado só adia aquele mês.</p>
             </div>
           </div>
           <Separator />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Carência Principal (meses)</Label>
-              <Input 
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Carência Principal (meses)
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        Meses em que só há apropriação/pagamento de juros — a amortização do principal só começa
+                        depois desse período (o "Gatilho da Primeira Amortização" abaixo define exatamente quando).
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input
                 type="number" 
                 min="0" 
                 value={form.principal_grace_months} 
@@ -958,12 +1178,28 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 disabled={!fieldsStatus.principalGrace}
               />
               {!fieldsStatus.principalGrace && (
-                <p className="text-xs text-slate-500">Não aplicável neste sistema</p>
+                <p className="text-xs text-slate-600">Não aplicável neste sistema</p>
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Carência Juros (meses)</Label>
-              <Input 
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Carência Juros (meses)
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        Meses em que os juros apropriados não são pagos em caixa — o "Comportamento dos Juros na
+                        Carência" abaixo define se eles capitalizam no saldo, se são pagos à parte, ou se acumulam
+                        para pagar depois (balloon).
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input
                 type="number" 
                 min="0" 
                 value={form.interest_grace_months} 
@@ -972,15 +1208,31 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 disabled={!fieldsStatus.interestGrace}
               />
               {!fieldsStatus.interestGrace && (
-                <p className="text-xs text-slate-500">Não aplicável neste sistema</p>
+                <p className="text-xs text-slate-600">Não aplicável neste sistema</p>
               )}
             </div>
           </div>
           {(parseInt(form.interest_grace_months) > 0 && fieldsStatus.interestGrace) && (
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Comportamento dos Juros na Carência</Label>
-                <Select 
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                  Comportamento dos Juros na Carência
+                  <TooltipProvider>
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <p className="text-xs">
+                          O que acontece com os juros apropriados durante a carência: Capitalizar soma ao saldo
+                          devedor (juros sobre juros); Pagar Juros exige desembolso mensal já na carência; Balloon
+                          acumula juros simples à parte para quitar depois.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+                <Select
                   value={form.grace_interest_behavior} 
                   onValueChange={(v) => {
                     // Bloquear PRICE + BALLOON
@@ -996,19 +1248,19 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                     <SelectItem value="CAPITALIZAR">
                       <div className="py-1">
                         <div className="font-semibold">Capitalizar (Anatocismo)</div>
-                        <div className="text-xs text-slate-500">Juros sobre juros - SD cresce</div>
+                        <div className="text-xs text-slate-600">Juros sobre juros - SD cresce</div>
                       </div>
                     </SelectItem>
                     <SelectItem value="INTEREST_ONLY">
                       <div className="py-1">
                         <div className="font-semibold">Pagar Juros (Interest Only)</div>
-                        <div className="text-xs text-slate-500">PMT = juros mensais, SD estático</div>
+                        <div className="text-xs text-slate-600">PMT = juros mensais, SD estático</div>
                       </div>
                     </SelectItem>
                     <SelectItem value="BALLOON" disabled={form.calculation_system === "PRICE"}>
                       <div className="py-1">
                         <div className="font-semibold">Balloon (Juros Simples)</div>
-                        <div className="text-xs text-slate-500">Acumula juros simples para pagar depois</div>
+                        <div className="text-xs text-slate-600">Acumula juros simples para pagar depois</div>
                       </div>
                     </SelectItem>
                   </SelectContent>
@@ -1022,31 +1274,46 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </div>
               {parseInt(form.principal_grace_months) > 0 && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Gatilho da Primeira Amortização</Label>
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                    Gatilho da Primeira Amortização
+                    <TooltipProvider>
+                      <Tooltip delayDuration={200}>
+                        <TooltipTrigger asChild>
+                          <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs">
+                          <p className="text-xs">
+                            Define a data exata da 1ª parcela de amortização, contada a partir do fim da carência
+                            de principal — as três opções abaixo mudam só esse detalhe de contagem.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
                   <Select value={form.amortization_trigger} onValueChange={(v) => update("amortization_trigger", v)}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="END_OF_GRACE">
                         <div className="py-1">
                           <div className="font-semibold">Fim da Carência</div>
-                          <div className="text-xs text-slate-500">1ª PMT = último dia da carência</div>
+                          <div className="text-xs text-slate-600">1ª PMT = último dia da carência</div>
                         </div>
                       </SelectItem>
                       <SelectItem value="GRACE_PLUS_FREQ">
                         <div className="py-1">
                           <div className="font-semibold">Carência + Periodicidade</div>
-                          <div className="text-xs text-slate-500">1ª PMT = carência + 1 frequência</div>
+                          <div className="text-xs text-slate-600">1ª PMT = carência + 1 frequência</div>
                         </div>
                       </SelectItem>
                       <SelectItem value="NEXT_MONTH">
                         <div className="py-1">
                           <div className="font-semibold">Mês Subsequente</div>
-                          <div className="text-xs text-slate-500">1ª PMT = carência + 1 mês fixo</div>
+                          <div className="text-xs text-slate-600">1ª PMT = carência + 1 mês fixo</div>
                         </div>
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-slate-500">Define quando cai a primeira parcela de amortização</p>
+                  <p className="text-xs text-slate-600">Define quando cai a primeira parcela de amortização</p>
                 </div>
               )}
             </div>
@@ -1054,7 +1321,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <Separator />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Periodicidade Amortização</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Periodicidade Amortização</Label>
               <Select 
                 value={form.principal_periodicity} 
                 onValueChange={(v) => update("principal_periodicity", v)}
@@ -1066,7 +1333,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 </SelectContent>
               </Select>
               {!fieldsStatus.principalPeriodicity && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600">
                   {form.calculation_system === "PRICE" && "Travado como Mensal (PRICE)"}
                   {form.calculation_system === "AMERICANO" && "Amortização só ao final"}
                   {form.calculation_system === "BULLET" && "Pagamento único final"}
@@ -1074,7 +1341,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Periodicidade Juros</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Periodicidade Juros</Label>
               <Select 
                 value={form.interest_periodicity} 
                 onValueChange={(v) => update("interest_periodicity", v)}
@@ -1086,7 +1353,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 </SelectContent>
               </Select>
               {!fieldsStatus.interestPeriodicity && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600">
                   {form.calculation_system === "SAC" && "Segue periodicidade da amortização"}
                   {form.calculation_system === "PRICE" && "Travado como Mensal (PRICE)"}
                   {form.calculation_system === "BULLET" && "Pagamento único final"}
@@ -1132,7 +1399,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 value={form.amortization_percentages}
                 onChange={(e) => update("amortization_percentages", e.target.value)}
                 placeholder="Ex: 24.18, 28.09, 32.72, 38.18"
-                className="h-9 font-mono border-amber-300"
+                className="h-9 border-amber-300"
               />
               <p className="text-xs text-amber-600">
                 Insira os percentuais separados por vírgula. Ex: primeira parcela 24,18%, segunda 28,09%, etc.
@@ -1210,6 +1477,40 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
         {isCalculating && (
           <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
             <div className="h-full bg-blue-600 animate-pulse" style={{ width: "100%" }} />
+          </div>
+        )}
+
+        {/* Salvar/Enviar ficam logo abaixo de Calcular — próximos o bastante
+            para o usuário enxergar o próximo passo sem procurar em outra
+            parte da tela. Ficam desabilitados até existir um cálculo (result)
+            porque é dele que vem o cronograma que será persistido. */}
+        {(onSaveDraft || onSubmitForReview) && (
+          <div className="grid grid-cols-2 gap-2">
+            {onSaveDraft && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!hasResult || isSaving}
+                onClick={onSaveDraft}
+                className="gap-1.5 text-xs disabled:opacity-60 disabled:cursor-not-allowed"
+                title={!hasResult ? "Calcule o contrato antes de salvar" : undefined}
+              >
+                <Save className="w-3.5 h-3.5" />
+                {isSaving ? "Salvando..." : "Salvar como Rascunho"}
+              </Button>
+            )}
+            {onSubmitForReview && (
+              <Button
+                type="button"
+                disabled={!hasResult || isSaving}
+                onClick={onSubmitForReview}
+                className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                title={!hasResult ? "Calcule o contrato antes de enviar" : undefined}
+              >
+                <Send className="w-3.5 h-3.5" />
+                {isSaving ? "Enviando..." : "Enviar para Revisão"}
+              </Button>
+            )}
           </div>
         )}
       </div>

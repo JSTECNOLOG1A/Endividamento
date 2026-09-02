@@ -1,6 +1,7 @@
 import { refreshPayableTitlesFromErp } from "../payables/erpIntegrate.js";
 import { convertPayablePrToTx } from "../payables/convertPrToTx.js";
 import { refreshReceivableTitlesFromErp } from "../receivables/erpIntegrate.js";
+import { syncPtaxToCurrencies, syncRatesToCdiRates } from "../functions/bacen.js";
 
 export const TASKS = {
   consultar_titulos_pagar: {
@@ -59,16 +60,53 @@ export const TASKS = {
   },
   converter_titulos_pr_tx: {
     key: "converter_titulos_pr_tx",
-    label: "Converter títulos PR em TX no virar do mês",
+    label: "Converter títulos PR em JUR no virar do mês",
     rotina: "Contas a pagar",
-    descricao: "No dia escolhido, consulta o PR no Protheus, estorna, troca o tipo para TX e integra de novo.",
-    defaultNome: "Converter juros PR em TX no virar do mês",
+    descricao: "No dia escolhido, consulta o PR no Protheus, estorna, troca o tipo para JUR e integra de novo.",
+    defaultNome: "Converter juros PR em JUR no virar do mês",
     defaultModo: "mensal",
     defaultIntervaloMinutos: 1440,
     defaultDiaMes: 1,
     defaultHoraExecucao: "00:10",
     async run() {
       return convertPayablePrToTx();
+    },
+  },
+  atualizar_ptax_bacen: {
+    key: "atualizar_ptax_bacen",
+    label: "Atualizar PTAX do BACEN",
+    rotina: "Câmbio",
+    descricao: "Busca a cotação PTAX (dólar) mais recente direto no Banco Central e grava no cadastro de Moedas.",
+    defaultNome: "Atualizar PTAX do BACEN",
+    defaultModo: "intervalo",
+    defaultIntervaloMinutos: 1440,
+    async run() {
+      const result = await syncPtaxToCurrencies();
+      return {
+        ok: result.ok,
+        message: `PTAX ${result.action === "created" ? "gravada" : "atualizada"} para ${result.rate_date}: R$ ${result.exchange_rate}`,
+        detalhes: result,
+      };
+    },
+  },
+  atualizar_indices_bacen: {
+    key: "atualizar_indices_bacen",
+    label: "Atualizar CDI e SELIC do BACEN",
+    rotina: "Índices",
+    descricao: "Busca CDI e SELIC diários direto no Banco Central (últimos 10 dias) e insere as datas ainda não cadastradas.",
+    defaultNome: "Atualizar CDI e SELIC do BACEN",
+    defaultModo: "intervalo",
+    defaultIntervaloMinutos: 1440,
+    async run() {
+      const result = await syncRatesToCdiRates();
+      const parts = Object.entries(result.summary).map(
+        ([tipo, s]) => `${tipo}: ${s.inserted} nova(s) de ${s.fetched} consultada(s)`
+      );
+      return {
+        ok: result.ok,
+        message: parts.join(" · "),
+        detalhes: result.summary,
+      };
     },
   },
 };

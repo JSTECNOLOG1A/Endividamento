@@ -27,6 +27,7 @@ import TitleViewDialog from "../components/payables/TitleViewDialog";
 import { erpStatusOf, ErpStatusBadge, ErpStatusLegend } from "@/lib/erpStatus";
 import { useProcessing } from "@/lib/ProcessingContext";
 import { useAuth } from "@/lib/AuthContext";
+import { useSortableRows, SortableTh } from "@/components/ui/sortable-table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,6 +88,26 @@ function canConsult(item) {
 function canSelect(item) {
   return canIntegrate(item) || canReverse(item);
 }
+
+// Mesma configuração de reordenação por clique no título da tabela de
+// Contratos. Checkbox e Ações ficam de fora (não fazem sentido ordenar).
+const RECEIVABLE_SORT_COLUMNS = {
+  erpStatus: { getValue: (row) => erpStatusOf(row) },
+  entity_name: {},
+  filial: {},
+  filial_origem: {},
+  cliente: { getValue: (row) => customerLabel(row) },
+  prefixo: {},
+  titulo_numero: {},
+  parcela: { numeric: true, getValue: (row) => Number(row.parcela) || 0 },
+  tipo: {},
+  emissao: { numeric: true, getValue: (row) => (row.emissao ? new Date(row.emissao).getTime() : 0) },
+  vencimento: { numeric: true, getValue: (row) => (row.vencimento ? new Date(row.vencimento).getTime() : 0) },
+  valor: { numeric: true },
+  saldo: { numeric: true },
+  natureza: {},
+  historico: {},
+};
 
 export default function AccountsReceivable() {
   const { user } = useAuth();
@@ -188,6 +209,8 @@ export default function AccountsReceivable() {
       ),
     [rows]
   );
+
+  const { sortKey, sortDir, toggleSort, sortedRows } = useSortableRows(rows, RECEIVABLE_SORT_COLUMNS);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["receivable-titles"] });
 
@@ -401,7 +424,7 @@ export default function AccountsReceivable() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contas a receber</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-sm text-slate-600 mt-0.5">
             Um título por contrato, com o primeiro SD Ini BRL do cronograma. Classifique, integre, consulte e estorne no Protheus como no contas a pagar.
           </p>
         </div>
@@ -411,7 +434,7 @@ export default function AccountsReceivable() {
             Consultar títulos
           </Button>
           {rows.length > 0 && (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-600">
               {rows.length} {rows.length === 1 ? "título" : "títulos"}
               <span className="mx-1.5 text-slate-300">•</span>
               Total {formatMoney(totals.valor)}
@@ -424,13 +447,13 @@ export default function AccountsReceivable() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3 mb-4">
         <div className="space-y-1 md:col-span-2">
-          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Legenda</Label>
+          <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Legenda</Label>
           <div className="flex min-h-9 items-center">
             <ErpStatusLegend />
           </div>
         </div>
         <div className="space-y-1 xl:col-span-1">
-          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Busca</Label>
+          <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Busca</Label>
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -439,7 +462,7 @@ export default function AccountsReceivable() {
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Entidade</Label>
+          <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Entidade</Label>
           <Select value={entityFilter} onValueChange={setEntityFilter}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -451,7 +474,7 @@ export default function AccountsReceivable() {
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</Label>
+          <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Tipo</Label>
           <Select value={tipoFilter} onValueChange={setTipoFilter}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -463,7 +486,7 @@ export default function AccountsReceivable() {
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status ERP</Label>
+          <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Status ERP</Label>
           <Select value={erpFilter} onValueChange={setErpFilter}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -517,7 +540,7 @@ export default function AccountsReceivable() {
                   ? "Nenhum título neste filtro"
                   : "Nenhum título a receber"}
             </p>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               {(titles || []).length > 0
                 ? "O título integrado fica em Status ERP = Integrado. Troque o filtro para Todos para ver a lista completa."
                 : "Os títulos entram aqui quando o contrato é aprovado, com o primeiro SD Ini BRL do cronograma."}
@@ -532,7 +555,7 @@ export default function AccountsReceivable() {
       ) : (
         <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1580px] caption-bottom text-sm">
+            <table className="w-full min-w-[1580px] caption-bottom text-[11px]">
               <thead>
                 <tr className="border-b bg-slate-50">
                   <th className="h-10 w-10 px-3 text-left align-middle">
@@ -542,28 +565,28 @@ export default function AccountsReceivable() {
                       aria-label="Selecionar títulos abertos"
                     />
                   </th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Status ERP</th>
-                  <th className="h-10 px-3 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Entidade</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Filial</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Fil. origem</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Cliente</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Prefixo</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Número</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Parc.</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Tipo</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Emissão</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Vencimento</th>
-                  <th className="h-10 px-2 text-right align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Valor</th>
-                  <th className="h-10 px-2 text-right align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Saldo</th>
-                  <th className="h-10 px-2 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Natureza (código)</th>
-                  <th className="h-10 px-3 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500">Histórico</th>
-                  <th className="h-10 px-3 text-right align-middle text-[11px] font-medium uppercase tracking-wider text-slate-500 sticky right-0 bg-slate-50 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.18)]">
+                  <SortableTh sortField="erpStatus" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Status ERP</SortableTh>
+                  <SortableTh sortField="entity_name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Entidade</SortableTh>
+                  <SortableTh sortField="filial" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Filial</SortableTh>
+                  <SortableTh sortField="filial_origem" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Fil. origem</SortableTh>
+                  <SortableTh sortField="cliente" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Cliente</SortableTh>
+                  <SortableTh sortField="prefixo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Prefixo</SortableTh>
+                  <SortableTh sortField="titulo_numero" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Número</SortableTh>
+                  <SortableTh sortField="parcela" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Parc.</SortableTh>
+                  <SortableTh sortField="tipo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Tipo</SortableTh>
+                  <SortableTh sortField="emissao" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Emissão</SortableTh>
+                  <SortableTh sortField="vencimento" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Vencimento</SortableTh>
+                  <SortableTh sortField="valor" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Valor</SortableTh>
+                  <SortableTh sortField="saldo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} right>Saldo</SortableTh>
+                  <SortableTh sortField="natureza" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Natureza (código)</SortableTh>
+                  <SortableTh sortField="historico" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Histórico</SortableTh>
+                  <th className="h-10 px-3 text-right align-middle text-[11px] font-medium uppercase tracking-wider text-slate-600 sticky right-0 bg-slate-50 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.18)]">
                     Ações
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((item) => {
+                {sortedRows.map((item) => {
                   const selectable = canSelect(item);
                   return (
                     <tr
@@ -572,7 +595,7 @@ export default function AccountsReceivable() {
                       onDoubleClick={() => setViewTitle(item)}
                     >
                       <td
-                        className="px-3 py-2.5 align-middle"
+                        className="px-3 py-1.5 align-middle"
                         onDoubleClick={(event) => event.stopPropagation()}
                       >
                         <Checkbox
@@ -582,41 +605,41 @@ export default function AccountsReceivable() {
                           aria-label={`Selecionar título ${item.titulo_numero} parcela ${item.parcela}`}
                         />
                       </td>
-                      <td className="px-2 py-2.5 align-middle"><ErpStatusBadge item={item} /></td>
-                      <td className="px-3 py-2.5 align-middle font-medium text-slate-800 max-w-[180px] truncate" title={item.entity_name || ""}>
+                      <td className="px-2 py-1.5 align-middle"><ErpStatusBadge item={item} /></td>
+                      <td className="px-3 py-1.5 align-middle font-medium text-slate-800 max-w-[180px] truncate" title={item.entity_name || ""}>
                         {item.entity_name || "—"}
                       </td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700" title="Empresa do título no SE1 (E1_FILIAL / M0_CODIGO)">
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700" title="Empresa do título no SE1 (E1_FILIAL / M0_CODIGO)">
                         {item.filial || "—"}
                       </td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700" title="Filial de origem (E1_FILORIG). Pode ser diferente da unidade da sessão, ex.: 0301 ou 0104">
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700" title="Filial de origem (E1_FILORIG). Pode ser diferente da unidade da sessão, ex.: 0301 ou 0104">
                         {item.filial_origem || "—"}
                       </td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-700 max-w-[200px] truncate" title={customerLabel(item)}>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700 max-w-[200px] truncate" title={customerLabel(item)}>
                         {customerLabel(item)}
                       </td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700">{item.prefixo}</td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700 whitespace-nowrap">{item.titulo_numero}</td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700">{item.parcela}</td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-700">{item.tipo}</td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-600 whitespace-nowrap">{formatDate(item.emissao)}</td>
-                      <td className="px-2 py-2.5 align-middle text-xs text-slate-600 whitespace-nowrap">{formatDate(item.vencimento)}</td>
-                      <td className="px-2 py-2.5 align-middle text-right text-xs tabular-nums whitespace-nowrap">{formatMoney(item.valor)}</td>
-                      <td className="px-2 py-2.5 align-middle text-right text-xs tabular-nums whitespace-nowrap">{formatMoney(item.saldo)}</td>
-                      <td className="px-2 py-2.5 align-middle font-mono text-xs text-slate-600 whitespace-nowrap" title={natureLabel(item.natureza, natures)}>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700">{item.prefixo}</td>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700 whitespace-nowrap">{item.titulo_numero}</td>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700">{item.parcela}</td>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-700">{item.tipo}</td>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-600 whitespace-nowrap">{formatDate(item.emissao)}</td>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-600 whitespace-nowrap">{formatDate(item.vencimento)}</td>
+                      <td className="px-2 py-1.5 align-middle text-right text-[11px] tabular-nums whitespace-nowrap">{formatMoney(item.valor)}</td>
+                      <td className="px-2 py-1.5 align-middle text-right text-[11px] tabular-nums whitespace-nowrap">{formatMoney(item.saldo)}</td>
+                      <td className="px-2 py-1.5 align-middle text-[11px] text-slate-600 whitespace-nowrap" title={natureLabel(item.natureza, natures)}>
                         {natureLabel(item.natureza, natures)}
                       </td>
-                      <td className="px-3 py-2.5 align-middle text-xs text-slate-600 max-w-[220px] truncate" title={item.historico || ""}>
+                      <td className="px-3 py-1.5 align-middle text-[11px] text-slate-600 max-w-[220px] truncate" title={item.historico || ""}>
                         {item.historico || "—"}
                       </td>
                       <td
-                        className="px-3 py-2.5 align-middle text-right sticky right-0 bg-white shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.18)]"
+                        className="px-3 py-1.5 align-middle text-right sticky right-0 bg-white shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.18)]"
                         onDoubleClick={(event) => event.stopPropagation()}
                       >
                         <div className="flex items-center justify-end gap-2">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-slate-500" disabled={busy}>
+                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-slate-600" disabled={busy}>
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -661,13 +684,13 @@ export default function AccountsReceivable() {
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 border-t">
-                  <td className="px-3 py-2.5 text-xs font-medium text-slate-600" colSpan={12}>
+                  <td className="px-3 py-1.5 text-[11px] font-medium text-slate-600" colSpan={12}>
                     {rows.length} {rows.length === 1 ? "título" : "títulos"}
                   </td>
-                  <td className="px-2 py-2.5 text-right text-xs font-semibold tabular-nums whitespace-nowrap text-slate-800">
+                  <td className="px-2 py-1.5 text-right text-[11px] font-semibold tabular-nums whitespace-nowrap text-slate-800">
                     {formatMoney(totals.valor)}
                   </td>
-                  <td className="px-2 py-2.5 text-right text-xs font-semibold tabular-nums whitespace-nowrap text-slate-800">
+                  <td className="px-2 py-1.5 text-right text-[11px] font-semibold tabular-nums whitespace-nowrap text-slate-800">
                     {formatMoney(totals.saldo)}
                   </td>
                   <td colSpan={2} />

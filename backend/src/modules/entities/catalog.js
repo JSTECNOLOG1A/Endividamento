@@ -152,9 +152,15 @@ export const ENTITIES = {
       "discount_amount", "rounding_adjustment", "other_amount", "total_paid",
     ],
   },
+  AccountMovement: {
+    table: "account_movements",
+    columns: ["contract_id", "movement_date", "movement_type", "amount", "observacao"],
+    booleans: [],
+    numbers: ["amount"],
+  },
   AccountingEventMapping: {
     table: "accounting_event_mappings",
-    columns: ["group_id", "entity_id", "event_type", "debit_account_id", "credit_account_id", "status"],
+    columns: ["group_id", "entity_id", "event_type", "operation_category", "debit_account_id", "credit_account_id", "status"],
     booleans: [],
     numbers: [],
   },
@@ -166,6 +172,12 @@ export const ENTITIES = {
     ],
     booleans: [],
     numbers: ["amount"],
+  },
+  NotificationLog: {
+    table: "notification_log",
+    columns: ["event_type", "contract_id", "to_email", "subject", "body", "status", "error_message"],
+    booleans: [],
+    numbers: [],
   },
   Tenant: {
     table: "tenants",

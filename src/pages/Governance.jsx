@@ -423,10 +423,10 @@ export default function Governance() {
   }, [accountsWithRefs, accountSearch, accountEntityFilter, accountStatusFilter, selectedBankId]);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <div className="w-full px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Governança</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Grupos, entidades, bancos, contas, naturezas e plano de contas</p>
+        <p className="text-sm text-slate-600 mt-0.5">Grupos, entidades, bancos, contas, naturezas e plano de contas</p>
       </div>
 
       <Tabs
@@ -507,7 +507,7 @@ export default function Governance() {
           )}
           {!showForm && (
             <div className="space-y-1 max-w-sm">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Grupo</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Grupo</Label>
               <Select
                 value={selectedGroup || "__all__"}
                 onValueChange={(value) => setSelectedGroup(value === "__all__" ? null : value)}
@@ -562,7 +562,7 @@ export default function Governance() {
               onEdit={(item) => handleEdit(item, "bank")}
               onDelete={(id) => deleteBankMutation.mutate(id)}
             />
-            <p className="text-xs text-slate-400">Clique no banco ou no ícone de carteira para filtrar as contas.</p>
+            <p className="text-xs text-slate-500">Clique no banco ou no ícone de carteira para filtrar as contas.</p>
           </div>
 
           <div className="space-y-4">
@@ -570,7 +570,7 @@ export default function Governance() {
               <div>
                 <h2 className="text-base font-semibold text-slate-800">Contas bancárias</h2>
                 {selectedBank ? (
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-slate-600 mt-0.5">
                     {selectedBank.bank_code} — {selectedBank.bank_name}
                     {" "}
                     <button
@@ -582,7 +582,7 @@ export default function Governance() {
                     </button>
                   </p>
                 ) : (
-                  <p className="text-xs text-slate-500 mt-0.5">Vinculadas ao banco e à empresa Protheus da entidade</p>
+                  <p className="text-xs text-slate-600 mt-0.5">Vinculadas ao banco e à empresa Protheus da entidade</p>
                 )}
               </div>
               {!(showForm && editingKind === "account") && (
@@ -627,7 +627,7 @@ export default function Governance() {
             {!(showForm && editingKind === "account") && (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div className="space-y-1 col-span-2 md:col-span-1">
-                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Busca</Label>
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Busca</Label>
                   <Input
                     value={accountSearch}
                     onChange={(e) => setAccountSearch(e.target.value)}
@@ -636,7 +636,7 @@ export default function Governance() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Entidade</Label>
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Entidade</Label>
                   <Select value={accountEntityFilter} onValueChange={setAccountEntityFilter}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -649,7 +649,7 @@ export default function Governance() {
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</Label>
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Status</Label>
                   <Select value={accountStatusFilter} onValueChange={setAccountStatusFilter}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -711,7 +711,7 @@ export default function Governance() {
           {!showForm && (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-1">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Busca</Label>
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Busca</Label>
                 <Input
                   value={natureSearch}
                   onChange={(e) => setNatureSearch(e.target.value)}
@@ -720,7 +720,7 @@ export default function Governance() {
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Entidade</Label>
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Entidade</Label>
                 <Select value={natureEntityFilter} onValueChange={setNatureEntityFilter}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -733,7 +733,7 @@ export default function Governance() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">LCDPR</Label>
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">LCDPR</Label>
                 <Select value={natureLcdprFilter} onValueChange={setNatureLcdprFilter}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -744,7 +744,7 @@ export default function Governance() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</Label>
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Tipo</Label>
                 <Select value={natureTipoFilter} onValueChange={setNatureTipoFilter}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -755,7 +755,7 @@ export default function Governance() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</Label>
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Status</Label>
                 <Select value={natureStatusFilter} onValueChange={setNatureStatusFilter}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -785,7 +785,7 @@ export default function Governance() {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-base font-semibold text-slate-800">Plano de contas</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Compartilhado no grupo 01, sem validação de filial. Contas bloqueadas no ERP não entram.</p>
+              <p className="text-xs text-slate-600 mt-0.5">Compartilhado no grupo 01, sem validação de filial. Contas bloqueadas no ERP não entram.</p>
             </div>
             {!showForm && (
               <div className="flex gap-2">

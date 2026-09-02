@@ -90,7 +90,7 @@ export default function BankAccountForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Banco *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Banco *</Label>
               {banks.length === 0 ? (
                 <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
                   Cadastre o banco antes de criar a conta.
@@ -108,11 +108,11 @@ export default function BankAccountForm({
                 </Select>
               )}
               {selectedBank ? (
-                <p className="text-xs text-slate-400">Código COMPE: {selectedBank.bank_code}</p>
+                <p className="text-xs text-slate-500">Código COMPE: {selectedBank.bank_code}</p>
               ) : null}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Entidade *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Entidade *</Label>
               {entities.length === 0 ? (
                 <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
                   Cadastre uma entidade componente e o código Protheus antes de criar a conta.
@@ -128,7 +128,7 @@ export default function BankAccountForm({
                 </Select>
               )}
               {selectedEntity ? (
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-500">
                   Empresa Protheus: {empresaCode || "informe o código da empresa na entidade"}
                 </p>
               ) : null}
@@ -136,38 +136,38 @@ export default function BankAccountForm({
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Agência *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Agência *</Label>
               <Input
                 value={form.agencia || ""}
                 onChange={(e) => setForm({ ...form, agencia: e.target.value })}
                 placeholder="0001"
-                className="h-9 font-mono"
+                className="h-9"
                 required
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Conta *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Conta *</Label>
               <Input
                 value={form.conta || ""}
                 onChange={(e) => setForm({ ...form, conta: e.target.value })}
                 placeholder="12345-6"
-                className="h-9 font-mono"
+                className="h-9"
                 required
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Dígito</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Dígito</Label>
               <Input
                 value={form.digito || ""}
                 onChange={(e) => setForm({ ...form, digito: e.target.value })}
                 placeholder="Opcional"
-                className="h-9 font-mono"
+                className="h-9"
               />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nome *</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nome *</Label>
               <Input
                 value={form.nome || ""}
                 onChange={(e) => setForm({ ...form, nome: e.target.value })}
@@ -177,7 +177,7 @@ export default function BankAccountForm({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tipo</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Tipo</Label>
               <Input
                 value={form.tipo || ""}
                 onChange={(e) => setForm({ ...form, tipo: e.target.value })}
@@ -187,7 +187,7 @@ export default function BankAccountForm({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</Label>
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Status</Label>
             <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -196,7 +196,7 @@ export default function BankAccountForm({
               </SelectContent>
             </Select>
           </div>
-          <p className="-mt-2 text-xs text-slate-400">
+          <p className="-mt-2 text-xs text-slate-500">
             O A6_FILIAL do ERP é a empresa da entidade; a filial fica em branco. A conta só entra se o A6_COD for o COMPE deste banco.
           </p>
           <div className="flex gap-2 justify-end pt-2">

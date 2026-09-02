@@ -586,6 +586,14 @@ export async function update(name, id, data) {
   if (name === "LoanContract" && previous.status !== "cancelado" && saved.status === "cancelado") {
     await bumpContractsUsed(-1);
   }
+  if (name === "LoanContract" && saved.status !== previous.status) {
+    try {
+      const { notifyContractStatusChange } = await import("../notifications/contractNotifications.js");
+      await notifyContractStatusChange(saved, previous.status);
+    } catch (error) {
+      logger.error({ err: error, contractId: saved.id }, "falha ao notificar mudança de status do contrato");
+    }
+  }
   return saved;
 }
 

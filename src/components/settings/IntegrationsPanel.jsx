@@ -36,6 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SORT_HEAD_CLASS } from "@/components/ui/sortable-table";
 import IntegrationForm from "./IntegrationForm";
 import {
   AUTH_TYPE_LABELS,
@@ -206,31 +207,35 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
         <Table>
           <TableHeader>
+            {/* Sem reordenação por clique: a lista é paginada no servidor
+                (só a página atual fica carregada no cliente) — ordenar
+                mudaria a página visível, não a lista inteira, e enganaria o
+                usuário. Só o estilo visual do cabeçalho é padronizado. */}
             <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>ERP</TableHead>
-              <TableHead>URL base</TableHead>
-              <TableHead>Endpoints</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Nome</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>ERP</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>URL base</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Endpoints</TableHead>
+              <TableHead className={SORT_HEAD_CLASS}>Status</TableHead>
+              <TableHead className={`${SORT_HEAD_CLASS} text-right`}>Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-slate-500 py-8">
+                <TableCell colSpan={6} className="text-center text-slate-600 py-8">
                   Carregando conexões...
                 </TableCell>
               </TableRow>
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-slate-500 py-8">
+                <TableCell colSpan={6} className="text-center text-slate-600 py-8">
                   Nenhuma conexão de API cadastrada.
                 </TableCell>
               </TableRow>
             ) : (
               items.map((item) => (
-                <TableRow key={item.id}>
+                <TableRow key={item.id} className="hover:bg-slate-50">
                   <TableCell className="font-medium text-slate-900">{item.nome}</TableCell>
                   <TableCell>{item.erpNome || "—"}</TableCell>
                   <TableCell className="max-w-[220px] truncate" title={item.baseUrl}>
@@ -280,7 +285,7 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
       </div>
 
       {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-slate-500">
+        <div className="flex items-center justify-between text-sm text-slate-600">
           <span>{pagination.total} conexões</span>
           <div className="flex gap-2">
             <Button
@@ -341,7 +346,7 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
               <Detail label="Timeout" value={`${details.timeoutSeconds}s`} />
               <Detail label="Grupo / Empresa / Filial" value={[details.grupoEmpresas, details.empresa, details.filial].filter(Boolean).join(" · ") || "—"} />
               <div>
-                <p className="text-slate-500 mb-1">Endpoints</p>
+                <p className="text-slate-600 mb-1">Endpoints</p>
                 {details.endpoints?.length ? (
                   <ul className="space-y-1">
                     {details.endpoints.map((endpoint) => (
@@ -393,7 +398,7 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
 function Detail({ label, value }) {
   return (
     <div className="flex justify-between gap-4">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-slate-600">{label}</span>
       <span className="font-medium text-slate-900 text-right break-all">{value || "—"}</span>
     </div>
   );

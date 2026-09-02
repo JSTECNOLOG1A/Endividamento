@@ -19,7 +19,10 @@ import { computeContractCET } from "../lib/cetFromSchedule";
 
 export default function Contracts() {
   const [selected, setSelected] = useState(null);
-  const [statusFilter, setStatusFilter] = useState("all");
+  // Abre por padrão só nos contratos Aprovados — é o recorte mais usado no
+  // dia a dia (consulta/consolidação); os outros status continuam a um
+  // clique de distância nos cards/filtro acima.
+  const [statusFilter, setStatusFilter] = useState("aprovado");
   const [bankFilter, setBankFilter] = useState("all");
   // Controla o painel lateral com o PDF do contrato (conferência lado a
   // lado no modo de revisão). Começa aberto automaticamente sempre que um
@@ -31,11 +34,24 @@ export default function Contracts() {
     setShowPdf(!!selected?.contract?.contract_pdf_url);
   }, [selected?.contract?.id]);
 
+  // Esc fecha a revisão do contrato e volta para a lista — mesmo atalho que
+  // o botão "Voltar para Contratos", para quem prefere teclado.
+  React.useEffect(() => {
+    if (!selected) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") setSelected(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selected]);
+
   const { data: contracts, isLoading } = useQuery({
     queryKey: ["contracts"],
     queryFn: () => base44.entities.LoanContract.list("-created_date", 1000),
     initialData: [],
   });
+
+  const [deepLinkHandled, setDeepLinkHandled] = useState(false);
 
   const { data: user } = useQuery({
     queryKey: ["current-user"],
@@ -93,7 +109,13 @@ export default function Contracts() {
 
   const handleView = (contract) => {
     const scheduleData = contract.schedule_data ? JSON.parse(contract.schedule_data) : {};
-    const schedule = scheduleData.schedule || scheduleData || [];
+    // {} é truthy em JS — "scheduleData.schedule || scheduleData || []" cai
+    // em {} (não []) quando não há cronograma salvo (ex.: contrato de Conta
+    // Garantida, que nunca tem schedule_data tradicional), e os .forEach/
+    // .reduce logo abaixo quebram em objeto. Garante array sempre.
+    const schedule = Array.isArray(scheduleData.schedule)
+      ? scheduleData.schedule
+      : Array.isArray(scheduleData) ? scheduleData : [];
     // O CET e a Taxa Nominal não ficam salvos em schedule_data (só o
     // cronograma é persistido) — por isso são recalculados aqui a partir do
     // próprio contrato + cronograma já salvos, sem precisar rodar o motor
@@ -114,6 +136,19 @@ export default function Contracts() {
       },
     });
   };
+
+  // Deep-link vindo de e-mails de notificação (?contract=<id>) — abre o
+  // contrato direto na visão de revisão assim que a lista carregar.
+  React.useEffect(() => {
+    if (deepLinkHandled || !contracts.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const contractId = params.get("contract");
+    if (contractId) {
+      const contract = contracts.find((c) => c.id === contractId);
+      if (contract) handleView(contract);
+    }
+    setDeepLinkHandled(true);
+  }, [contracts, deepLinkHandled]);
 
   const handleEdit = (contract) => {
     window.location.href = createPageUrl("Simulator") + "?edit=" + contract.id;
@@ -165,10 +200,10 @@ export default function Contracts() {
     const pdfVisible = showPdf && hasPdf;
 
     return (
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-8">
+      <div className="w-full px-4 sm:px-6 py-8">
         <div className="flex items-center justify-between mb-4">
-          <Button variant="ghost" size="sm" onClick={() => setSelected(null)} className="gap-1.5 text-xs">
-            <ArrowLeft className="w-3.5 h-3.5" /> Voltar
+          <Button variant="outline" size="sm" onClick={() => setSelected(null)} className="gap-1.5 text-xs">
+            <ArrowLeft className="w-3.5 h-3.5" /> Voltar para Contratos
           </Button>
           {hasPdf && (
             <Button
@@ -197,7 +232,7 @@ export default function Contracts() {
                       {statusLabel(selected.contract.status)}
                     </Badge>
                   </CardTitle>
-                  <p className="text-sm text-slate-500 mt-1">
+                  <p className="text-sm text-slate-600 mt-1">
                     {selected.contract.calculation_system} • {selected.contract.fixed_rate}% a.a.
                     {selected.contract.indexer !== "NA" ? ` + ${selected.contract.indexer}` : ""}
                   </p>
@@ -227,7 +262,7 @@ export default function Contracts() {
                 (Identificação, valores, taxas, prazos) antes de checar a
                 memória de cálculo — sem precisar clicar em "Editar" só para
                 conferir. É somente leitura; a edição continua isolada no
-                botão "Editar" (Simulador). */}
+                botão "Editar" (Calculadora). */}
             <Tabs defaultValue="dados">
               <TabsList className="bg-slate-100">
                 <TabsTrigger value="dados" className="text-xs">Dados do Contrato</TabsTrigger>
@@ -283,10 +318,11 @@ export default function Contracts() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+    // Largura máxima da tela, como o padrão em todas as telas do sistema.
+    <div className="w-full px-4 sm:px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contratos</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Visualize e gerencie os contratos cadastrados</p>
+        <p className="text-sm text-slate-600 mt-0.5">Visualize e gerencie os contratos cadastrados</p>
       </div>
 
       {/* Dashboard Cards */}
@@ -294,8 +330,8 @@ export default function Contracts() {
         <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("all")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-slate-500" />
-              <div className="text-xs text-slate-500">Total</div>
+              <FileText className="w-4 h-4 text-slate-600" />
+              <div className="text-xs text-slate-600">Total</div>
             </div>
             <div className="text-2xl font-bold mt-1">{statusCounts.all}</div>
           </CardContent>
@@ -304,7 +340,7 @@ export default function Contracts() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <Edit className="w-4 h-4 text-blue-500" />
-              <div className="text-xs text-slate-500">Rascunho</div>
+              <div className="text-xs text-slate-600">Rascunho</div>
             </div>
             <div className="text-2xl font-bold mt-1 text-blue-600">{statusCounts.rascunho}</div>
           </CardContent>
@@ -313,7 +349,7 @@ export default function Contracts() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-amber-500" />
-              <div className="text-xs text-slate-500">Pendente</div>
+              <div className="text-xs text-slate-600">Pendente</div>
             </div>
             <div className="text-2xl font-bold mt-1 text-amber-600">{statusCounts.pendente_aprovacao}</div>
           </CardContent>
@@ -322,7 +358,7 @@ export default function Contracts() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-green-500" />
-              <div className="text-xs text-slate-500">Aprovado</div>
+              <div className="text-xs text-slate-600">Aprovado</div>
             </div>
             <div className="text-2xl font-bold mt-1 text-green-600">{statusCounts.aprovado}</div>
           </CardContent>
@@ -331,7 +367,7 @@ export default function Contracts() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <RotateCcw className="w-4 h-4 text-red-500" />
-              <div className="text-xs text-slate-500">Devolvido</div>
+              <div className="text-xs text-slate-600">Devolvido</div>
             </div>
             <div className="text-2xl font-bold mt-1 text-red-600">{statusCounts.cancelado}</div>
           </CardContent>
@@ -372,6 +408,8 @@ export default function Contracts() {
       <ContractsList
         contracts={filteredContracts}
         banks={banks}
+        groups={groups}
+        entities={entities}
         onView={handleView}
         onEdit={handleEdit}
         onDelete={(id) => deleteMutation.mutate(id)}

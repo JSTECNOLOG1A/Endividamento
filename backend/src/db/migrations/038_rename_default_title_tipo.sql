@@ -1,0 +1,2 @@
+ALTER TABLE payable_titles ALTER COLUMN tipo SET DEFAULT 'DEF';
+ALTER TABLE receivable_titles ALTER COLUMN tipo SET DEFAULT 'DEF';

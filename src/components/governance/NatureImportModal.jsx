@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/table";
 import { base44 } from "@/api/base44Client";
 import { normalizeEmpresaCode } from "@/lib/empresaCode";
+import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
 
 const EMPRESA_ALL = "__all__";
 const TIPO_ALL = "__all__";
@@ -58,10 +59,23 @@ function vinculoLabel(item) {
   return "Sem vínculo";
 }
 
+// Mesma configuração de reordenação por clique no título da tabela de
+// Contratos. Checkbox fica de fora (não faz sentido ordenar).
+const NATURE_IMPORT_SORT_COLUMNS = {
+  entidade: { getValue: (item) => vinculoLabel(item) },
+  empresa: { getValue: (item) => empresaLabel(item.empresa) },
+  codigo: { getValue: (item) => item.codigo || "" },
+  descricao: { getValue: (item) => item.descricao || "" },
+  tipo: { getValue: (item) => (item.tipo_natureza === "sintetica" ? "Sintética" : "Analítica") },
+  tipoConta: { getValue: (item) => item.tipo_conta || "" },
+  lcdpr: { getValue: (item) => (item.gera_lcdpr ? "Sim" : "Não") },
+  situacao: { getValue: (item) => (item.already_exists ? "Já cadastrada" : "Nova") },
+};
+
 function FilterSelect({ label, value, onValueChange, children }) {
   return (
     <div className="space-y-1 min-w-0">
-      <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</Label>
+      <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">{label}</Label>
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
         <SelectContent>{children}</SelectContent>
@@ -173,6 +187,8 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
     });
   }, [items, search, empresaFilter, vinculoFilter, lcdprFilter, tipoNaturezaFilter, tipoContaFilter, situacaoFilter]);
 
+  const { sortKey, sortDir, toggleSort, sortedRows: sortedFiltered } = useSortableRows(filtered, NATURE_IMPORT_SORT_COLUMNS);
+
   const allFilteredSelected = filtered.length > 0 && filtered.every((item) => selectedKeys.has(rowKey(item)));
   const someFilteredSelected = filtered.some((item) => selectedKeys.has(rowKey(item)));
   const hasActiveFilters =
@@ -250,11 +266,11 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
         </DialogHeader>
 
         {loading ? (
-          <p className="text-sm text-slate-500 py-8 text-center">Consultando o ERP...</p>
+          <p className="text-sm text-slate-600 py-8 text-center">Consultando o ERP...</p>
         ) : (
           <div className="space-y-3 min-h-0 flex-1 flex flex-col">
             {(preview?.grupo_empresas || preview?.empresas?.length || preview?.tabela) ? (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-600">
                 {[
                   preview.grupo_empresas ? `Grupo ${preview.grupo_empresas}` : null,
                   preview.empresas?.length ? `Empresas ${preview.empresas.join(", ")}` : null,
@@ -322,7 +338,7 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
                 {allFilteredSelected ? "Nenhum" : "Todos"}
               </Button>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-600">
               {selectedKeys.size} de {items.length} selecionadas
               {hasActiveFilters ? ` · ${filtered.length} visíveis` : ""}
             </p>
@@ -340,25 +356,25 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
                         onChange={toggleFiltered}
                       />
                     </TableHead>
-                    <TableHead>Entidade</TableHead>
-                    <TableHead>Empresa</TableHead>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Receita/Despesa</TableHead>
-                    <TableHead>LCDPR</TableHead>
-                    <TableHead>Situação</TableHead>
+                    <SortableHead sortField="entidade" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Entidade</SortableHead>
+                    <SortableHead sortField="empresa" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Empresa</SortableHead>
+                    <SortableHead sortField="codigo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Código</SortableHead>
+                    <SortableHead sortField="descricao" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Descrição</SortableHead>
+                    <SortableHead sortField="tipo" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Tipo</SortableHead>
+                    <SortableHead sortField="tipoConta" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Receita/Despesa</SortableHead>
+                    <SortableHead sortField="lcdpr" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>LCDPR</SortableHead>
+                    <SortableHead sortField="situacao" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Situação</SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.length === 0 ? (
+                  {sortedFiltered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-slate-500 py-8">
+                      <TableCell colSpan={9} className="text-center text-slate-600 py-8">
                         Nenhuma natureza encontrada.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map((item) => {
+                    sortedFiltered.map((item) => {
                       const key = rowKey(item);
                       return (
                         <TableRow key={key} className="cursor-pointer" onClick={() => toggleKey(key)}>
@@ -375,21 +391,21 @@ export default function NatureImportModal({ open, onOpenChange, entities = [], o
                               {vinculoLabel(item)}
                             </span>
                           </TableCell>
-                          <TableCell className="whitespace-nowrap font-mono text-xs">{empresaLabel(item.empresa)}</TableCell>
-                          <TableCell className="font-mono whitespace-nowrap">{item.codigo}</TableCell>
+                          <TableCell className="whitespace-nowrap text-[11px]">{empresaLabel(item.empresa)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{item.codigo}</TableCell>
                           <TableCell>{item.descricao}</TableCell>
                           <TableCell>
                             <Badge variant="outline">
                               {item.tipo_natureza === "sintetica" ? "Sintética" : "Analítica"}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-slate-500 whitespace-nowrap">{item.tipo_conta || "—"}</TableCell>
+                          <TableCell className="text-slate-600 whitespace-nowrap">{item.tipo_conta || "—"}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className={item.gera_lcdpr ? "border-sky-200 bg-sky-50 text-sky-800" : ""}>
                               {item.gera_lcdpr ? "Sim" : "Não"}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-slate-500 whitespace-nowrap">
+                          <TableCell className="text-slate-600 whitespace-nowrap">
                             {item.already_exists ? "Já cadastrada" : "Nova"}
                           </TableCell>
                         </TableRow>

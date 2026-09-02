@@ -44,7 +44,7 @@ export default function ClassifyTitleDialog({
   const entityId = titles[0]?.entity_id || "";
   const entity = entities.find((item) => item.id === entityId) || null;
 
-  const [tipo, setTipo] = useState(titles[0]?.tipo || "NP");
+  const [tipo, setTipo] = useState(titles[0]?.tipo || "DEF");
   const [natureza, setNatureza] = useState(titles[0]?.natureza || "");
   const [partyCode, setPartyCode] = useState(isReceber ? (titles[0]?.cliente || "") : (titles[0]?.fornecedor || ""));
   const [partyLoja, setPartyLoja] = useState(isReceber ? (titles[0]?.cliente_loja || "01") : (titles[0]?.fornecedor_loja || "01"));
@@ -54,7 +54,7 @@ export default function ClassifyTitleDialog({
 
   useEffect(() => {
     if (!open) return;
-    setTipo(titles[0]?.tipo || "NP");
+    setTipo(titles[0]?.tipo || "DEF");
     setNatureza(titles[0]?.natureza || "");
     setPartyCode(isReceber ? (titles[0]?.cliente || "") : (titles[0]?.fornecedor || ""));
     setPartyLoja(isReceber ? (titles[0]?.cliente_loja || "01") : (titles[0]?.fornecedor_loja || "01"));
@@ -116,11 +116,11 @@ export default function ClassifyTitleDialog({
               value={tipo}
               onChange={(value) => setTipo(String(value || "").toUpperCase())}
               onLookup={() => setLookup("tipos")}
-              placeholder="NP, NF, TX..."
+              placeholder="DEF, NF, JUR..."
               mono
             />
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Natureza (ED_CODIGO)</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Natureza (ED_CODIGO)</Label>
               <Select value={natureza || undefined} onValueChange={setNatureza}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Selecione o código da natureza" /></SelectTrigger>
                 <SelectContent>
@@ -145,12 +145,12 @@ export default function ClassifyTitleDialog({
                 mono
               />
               <div className="space-y-1">
-                <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Loja</Label>
-                <Input value={partyLoja} onChange={(event) => setPartyLoja(event.target.value)} className="h-9 font-mono" placeholder="01" />
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Loja</Label>
+                <Input value={partyLoja} onChange={(event) => setPartyLoja(event.target.value)} className="h-9" placeholder="01" />
               </div>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Nome do {isReceber ? "cliente" : "fornecedor"}</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nome do {isReceber ? "cliente" : "fornecedor"}</Label>
               <Input value={partyNome} onChange={(event) => setPartyNome(event.target.value)} className="h-9" />
             </div>
             <label className="flex items-start gap-2 text-sm text-slate-700">

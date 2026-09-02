@@ -36,10 +36,10 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useSortableRows, SortableHead } from "@/components/ui/sortable-table";
 import {
   DAY_OPTIONS,
   INTERVAL_OPTIONS,
@@ -65,6 +65,26 @@ function formatDateTime(value) {
 function selectedTask(tasks, key) {
   return tasks.find((item) => item.key === key) || null;
 }
+
+// Colunas ordenáveis por clique no título (mesma configuração da tabela de
+// Contratos) — cada linha é { task, job }, por isso usam getValue em vez de
+// ler `row[key]` direto.
+const SCHEDULE_SORT_COLUMNS = {
+  taskLabel: { getValue: (row) => row.task.label },
+  jobNome: { getValue: (row) => row.job?.nome || "" },
+  repeticao: { getValue: (row) => (row.job ? scheduleLabel(row.job) : "") },
+  status: {
+    getValue: (row) => (row.job ? (row.job.executando ? "Executando" : row.job.ativo ? "Ativo" : "Pausado") : "Pendente"),
+  },
+  ultimaExecucaoEm: {
+    numeric: true,
+    getValue: (row) => (row.job?.ultimaExecucaoEm ? new Date(row.job.ultimaExecucaoEm).getTime() : 0),
+  },
+  proximaExecucaoEm: {
+    numeric: true,
+    getValue: (row) => (row.job?.ativo && row.job?.proximaExecucaoEm ? new Date(row.job.proximaExecucaoEm).getTime() : 0),
+  },
+};
 
 export default function SchedulesPanel() {
   const { withProcessing } = useProcessing();
@@ -105,6 +125,9 @@ export default function SchedulesPanel() {
     [tasks, jobByTask]
   );
   const missingTasks = rows.filter((row) => !row.job).map((row) => row.task);
+  // Ordenação por coluna (clique no título) — mesma configuração da tabela
+  // de Contratos, ver src/components/ui/sortable-table.jsx.
+  const { sortKey, sortDir, toggleSort, sortedRows } = useSortableRows(rows, SCHEDULE_SORT_COLUMNS);
 
   const openCreate = (task) => {
     const chosen = task || missingTasks[0] || tasks[0];
@@ -228,8 +251,8 @@ export default function SchedulesPanel() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-slate-500">
-          Escolha a tarefa, crie o agendamento e defina o dia ou o intervalo. A conversão PR→TX consulta o Protheus, estorna o PR e integra de novo como TX.
+        <p className="text-sm text-slate-600">
+          Escolha a tarefa, crie o agendamento e defina o dia ou o intervalo. A conversão PR→JUR consulta o Protheus, estorna o PR e integra de novo como JUR.
         </p>
         <div className="flex flex-wrap gap-2">
           {missingTasks.length > 0 && (
@@ -246,38 +269,38 @@ export default function SchedulesPanel() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-500">Carregando agendamentos...</p>
+        <p className="text-sm text-slate-600">Carregando agendamentos...</p>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-slate-500 rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center">
+        <p className="text-sm text-slate-600 rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center">
           Nenhuma tarefa disponível.
         </p>
       ) : (
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Tarefa</TableHead>
-              <TableHead>Agendamento</TableHead>
-              <TableHead>Repetição</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Última execução</TableHead>
-              <TableHead>Próxima</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <SortableHead sortField="taskLabel" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Tarefa</SortableHead>
+              <SortableHead sortField="jobNome" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Agendamento</SortableHead>
+              <SortableHead sortField="repeticao" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Repetição</SortableHead>
+              <SortableHead sortField="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Status</SortableHead>
+              <SortableHead sortField="ultimaExecucaoEm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Última execução</SortableHead>
+              <SortableHead sortField="proximaExecucaoEm" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Próxima</SortableHead>
+              <SortableHead right>Ações</SortableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map(({ task, job }) => (
-              <TableRow key={task.key}>
+            {sortedRows.map(({ task, job }) => (
+              <TableRow key={task.key} className="hover:bg-slate-50">
                 <TableCell>
                   <div className="font-medium text-slate-900">{task.label}</div>
-                  <div className="text-[11px] text-slate-400">{task.rotina}</div>
+                  <div className="text-[11px] text-slate-500">{task.rotina}</div>
                   {task.descricao ? (
-                    <div className="text-[11px] text-slate-500 mt-0.5 max-w-[280px]">{task.descricao}</div>
+                    <div className="text-[11px] text-slate-600 mt-0.5 max-w-[280px]">{task.descricao}</div>
                   ) : null}
                 </TableCell>
-                <TableCell className="text-sm text-slate-700">
-                  {job ? job.nome : <span className="text-slate-400">Não criada</span>}
+                <TableCell className="text-[11px] text-slate-700">
+                  {job ? job.nome : <span className="text-slate-500">Não criada</span>}
                 </TableCell>
-                <TableCell className="text-sm text-slate-600">
+                <TableCell className="text-[11px] text-slate-600">
                   {job ? scheduleLabel(job) : "—"}
                 </TableCell>
                 <TableCell>
@@ -292,7 +315,7 @@ export default function SchedulesPanel() {
                 <TableCell>
                   {job ? (
                     <>
-                      <div className="text-sm text-slate-700">{formatDateTime(job.ultimaExecucaoEm)}</div>
+                      <div className="text-[11px] text-slate-700">{formatDateTime(job.ultimaExecucaoEm)}</div>
                       {job.ultimaMensagem ? (
                         <div
                           className={`text-[11px] max-w-[240px] truncate ${job.ultimaExecucaoOk ? "text-emerald-700" : "text-rose-700"}`}
@@ -303,10 +326,10 @@ export default function SchedulesPanel() {
                       ) : null}
                     </>
                   ) : (
-                    <span className="text-sm text-slate-400">—</span>
+                    <span className="text-[11px] text-slate-500">—</span>
                   )}
                 </TableCell>
-                <TableCell className="text-sm text-slate-600">
+                <TableCell className="text-[11px] text-slate-600">
                   {job?.ativo ? formatDateTime(job.proximaExecucaoEm) : "—"}
                 </TableCell>
                 <TableCell className="text-right">
@@ -386,7 +409,7 @@ export default function SchedulesPanel() {
                   </SelectContent>
                 </Select>
                 {editorTask?.descricao ? (
-                  <p className="text-xs text-slate-500">{editorTask.descricao}</p>
+                  <p className="text-xs text-slate-600">{editorTask.descricao}</p>
                 ) : null}
               </div>
               <div className="space-y-1">
@@ -448,7 +471,7 @@ export default function SchedulesPanel() {
                       }))}
                     />
                   </div>
-                  <p className="col-span-2 text-xs text-slate-500">
+                  <p className="col-span-2 text-xs text-slate-600">
                     Horário de Brasília. Se o mês não tiver esse dia, a rotina roda no último dia.
                   </p>
                 </div>
@@ -476,7 +499,7 @@ export default function SchedulesPanel() {
               <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
                 <div>
                   <p className="text-sm font-medium text-slate-800">Ativo</p>
-                  <p className="text-xs text-slate-500">Pausado deixa de repetir até ser ligado de novo.</p>
+                  <p className="text-xs text-slate-600">Pausado deixa de repetir até ser ligado de novo.</p>
                 </div>
                 <Switch
                   checked={editor.form.ativo}

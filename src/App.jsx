@@ -44,7 +44,7 @@ const AuthenticatedApp = () => {
         <div className="max-w-md text-center space-y-3">
           <h1 className="text-xl font-semibold text-slate-800">API local indisponível</h1>
           <p className="text-sm text-slate-600">{authError.message}</p>
-          <p className="text-xs text-slate-400">Suba o stack com docker compose up --build e recarregue.</p>
+          <p className="text-xs text-slate-500">Suba o stack com docker compose up --build e recarregue.</p>
         </div>
       </div>
     );

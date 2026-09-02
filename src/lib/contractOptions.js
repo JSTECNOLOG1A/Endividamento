@@ -6,6 +6,8 @@
 export const OPERATION_CATEGORIES = [
   { value: "emprestimos", label: "Empréstimos (Capital de Giro)" },
   { value: "financiamentos", label: "Financiamentos (Investimento/CAPEX)" },
+  { value: "mutuos_partes_relacionadas", label: "Mútuos com Partes Relacionadas" },
+  { value: "mutuos_terceiros", label: "Mútuos com Terceiros" },
 ];
 
 export const OPERATION_TYPES = {
@@ -17,10 +19,25 @@ export const OPERATION_TYPES = {
   ],
   financiamentos: [
     { value: "bndes_finame", label: "BNDES/FINAME" },
+    { value: "aquisicao_veiculos", label: "Aquisição de Veículos" },
+    { value: "aquisicao_maquinas_equipamentos", label: "Aquisição de Máquinas e Equipamentos" },
+    { value: "cdc_bens", label: "CDC — Crédito Direto ao Consumidor (Bens)" },
+    { value: "financiamento_imobiliario", label: "Financiamento Imobiliário" },
     { value: "credito_rural_custeio", label: "Crédito Rural (Custeio)" },
     { value: "credito_rural_investimento_solos", label: "Crédito rural (Investimento em solos)" },
     { value: "leasing", label: "Leasing Imobiliário/Equipamentos" },
     { value: "cri_cra", label: "CRI/CRA" },
+  ],
+  // Mútuos com partes relacionadas (sócios, controladora, coligadas) e
+  // mútuos com terceiros (fora do grupo econômico, sem ser banco) são duas
+  // categorias de primeiro nível — contabilmente precisam de contas
+  // próprias, separadas entre si e do restante, por isso cada uma tem sua
+  // própria aba na matriz contábil do Fechamento (ver AccountingMatrixConfig.jsx).
+  mutuos_partes_relacionadas: [
+    { value: "mutuo_partes_relacionadas", label: "Mútuo com Partes Relacionadas" },
+  ],
+  mutuos_terceiros: [
+    { value: "mutuo_terceiros", label: "Mútuo com Terceiros" },
   ],
 };
 
@@ -45,6 +62,11 @@ export const SYSTEMS = [
     description: "Sistema Francês de Amortização: Prestações fixas durante todo o contrato. Nos primeiros períodos, a maior parte da prestação é composta por juros; gradualmente, a amortização do principal aumenta. Facilita o orçamento mensal por ter parcelas constantes."
   },
   {
+    value: "SACRE",
+    label: "SACRE — Amortização Crescente",
+    description: "Sistema híbrido SAC + PRICE (Caixa Econômica Federal): a prestação fica fixa por blocos de 12 meses (como no PRICE), mas é recalculada a cada aniversário com base no saldo devedor atual (como no SAC). Resultado: parcelas decrescem em degraus anuais, mais suaves que o SAC puro."
+  },
+  {
     value: "AMERICANO",
     label: "Americano — Juros Periódicos",
     description: "Sistema Americano: Pagamento de juros em cada período, com amortização total do principal apenas no vencimento final. Mantém prestações baixas durante o período, mas requer planejamento para pagamento do valor principal no final. Comum em operações estruturadas."
@@ -65,6 +87,11 @@ export const INDEXERS = [
   { value: "NA", label: "N/A (Prefixado)" },
   { value: "CDI", label: "CDI" },
   { value: "SELIC", label: "SELIC" },
+  { value: "IPCA", label: "IPCA" },
+  { value: "INPC", label: "INPC" },
+  { value: "IGPM", label: "IGP-M" },
+  { value: "TJLP", label: "TJLP" },
+  { value: "TR", label: "TR" },
 ];
 
 export const EXCHANGE_LAGS = [
@@ -128,4 +155,11 @@ export function combineGuaranteeLabel(realType, personalType) {
   if (realLabel) return realLabel;
   if (personalLabel) return personalLabel;
   return "Não informado";
+}
+
+// Rótulo da Categoria da Operação — usado em qualquer lista/tabela que
+// precise exibir a categoria (Contratos, Leitura Contábil etc.), para não
+// duplicar a mesma busca em OPERATION_CATEGORIES em cada tela.
+export function operationCategoryLabel(operationCategory) {
+  return OPERATION_CATEGORIES.find((c) => c.value === operationCategory)?.label || "Sem Categoria";
 }

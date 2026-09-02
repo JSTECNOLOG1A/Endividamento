@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Save, Send, RotateCcw, X, FileText, Trash2 } from "lucide-react";
+import { RotateCcw, X, FileText, Trash2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "../utils";
 import ContractForm from "../components/loan/ContractForm";
@@ -30,6 +30,7 @@ export default function Simulator() {
   const [reopenData, setReopenData] = useState(null);
   const [editingContractId, setEditingContractId] = useState(null);
   const [editingContractMeta, setEditingContractMeta] = useState(null);
+  const [recalcFlag, setRecalcFlag] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [uploadedPdfUrl, setUploadedPdfUrl] = useState(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
@@ -184,6 +185,12 @@ export default function Simulator() {
         status: contract.status || "rascunho",
         rejectionComments: contract.rejection_comments || "",
       });
+      // "Modo recálculo": presente quando o contrato foi reaberto a partir
+      // do botão "Requer recálculo" no Fechamento Contábil (ver
+      // FechamentoContabil.jsx → handleReopenForRecalc). Guardado em
+      // extra_json (campo dinâmico, sem precisar de migração) — some quando
+      // o contrato é salvo de novo daqui (ver persistContract/handleCloseContract).
+      setRecalcFlag(contract.recalculation_flag || null);
       setReopenData(reopenFormData);
       // Preenche formParams/lastCalculatedParams com os mesmos dados já
       // salvos — assim os botões de Salvar/Enviar funcionam imediatamente,
@@ -481,6 +488,10 @@ export default function Simulator() {
       }),
       status: targetStatus,
       contract_pdf_url: uploadedPdfUrl || null,
+      // Modo recálculo: este salvamento É o "recálculo reprocessado" — some
+      // com a sinalização (ver setRecalcFlag em loadContractForEdit) para
+      // não ficar destacando a parcela para sempre depois de resolvida.
+      ...(recalcFlag ? { recalculation_flag: null } : {}),
     };
 
     const successMessage = targetStatus === "rascunho"
@@ -500,14 +511,18 @@ export default function Simulator() {
       }
       alert(successMessage);
 
-      // Depois de salvar, sai da tela e volta para a lista de Contratos
-      // (mesmo comportamento do "Fechar Contrato") — evita qualquer dúvida
-      // sobre se os dados "sumiram": a tela do Simulador nem fica visível
-      // depois do salvamento, então não há confusão possível.
+      // Depois de salvar, sai da tela. Em modo recálculo, volta para a
+      // mesma tela de Fechamento Contábil de onde veio (returnTo, montado
+      // por FechamentoContabil.jsx ao reabrir); caso contrário, mantém o
+      // comportamento padrão de ir para a lista de Contratos.
       const savedId = saved?.id || editingContractId;
       clearDraft(previousDraftKey);
       if (savedId && savedId !== previousDraftKey) clearDraft(savedId);
-      navigate(createPageUrl("Contracts"));
+      if (recalcFlag?.returnTo) {
+        navigate(recalcFlag.returnTo);
+      } else {
+        navigate(createPageUrl("Contracts"));
+      }
     } catch (error) {
       alert("Erro ao salvar: " + error.message);
     }
@@ -536,7 +551,13 @@ export default function Simulator() {
       alert("Apenas arquivos PDF são permitidos");
       return;
     }
-    
+
+    const MAX_PDF_SIZE = 50 * 1024 * 1024; // mantido em sincronia com o limite do multer no backend (backend/src/app.js)
+    if (file.size > MAX_PDF_SIZE) {
+      alert(`Arquivo muito grande (${(file.size / (1024 * 1024)).toFixed(1)}MB). Tamanho máximo: 50MB. Tente compactar o PDF antes de anexar.`);
+      return;
+    }
+
     setIsUploadingPdf(true);
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
@@ -571,9 +592,32 @@ export default function Simulator() {
     setHasUnsavedChanges(false);
     setEditingContractId(null);
     setEditingContractMeta(null);
+    setRecalcFlag(null);
     setReopenData(null);
     setUploadedPdfUrl(null);
   };
+
+  // Sai da edição sem salvar — volta para o Fechamento Contábil de origem se
+  // o contrato foi reaberto em "modo recálculo" (ver FechamentoContabil.jsx),
+  // senão para a tela de Contratos. Confirma antes, já que não há como saber
+  // com certeza se o usuário alterou algo no formulário.
+  const handleBack = () => {
+    if (!window.confirm("Sair sem salvar? Alterações não salvas neste contrato serão perdidas.")) return;
+    if (recalcFlag?.returnTo) navigate(recalcFlag.returnTo);
+    else navigate(createPageUrl("Contracts"));
+  };
+
+  // Esc é o mesmo atalho do botão "Voltar" — só ativo enquanto há um
+  // contrato existente em edição (contrato novo, ainda não salvo, não tem
+  // "para onde voltar" óbvio).
+  React.useEffect(() => {
+    if (!editingContractId) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") handleBack();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editingContractId, recalcFlag]);
 
   const handleCloseContract = async () => {
     if (!editingContractId || (!formParams && !reopenData)) {
@@ -645,11 +689,18 @@ export default function Simulator() {
         // "Fechar Contrato" apenas guarda o estado atual como rascunho e
         // sai da tela — não exige PDF nem envia para revisão.
         status: "rascunho",
+        // Modo recálculo: "Fechar Contrato" também conta como "encerrar" o
+        // recálculo (mesmo tratamento de persistContract, ver comentário lá).
+        ...(recalcFlag ? { recalculation_flag: null } : {}),
       };
 
       await base44.entities.LoanContract.update(editingContractId, closeContractData);
       clearDraft(editingContractId);
-      navigate(createPageUrl("Contracts"));
+      if (recalcFlag?.returnTo) {
+        navigate(recalcFlag.returnTo);
+      } else {
+        navigate(createPageUrl("Contracts"));
+      }
     } catch (error) {
       alert("Erro ao fechar contrato: " + error.message);
     } finally {
@@ -717,14 +768,34 @@ export default function Simulator() {
 
   return (
     <div className="w-full px-4 sm:px-6 py-8">
+      {editingContractId && (
+        <div className="mb-4">
+          <Button variant="outline" size="sm" onClick={handleBack} className="gap-1.5 text-xs">
+            <ArrowLeft className="w-3.5 h-3.5" />
+            {recalcFlag?.returnTo ? "Voltar para o Fechamento Contábil" : "Voltar para Contratos"}
+          </Button>
+        </div>
+      )}
+      {recalcFlag && (
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-semibold">Modo recálculo — </span>
+            contrato reaberto por divergência na baixa da parcela {recalcFlag.parcela}
+            {recalcFlag.dataVencimento ? ` (venc. ${String(recalcFlag.dataVencimento).split("-").reverse().join("/")})` : ""}.
+            {" "}Ela está destacada na tabela de amortização. Este aviso some quando você salvar o novo cálculo, e você
+            volta automaticamente para o Fechamento Contábil de onde saiu.
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
         {/* Left — Form */}
         <div className="xl:col-span-4">
           <div className="sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Simulador</h1>
-                <p className="text-sm text-slate-500 mt-0.5">Configure os parâmetros do empréstimo</p>
+                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Calculadora</h1>
+                <p className="text-sm text-slate-600 mt-0.5">Configure os parâmetros do empréstimo</p>
               </div>
               {result && (
                 <Button variant="ghost" size="sm" onClick={handleReset} className="text-xs gap-1.5">
@@ -756,6 +827,10 @@ export default function Simulator() {
               uploadedPdfUrl={uploadedPdfUrl}
               onPdfUpload={handlePdfUpload}
               isUploadingPdf={isUploadingPdf}
+              hasResult={!!result}
+              isSaving={saving}
+              onSaveDraft={handleSaveDraft}
+              onSubmitForReview={handleSubmitForReview}
             />
           </div>
         </div>
@@ -766,22 +841,12 @@ export default function Simulator() {
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-900 tracking-tight">Resultado</h2>
-                <div className="flex gap-2">
-                  {editingContractId && (
-                    <Button onClick={handleCloseContract} disabled={saving} size="sm" variant="outline" className="gap-1.5 text-xs">
-                      <X className="w-3.5 h-3.5" />
-                      Fechar Contrato
-                    </Button>
-                  )}
-                  <Button onClick={handleSaveDraft} disabled={saving} size="sm" variant="outline" className="gap-1.5 text-xs">
-                    <Save className="w-3.5 h-3.5" />
-                    {saving ? "Salvando..." : "Salvar como Rascunho"}
+                {editingContractId && (
+                  <Button onClick={handleCloseContract} disabled={saving} size="sm" variant="outline" className="gap-1.5 text-xs">
+                    <X className="w-3.5 h-3.5" />
+                    Fechar Contrato
                   </Button>
-                  <Button onClick={handleSubmitForReview} disabled={saving} size="sm" className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <Send className="w-3.5 h-3.5" />
-                    {saving ? "Enviando..." : "Enviar para Revisão"}
-                  </Button>
-                </div>
+                )}
               </div>
 
               <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -795,7 +860,7 @@ export default function Simulator() {
                   <TabsTrigger value="scenarios" className="text-xs">🧪 Cenários</TabsTrigger>
                 </TabsList>
                 <TabsContent value="tabela" className="mt-4">
-                 <AmortizationTable result={result} params={formParams} onRecalculate={handleRecalculate} />
+                 <AmortizationTable result={result} params={formParams} onRecalculate={handleRecalculate} highlightParcela={recalcFlag?.parcela} />
                 </TabsContent>
                 <TabsContent value="graficos" className="mt-4">
                  <ScheduleChart schedule={result.schedule} />
@@ -831,7 +896,7 @@ export default function Simulator() {
                   </svg>
                 </div>
                 <h3 className="text-lg font-semibold text-slate-700">Nenhum cálculo realizado</h3>
-                <p className="text-sm text-slate-400 mt-1">Preencha os parâmetros e clique em "Calcular"</p>
+                <p className="text-sm text-slate-500 mt-1">Preencha os parâmetros e clique em "Calcular"</p>
               </div>
             </div>
           )}

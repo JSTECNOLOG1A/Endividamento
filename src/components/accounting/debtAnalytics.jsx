@@ -258,6 +258,49 @@ export function getDebtMaturityBreakdown(contracts, baseDate) {
 }
 
 /**
+ * 2️⃣b CIRCULANTE / NÃO CIRCULANTE POR CONTRATO
+ * Mesma classificação de getDebtMaturityBreakdown (saldo de principal a
+ * vencer em até 12 meses = circulante; acima disso = não circulante), mas
+ * calculada para UM contrato por vez e indexada por contract.id — usada na
+ * tabela de Contratos, onde cada linha precisa do próprio saldo, sem
+ * depender de agrupar por número de contrato (que não é garantidamente
+ * único entre bancos/entidades diferentes).
+ *
+ * Parcelas já vencidas (dataVencimento no passado em relação a baseDate)
+ * entram no circulante — são, por definição, uma obrigação corrente.
+ */
+export function getContractCirculanteSplit(contract, baseDate) {
+  const result = { shortTerm: 0, longTerm: 0 };
+  if (!contract?.schedule_data) return result;
+
+  let schedule;
+  try {
+    schedule = JSON.parse(contract.schedule_data).schedule || [];
+  } catch {
+    return result;
+  }
+
+  const baseDateObj = new Date(baseDate + "T00:00:00");
+  schedule.forEach((row) => {
+    if (!(row.amortizacao > 0)) return;
+    const rowDate = new Date(row.dataVencimento + "T00:00:00");
+    const daysToMaturity = Math.ceil((rowDate - baseDateObj) / (1000 * 60 * 60 * 24));
+    if (daysToMaturity < 0) {
+      result.shortTerm += row.amortizacao; // Vencido — obrigação corrente.
+      return;
+    }
+    const monthsToMaturity = Math.floor(daysToMaturity / 30.44);
+    if (monthsToMaturity <= 12) result.shortTerm += row.amortizacao;
+    else result.longTerm += row.amortizacao;
+  });
+
+  return {
+    shortTerm: Math.round(result.shortTerm * 100) / 100,
+    longTerm: Math.round(result.longTerm * 100) / 100,
+  };
+}
+
+/**
  * 3️⃣ INTEREST BY MONTH
  * Juros apropriados por mês
  */
@@ -709,11 +752,23 @@ export function getDebtKPIs(contracts, targetDate) {
  * @returns {string} Data de início do exercício (YYYY-MM-DD)
  */
 export function getExercicioStart(baseDate, startMonth) {
-  const baseDateObj = new Date(baseDate + "T00:00:00");
-  const baseYear = baseDateObj.getFullYear();
-  const baseMonth = baseDateObj.getMonth() + 1; // 1-12
+  let baseDateObj = new Date(baseDate + "T00:00:00");
   const normalizedStartMonth = Math.min(12, Math.max(1, parseInt(startMonth) || 1));
 
+  // Proteção: se baseDate vier vazio/inválido (ex.: input nativo de data
+  // emitindo string vazia no meio da digitação), Date.getFullYear() retorna
+  // NaN, e isso se propagava como "NaN-01-01" pros cálculos seguintes — que
+  // então explodiam ao tentar montar um Date a partir disso (toISOString()
+  // lança RangeError em Invalid Date), derrubando a tela inteira. Sem uma
+  // data-base válida, cai pra data de hoje só pra manter o retorno uma data
+  // real (os componentes que chamam essa função sempre esperam uma string
+  // "YYYY-MM-DD" utilizável, nunca null) — os cálculos que dependem dela vão
+  // se corrigir sozinhos assim que o usuário terminar de digitar uma data
+  // válida no campo.
+  if (Number.isNaN(baseDateObj.getTime())) baseDateObj = new Date();
+
+  const baseYear = baseDateObj.getFullYear();
+  const baseMonth = baseDateObj.getMonth() + 1; // 1-12
   const exercicioYear = baseMonth < normalizedStartMonth ? baseYear - 1 : baseYear;
 
   return `${exercicioYear}-${String(normalizedStartMonth).padStart(2, "0")}-01`;
@@ -763,6 +818,7 @@ export function getPaymentFlowByBankModalityGuarantee(contracts, baseDate, yearS
       rowsMap.set(key, {
         bankId: contract.bank_id || null,
         operationType: contract.operation_type || null,
+        operationCategory: contract.operation_category || null,
         guarantee: guaranteeLabel,
         byYear: {}, // year -> { principal, interest }
         catchAll: { principal: 0, interest: 0 },

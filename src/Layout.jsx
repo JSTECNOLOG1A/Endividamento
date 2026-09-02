@@ -13,6 +13,7 @@ import {
   Settings,
   Sigma,
   Wallet,
+  RefreshCw,
   Receipt,
   Banknote,
   ChevronDown,
@@ -37,8 +38,9 @@ import { useAuth } from "@/lib/AuthContext";
 import { usePlatform } from "@/lib/PlatformContext";
 
 const NAV_ITEMS = [
-  { name: "Simulador", page: "Simulator", icon: Calculator },
+  { name: "Calculadora", page: "Simulator", icon: Calculator },
   { name: "Contratos", page: "Contracts", icon: FolderOpen },
+  { name: "Contas Garantidas", page: "GuaranteedAccounts", icon: RefreshCw },
   { name: "Governança", page: "Governance", icon: Building },
   { name: "Contabilidade", page: "Accounting", icon: BarChart3 },
   { name: "Consolidação", page: "Consolidation", icon: BarChart3 },
@@ -59,7 +61,7 @@ function navClass(active) {
   return `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
     active
       ? "bg-blue-50 text-blue-700 shadow-sm"
-      : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+      : "text-slate-600 hover:text-slate-700 hover:bg-slate-100"
   }`;
 }
 
@@ -72,7 +74,7 @@ export default function Layout({ children, currentPageName }) {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-white">
       <style>{`
         :root {
           --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
@@ -81,18 +83,29 @@ export default function Layout({ children, currentPageName }) {
           font-family: var(--font-sans);
           -webkit-font-smoothing: antialiased;
         }
+        /* Padrão visual do sistema: sem bordas arredondadas em lugar
+           nenhum (botões, cards, inputs, badges, modais etc.). */
+        *, *::before, *::after {
+          border-radius: 0 !important;
+        }
+        /* Padrão visual do sistema: células e cabeçalhos de tabela nunca
+           quebram texto em duas linhas — cada tabela rola horizontalmente
+           quando necessário, em vez de forçar quebra de linha no conteúdo. */
+        table th, table td {
+          white-space: nowrap !important;
+        }
       `}</style>
 
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/60">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="w-full px-4 sm:px-6">
           <div className="flex items-center justify-between h-14">
             <Link to={createPageUrl("Simulator")} className="flex items-center gap-2.5 group">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-sm shadow-blue-600/20 group-hover:shadow-md group-hover:shadow-blue-600/30 transition-shadow">
                 <Sigma className="w-4 h-4 text-white" strokeWidth={2.5} />
               </div>
               <div>
-                <span className="text-sm font-bold text-slate-900 tracking-tight">Endividamento</span>
-                <span className="text-[10px] text-slate-400 font-medium ml-1.5 hidden sm:inline">BACEN</span>
+                <span className="text-sm font-bold text-slate-900 tracking-tight">AllDebt</span>
+                <span className="text-[10px] text-slate-500 font-medium ml-1.5 hidden sm:inline">BACEN</span>
               </div>
             </Link>
 
@@ -192,7 +205,7 @@ export default function Layout({ children, currentPageName }) {
                       type="button"
                       onClick={() => setMobileFinanceOpen((open) => !open)}
                       className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium ${
-                        childActive ? "bg-blue-50 text-blue-700" : "text-slate-500 hover:bg-slate-50"
+                        childActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
                       }`}
                     >
                       <item.icon className="w-4 h-4" />
@@ -207,7 +220,7 @@ export default function Layout({ children, currentPageName }) {
                         className={`flex items-center gap-2 pl-9 pr-3 py-2 rounded-lg text-sm font-medium ${
                           currentPageName === child.page
                             ? "bg-blue-50 text-blue-700"
-                            : "text-slate-500 hover:bg-slate-50"
+                            : "text-slate-600 hover:bg-slate-50"
                         }`}
                       >
                         <child.icon className="w-4 h-4" />
@@ -227,7 +240,7 @@ export default function Layout({ children, currentPageName }) {
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium ${
                     isActive
                       ? "bg-blue-50 text-blue-700"
-                      : "text-slate-500 hover:bg-slate-50"
+                      : "text-slate-600 hover:bg-slate-50"
                   }`}
                 >
                   <item.icon className="w-4 h-4" />
