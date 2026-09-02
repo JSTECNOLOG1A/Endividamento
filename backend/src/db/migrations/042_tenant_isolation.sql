@@ -102,9 +102,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS chart_of_accounts_group_code_uidx
   ON chart_of_accounts (group_id, account_code)
   WHERE group_id IS NOT NULL;
 
+-- Duas entidades do mesmo grupo podem compartilhar uma conta bancária
+-- (conta centralizadora/pool) — por isso a unicidade fica por entidade
+-- dentro do grupo, não só por grupo, senão duas empresas com a mesma
+-- conta física derrubam a migração (caso real: Grupo Cangaia, ag. 0240
+-- conta 148940-2, compartilhada entre 2 empresas).
 DROP INDEX IF EXISTS bank_accounts_empresa_banco_agencia_conta_uidx;
 CREATE UNIQUE INDEX IF NOT EXISTS bank_accounts_group_banco_agencia_conta_uidx
-  ON bank_accounts (group_id, bank_id, agencia, conta)
+  ON bank_accounts (group_id, entity_id, bank_id, agencia, conta)
   WHERE group_id IS NOT NULL;
 
 ALTER TABLE integrations DROP CONSTRAINT IF EXISTS integrations_code_key;
