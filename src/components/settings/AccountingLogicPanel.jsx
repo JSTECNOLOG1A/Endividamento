@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -11,95 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Settings2 } from "lucide-react";
-import AccountingMatrixConfig from "@/components/accounting/AccountingMatrixConfig";
-import { SETTLEMENT_MATERIALITY_CONFIG, SETTLEMENT_EVENT_TYPES, EVENT_TYPE_LABELS } from "@/lib/accountingClosing";
-import { OPERATION_CATEGORIES } from "@/lib/contractOptions";
-
-// Ordem de leitura pedida: circulante/não circulante primeiro (patrimonial),
-// depois juros, depois o resto — mesma sequência do "circulante x não
-// circulante x juros x variações" combinado desde o início do desenho.
-const SUMMARY_EVENT_ORDER = [
-  SETTLEMENT_EVENT_TYPES.JUROS_APROPRIADOS,
-  SETTLEMENT_EVENT_TYPES.IOF,
-  SETTLEMENT_EVENT_TYPES.CUSTO_TRANSACAO_APROPRIACAO,
-  SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA,
-  SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA,
-  SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA_REALIZADA,
-  SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA_REALIZADA,
-  SETTLEMENT_EVENT_TYPES.MULTA_MORA,
-  SETTLEMENT_EVENT_TYPES.TARIFA_BANCARIA,
-  SETTLEMENT_EVENT_TYPES.DESCONTO_FINANCEIRO,
-  SETTLEMENT_EVENT_TYPES.AJUSTE_ARREDONDAMENTO,
-];
-
-function accountLabel(id, accountsById) {
-  const acc = accountsById.get(id);
-  return acc ? `${acc.account_code} — ${acc.account_name}` : null;
-}
-
-function CategoryAccountSummary({ entityId }) {
-  // Mesma queryKey que AccountingMatrixConfig.jsx usa pro próprio fetch —
-  // garante que salvar uma conta na matriz invalida o cache daqui também
-  // (ela já chama invalidateQueries com essa key ao salvar), sem precisar
-  // de lógica de sincronização própria.
-  const { data: mappings = [] } = useQuery({
-    queryKey: ["accounting-event-mappings", entityId],
-    queryFn: () => base44.entities.AccountingEventMapping.filter({ entity_id: entityId }, "", 500),
-    enabled: !!entityId,
-    initialData: [],
-  });
-  const { data: chartOfAccounts = [] } = useQuery({
-    queryKey: ["chart-of-accounts"],
-    queryFn: () => base44.entities.ChartOfAccount.list("account_code", 2000),
-    initialData: [],
-  });
-  const accountsById = new Map(chartOfAccounts.map((a) => [a.id, a]));
-
-  const byCategory = new Map(
-    OPERATION_CATEGORIES.map((c) => [c.value, new Map(mappings.filter((m) => m.operation_category === c.value).map((m) => [m.event_type, m]))])
-  );
-
-  return (
-    <div className="space-y-4">
-      {OPERATION_CATEGORIES.map((cat) => {
-        const eventsByType = byCategory.get(cat.value);
-        const reclass = eventsByType.get(SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_PRINCIPAL);
-        const circulante = reclass ? accountLabel(reclass.credit_account_id, accountsById) : null;
-        const naoCirculante = reclass ? accountLabel(reclass.debit_account_id, accountsById) : null;
-
-        const rows = [
-          { label: `${cat.label} — Circulante`, value: circulante },
-          { label: `${cat.label} — Não circulante`, value: naoCirculante },
-          ...SUMMARY_EVENT_ORDER.map((type) => {
-            const m = eventsByType.get(type);
-            return { label: EVENT_TYPE_LABELS[type], value: m ? accountLabel(m.debit_account_id, accountsById) : null };
-          }),
-        ];
-        const configuredCount = rows.filter((r) => r.value).length;
-
-        return (
-          <div key={cat.value} className="rounded-lg border border-slate-200">
-            <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-800">{cat.label}</span>
-              <span className="text-[11px] text-slate-500">{configuredCount}/{rows.length} configuradas</span>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {rows.map((row) => (
-                <div key={row.label} className="px-3 py-1.5 flex items-center justify-between gap-3 text-xs">
-                  <span className="text-slate-600 shrink-0">{row.label}</span>
-                  <span className={row.value ? "text-slate-900 font-medium text-right" : "text-amber-600 text-right"}>
-                    {row.value || "não configurada"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+import { AccountingMatrixFields } from "@/components/accounting/AccountingMatrixConfig";
+import { SETTLEMENT_MATERIALITY_CONFIG } from "@/lib/accountingClosing";
 
 // Referência viva da lógica do motor de fechamento contábil
 // (src/lib/accountingClosing.js) — cada mudança de regra ali (novo evento,
@@ -189,7 +101,6 @@ const EVENT_REFERENCE = [
 
 export default function AccountingLogicPanel() {
   const [entityId, setEntityId] = useState("");
-  const [matrixOpen, setMatrixOpen] = useState(false);
 
   const { data: entities = [] } = useQuery({
     queryKey: ["accounting-logic-entities"],
@@ -205,25 +116,25 @@ export default function AccountingLogicPanel() {
           <CardDescription>
             Onde cada evento abaixo é amarrado à conta de débito/crédito real do plano de contas do cliente — separado
             por categoria de operação (empréstimos, financiamentos, mútuos com partes relacionadas e com terceiros).
+            Escolha a empresa e edite direto aqui — sem precisar abrir um fechamento primeiro.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Empresa</label>
-            <Select value={entityId || undefined} onValueChange={setEntityId}>
-              <SelectTrigger className="h-9 w-64"><SelectValue placeholder="Selecione a empresa" /></SelectTrigger>
-              <SelectContent>
-                {entities.map((e) => (<SelectItem key={e.id} value={e.id}>{e.entity_name}</SelectItem>))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button type="button" variant="outline" className="h-9 gap-1.5" disabled={!entityId} onClick={() => setMatrixOpen(true)}>
-            <Settings2 className="w-3.5 h-3.5" /> Abrir matriz contábil
-          </Button>
+        <CardContent className="space-y-1">
+          <label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Empresa</label>
+          <Select value={entityId || undefined} onValueChange={setEntityId}>
+            <SelectTrigger className="h-9 w-64"><SelectValue placeholder="Selecione a empresa" /></SelectTrigger>
+            <SelectContent>
+              {entities.map((e) => (<SelectItem key={e.id} value={e.id}>{e.entity_name}</SelectItem>))}
+            </SelectContent>
+          </Select>
         </CardContent>
         {entityId && (
           <CardContent className="pt-0">
-            <CategoryAccountSummary entityId={entityId} />
+            {/* key={entityId} força remontagem ao trocar de empresa — sem
+                isso, o estado de rascunho (campos editados mas não salvos)
+                vaza de uma empresa pra outra, já que fica guardado
+                localmente, não por entityId. */}
+            <AccountingMatrixFields key={entityId} entityId={entityId} stacked />
           </CardContent>
         )}
       </Card>
@@ -263,14 +174,6 @@ export default function AccountingLogicPanel() {
           </div>
         </CardContent>
       </Card>
-
-      {entityId && (
-        // key={entityId} força remontagem ao trocar de empresa — sem isso,
-        // o estado de rascunho (campos editados mas não salvos) do
-        // AccountingMatrixConfig vaza de uma empresa pra outra, já que ele
-        // guarda os drafts localmente, não por entityId.
-        <AccountingMatrixConfig key={entityId} entityId={entityId} open={matrixOpen} onOpenChange={setMatrixOpen} />
-      )}
     </div>
   );
 }
