@@ -19,6 +19,7 @@ import AuditLogPanel from "@/components/settings/AuditLogPanel";
 import UsersPanel from "@/components/settings/UsersPanel";
 import PlanPanel from "@/components/settings/PlanPanel";
 import ParametersPanel from "@/components/settings/ParametersPanel";
+import AccountingLogicPanel from "@/components/settings/AccountingLogicPanel";
 
 const ROLE_LABELS = {
   admin: "Administrador",
@@ -36,6 +37,9 @@ const SECTION_COPY = {
   },
   parametros: {
     description: "Comportamento do AllDebt para sua empresa — layout, financeiro e aparência.",
+  },
+  "logica-contabil": {
+    description: "Referência de manutenção do motor de fechamento contábil e matriz de contas por empresa.",
   },
   usuarios: {
     description: "Convide por e-mail. A pessoa define a própria senha no link (válido por 7 dias).",
@@ -124,6 +128,9 @@ function SettingsPanel({ section, isTenantAdmin, isOwner, viewingAll, user, logo
   }
   if (section === "parametros" && isTenantAdmin) {
     return <ParametersPanel />;
+  }
+  if (section === "logica-contabil" && isTenantAdmin) {
+    return <AccountingLogicPanel />;
   }
   if (section === "usuarios" && isTenantAdmin) {
     return (

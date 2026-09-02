@@ -12,6 +12,10 @@ export function SettingsParameters() {
   return <SettingsView section="parametros" />;
 }
 
+export function SettingsAccountingLogic() {
+  return <SettingsView section="logica-contabil" />;
+}
+
 export function SettingsUsers() {
   return <SettingsView section="usuarios" />;
 }

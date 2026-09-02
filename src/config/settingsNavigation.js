@@ -1,4 +1,5 @@
 import {
+  BookOpenCheck,
   CalendarClock,
   Plug,
   ScrollText,
@@ -12,6 +13,7 @@ export const SETTINGS_SECTIONS = [
   { section: "integracoes", name: "Integrações", page: "SettingsIntegrations", icon: Plug },
   { section: "agendamento", name: "Agendamento", page: "SettingsSchedules", icon: CalendarClock },
   { section: "parametros", name: "Parâmetros", page: "SettingsParameters", icon: SlidersHorizontal, adminOnly: true },
+  { section: "logica-contabil", name: "Lógica Contábil", page: "SettingsAccountingLogic", icon: BookOpenCheck, adminOnly: true },
   { section: "usuarios", name: "Usuários", page: "SettingsUsers", icon: Users, adminOnly: true },
   { section: "log", name: "Log", page: "SettingsLog", icon: ScrollText, adminOnly: true },
   { section: "conta", name: "Conta", page: "SettingsAccount", icon: UserCircle },
