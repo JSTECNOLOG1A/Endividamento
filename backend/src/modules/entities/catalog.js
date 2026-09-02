@@ -144,12 +144,13 @@ export const ENTITIES = {
       "principal_paid", "interest_paid", "penalty_paid", "fee_paid", "discount_amount",
       "rounding_adjustment", "other_amount", "total_paid", "bank_account_id",
       "extraordinary_amortization", "triggers_recalculation", "recalculation_snapshot_id",
-      "proof_url", "observacao", "status",
+      "proof_url", "observacao", "status", "exchange_rate_pagamento",
     ],
     booleans: ["extraordinary_amortization", "triggers_recalculation"],
     numbers: [
       "scheduled_amount", "principal_paid", "interest_paid", "penalty_paid", "fee_paid",
       "discount_amount", "rounding_adjustment", "other_amount", "total_paid",
+      "exchange_rate_pagamento",
     ],
   },
   AccountMovement: {

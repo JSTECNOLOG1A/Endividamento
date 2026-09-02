@@ -40,7 +40,10 @@ export const SETTLEMENT_EVENT_TYPES = {
   PAGAMENTO_JUROS: "pagamento_juros",
   VARIACAO_CAMBIAL_PASSIVA: "variacao_cambial_passiva",
   VARIACAO_CAMBIAL_ATIVA: "variacao_cambial_ativa",
+  VARIACAO_CAMBIAL_PASSIVA_REALIZADA: "variacao_cambial_passiva_realizada",
+  VARIACAO_CAMBIAL_ATIVA_REALIZADA: "variacao_cambial_ativa_realizada",
   TARIFA_BANCARIA: "tarifa_bancaria",
+  IOF: "iof",
   CUSTO_TRANSACAO_INICIAL: "custo_transacao_inicial",
   CUSTO_TRANSACAO_APROPRIACAO: "custo_transacao_apropriacao",
   RECLASSIFICACAO_CIRCULANTE_PRINCIPAL: "reclassificacao_circulante_principal",
@@ -56,11 +59,14 @@ export const EVENT_TYPE_LABELS = {
   juros_apropriados: "Juros apropriados (competência)",
   pagamento_principal: "Pagamento de principal",
   pagamento_juros: "Pagamento de juros",
-  variacao_cambial_passiva: "Variação cambial passiva",
-  variacao_cambial_ativa: "Variação cambial ativa",
+  variacao_cambial_passiva: "Variação cambial passiva (provisão)",
+  variacao_cambial_ativa: "Variação cambial ativa (provisão)",
+  variacao_cambial_passiva_realizada: "Variação cambial passiva (realizada na baixa)",
+  variacao_cambial_ativa_realizada: "Variação cambial ativa (realizada na baixa)",
   tarifa_bancaria: "Tarifa bancária",
+  iof: "IOF",
   custo_transacao_inicial: "Custo de transação inicial",
-  custo_transacao_apropriacao: "Apropriação de custo de transação",
+  custo_transacao_apropriacao: "Apropriação de custo de transação (fee de estruturação)",
   reclassificacao_circulante_principal: "Reclassificação de principal para circulante",
   reclassificacao_circulante_juros: "Reclassificação de juros para circulante",
   multa_mora: "Multa e mora",
@@ -311,6 +317,27 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
       if (principalPaidRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.PAGAMENTO_PRINCIPAL, amount: r2(principalPaidRow), date: row.dataVencimento, extraordinary: settlement?.extraordinary_amortization });
       if (interestPaidRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.PAGAMENTO_JUROS, amount: r2(interestPaidRow), date: row.dataVencimento });
 
+      // IOF: despesa integral no mês da liberação (não amortizado — é um
+      // tributo incidente na operação, diferente do fee de estruturação
+      // abaixo, que é apropriado ao longo do prazo). A conta de crédito
+      // (Passivo ou Caixa) fica a critério do de-para configurado na
+      // matriz — aqui só decide QUANDO e QUANTO.
+      if (idx === 0 && (contract.iof_value || 0) > 0) {
+        result.events.push({ type: SETTLEMENT_EVENT_TYPES.IOF, amount: r2(contract.iof_value), date: row.dataVencimento });
+      }
+
+      // Fee de estruturação (custo de transação): só existe pra apropriar
+      // se foi financiado (somado ao principal) — se pago à vista, já saiu
+      // do caixa no ato e não tem o que apropriar mês a mês. Linear ao
+      // longo do prazo contratual, mesma régua simplificada usada pro
+      // passivo (sem conta retificadora — ver plano de contas acordado).
+      if (contract.other_fees_financed && (contract.other_fees || 0) > 0 && (contract.total_term_months || 0) > 0) {
+        const monthlyFee = r2(contract.other_fees / contract.total_term_months);
+        if (monthlyFee) {
+          result.events.push({ type: SETTLEMENT_EVENT_TYPES.CUSTO_TRANSACAO_APROPRIACAO, amount: monthlyFee, date: row.dataVencimento });
+        }
+      }
+
       if (settlement) {
         result.settlementsUsed.push(settlement.id);
         if (settlement.penalty_paid) result.events.push({ type: SETTLEMENT_EVENT_TYPES.MULTA_MORA, amount: r2(settlement.penalty_paid), date: settlement.actual_payment_date });
@@ -320,6 +347,28 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
         if (settlement.other_amount) result.events.push({ type: SETTLEMENT_EVENT_TYPES.OUTROS, amount: r2(settlement.other_amount), date: settlement.actual_payment_date });
         if (settlement.triggers_recalculation && !settlement.recalculation_snapshot_id) {
           result.pendingRecalculation.push(settlement.id);
+        }
+
+        // Variação cambial realizada: só contratos USD (row.blocoContabil só
+        // existe pra eles) com a PTAX do pagamento informada na baixa.
+        // Reaplica a mesma fórmula do motor de cálculo (saldo em USD ×
+        // delta de PTAX), mas trocando a PTAX assumida no cronograma pela
+        // PTAX real do dia do pagamento — a diferença entre essa "realizada"
+        // e a "provisão" (fxAccruedRow, já lançada acima) é normal e não
+        // exige recálculo do contrato, só reflete a variação que de fato
+        // ocorreu sobre o valor efetivamente liquidado no mês.
+        const ptaxPagamento = settlement.exchange_rate_pagamento;
+        const sdInicialUSD = row.blocoContabil?.sd_inicial_usd ?? row.sdInicial_USD;
+        const ptaxAssumida = row.blocoContabil?.ptax_anterior ?? row.blocoContabil?.ptax_atual;
+        if (ptaxPagamento && sdInicialUSD && ptaxAssumida) {
+          const fxRealizado = r2(sdInicialUSD * (ptaxPagamento - ptaxAssumida));
+          if (fxRealizado) {
+            result.events.push({
+              type: fxRealizado >= 0 ? SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA_REALIZADA : SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA_REALIZADA,
+              amount: r2(Math.abs(fxRealizado)),
+              date: settlement.actual_payment_date,
+            });
+          }
         }
       }
     }

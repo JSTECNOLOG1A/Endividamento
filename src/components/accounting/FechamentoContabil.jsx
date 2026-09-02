@@ -150,6 +150,7 @@ const EMPTY_SETTLEMENT_FORM = {
   other_amount: "0",
   bank_account_id: "",
   observacao: "",
+  exchange_rate_pagamento: "",
 };
 
 function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing, bankAccounts, dataBase, onSave, saving }) {
@@ -174,7 +175,38 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
     other_amount: String(existing?.other_amount ?? 0),
     bank_account_id: existing?.bank_account_id || "",
     observacao: existing?.observacao || "",
+    exchange_rate_pagamento: String(existing?.exchange_rate_pagamento ?? ""),
   }));
+  const [fetchingPtax, setFetchingPtax] = useState(false);
+
+  // blocoContabil só existe nas linhas de cronograma de contrato indexado em
+  // USD (ver CalculationEngine.js) — usa isso como sinal de que a variação
+  // cambial realizada faz sentido pra este contrato, em vez de duplicar a
+  // lógica de detecção de moeda do motor aqui.
+  const isUSD = !!scheduleRow?.blocoContabil;
+
+  const handleFetchPtax = async () => {
+    if (!form.actual_payment_date) {
+      toast.warning("Informe a data do pagamento antes de buscar a PTAX.");
+      return;
+    }
+    setFetchingPtax(true);
+    try {
+      const rows = await base44.entities.Currency.filter(
+        { currency_code: "USD" }, "-rate_date", 400
+      );
+      const match = rows
+        .filter((r) => r.rate_date <= form.actual_payment_date)
+        .sort((a, b) => (a.rate_date < b.rate_date ? 1 : -1))[0];
+      if (!match) {
+        toast.warning("Nenhuma cotação USD encontrada até essa data — importe o PTAX em Indexadores e Feriados.");
+        return;
+      }
+      setForm((prev) => ({ ...prev, exchange_rate_pagamento: String(match.exchange_rate) }));
+    } finally {
+      setFetchingPtax(false);
+    }
+  };
 
   // O usuário só precisa informar o valor total pago (extrato do banco) —
   // o sistema assume que principal e juros previstos estão certos e joga a
@@ -210,6 +242,7 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
     total_paid: 0,
     actual_payment_date: form.actual_payment_date,
     bank_account_id: form.bank_account_id,
+    exchange_rate_pagamento: isUSD && form.exchange_rate_pagamento ? num("exchange_rate_pagamento") : null,
   };
   const totalPaid = sumSettlementCashBuckets(draftSettlement);
   draftSettlement.total_paid = totalPaid;
@@ -263,6 +296,22 @@ function SettlementDialog({ open, onOpenChange, contract, scheduleRow, existing,
               </Select>
             </div>
           </div>
+
+          {isUSD && (
+            <div className="space-y-1">
+              <Label className="text-xs">
+                PTAX na data do pagamento
+                <InfoTip text="PTAX real do dia do pagamento — usada pra calcular a variação cambial realizada (separada da provisão já lançada por competência). Deixe em branco se não quiser lançar a realizada neste mês." />
+              </Label>
+              <div className="flex gap-2">
+                <Input className="h-9" value={form.exchange_rate_pagamento}
+                  onChange={(e) => setForm({ ...form, exchange_rate_pagamento: e.target.value })} />
+                <Button type="button" variant="outline" className="h-9 shrink-0" disabled={fetchingPtax} onClick={handleFetchPtax}>
+                  {fetchingPtax ? "..." : "Buscar PTAX do dia"}
+                </Button>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1">
             <Label className="text-xs">Valor total pago (conforme extrato bancário) *</Label>
