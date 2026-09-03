@@ -48,9 +48,15 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
   const [erpBlock, setErpBlock] = useState(null);
 
   const canSendApproval = contract.status === "rascunho" && canWrite(user);
+  // O dono do tenant (isOwner) fica isento da trava de "quem cria não pode
+  // aprovar o próprio contrato" — faz sentido pra um operador único (o
+  // dono é a última instância de qualquer forma), sem abrir mão da
+  // segregação de funções pra admins que não são donos (se um dia
+  // existirem múltiplos usuários no mesmo tenant, eles continuam
+  // precisando de outra pessoa pra aprovar o que submeteram).
   const canApprove = contract.status === "pendente_aprovacao"
     && isTenantAdmin(user)
-    && !sameEmail(contract.created_by, user?.email);
+    && (isOwner(user) || !sameEmail(contract.created_by, user?.email));
   const canReject = contract.status === "pendente_aprovacao" && isTenantAdmin(user);
   const reopenPending = Boolean(contract.reopen_requested_by);
   const canReopen = contract.status === "aprovado"
