@@ -59,8 +59,6 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
       isOwner(user)
       || (isTenantAdmin(user) && (!reopenPending || !sameEmail(contract.reopen_requested_by, user?.email)))
     );
-  const canCancel = ["rascunho", "pendente_aprovacao"].includes(contract.status) && canWrite(user);
-
   const addToHistory = (newStatus, historyComments = "") => {
     const history = parseStatusHistory(contract.status_history);
     history.push({
@@ -124,12 +122,6 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             status: "rascunho",
             rejection_comments: comments,
             status_history: addToHistory("rascunho", comments),
-          };
-          break;
-        case "cancel":
-          updateData = {
-            status: "cancelado",
-            status_history: addToHistory("cancelado", comments),
           };
           break;
       }
@@ -273,16 +265,6 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             {reopenPending && !isOwner(user) ? "Confirmar reabertura" : "Reabrir para Edição"}
           </Button>
         )}
-         {canCancel && (
-           <Button
-             size="sm"
-             variant="outline"
-             onClick={() => openDialog("cancel")}
-             className="gap-1.5 text-xs"
-           >
-             Cancelar Contrato
-           </Button>
-         )}
         {canWrite(user) ? (
         <Button
           size="sm"
@@ -303,7 +285,6 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
               {action === "send_approval" && "Enviar para Aprovação"}
               {action === "approve" && "Aprovar Contrato"}
               {action === "reject" && "Recusar Contrato"}
-              {action === "cancel" && "Cancelar Contrato"}
               {action === "reopen" && "Reabrir Contrato para Edição"}
             </DialogTitle>
           </DialogHeader>
@@ -351,7 +332,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
                 {" "}Títulos baixados ou com movimentação impedem a reabertura.
               </p>
             )}
-            {(action === "approve" || action === "reject" || action === "cancel") && (
+            {(action === "approve" || action === "reject") && (
               <div className="space-y-2">
                 <Label className="text-sm">
                   Comentários {action === "reject" && <span className="text-red-600">*</span>}

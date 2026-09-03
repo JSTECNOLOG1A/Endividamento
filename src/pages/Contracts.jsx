@@ -16,6 +16,7 @@ import { createPageUrl } from "../utils";
 import { statusLabel } from "../lib/contractStatus";
 import { toBRDecimalString } from "../lib/brNumber";
 import { computeContractCET } from "../lib/cetFromSchedule";
+import { withAuthToken } from "../lib/documentActions";
 
 export default function Contracts() {
   const [selected, setSelected] = useState(null);
@@ -293,7 +294,7 @@ export default function Contracts() {
                 <CardHeader className="flex flex-row items-center justify-between py-3">
                   <CardTitle className="text-sm font-semibold text-slate-800">PDF do Contrato</CardTitle>
                   <a
-                    href={selected.contract.contract_pdf_url}
+                    href={withAuthToken(selected.contract.contract_pdf_url)}
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs text-blue-600 hover:underline"
@@ -303,7 +304,7 @@ export default function Contracts() {
                 </CardHeader>
                 <CardContent className="p-0">
                   <iframe
-                    src={selected.contract.contract_pdf_url}
+                    src={withAuthToken(selected.contract.contract_pdf_url)}
                     title="PDF do Contrato"
                     className="w-full border-0"
                     style={{ height: "calc(100vh - 220px)" }}
