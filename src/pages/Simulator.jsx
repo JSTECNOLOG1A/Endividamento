@@ -20,6 +20,16 @@ import { calculateAmortizationSchedule } from "../lib/runCalculation";
 import { toBRDecimalString } from "../lib/brNumber";
 import { useLayoutMode } from "@/lib/LayoutContext";
 
+function parseJsonField(raw, fallback = null) {
+  if (raw == null || raw === "") return fallback;
+  if (typeof raw === "object") return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
 export default function Simulator() {
   const navigate = useNavigate();
   const { layoutMode } = useLayoutMode();
@@ -37,6 +47,18 @@ export default function Simulator() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [uploadedPdfUrl, setUploadedPdfUrl] = useState(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  // Se a URL já pede edição/reabertura, não monta o formulário vazio antes dos
+  // dados — isso gerava autosave de rascunho em branco e campos "sumindo".
+  const [editBootstrap, setEditBootstrap] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const edit = params.get("edit");
+    if (edit) return { mode: "edit", id: edit };
+    const reopen = params.get("reopen");
+    if (reopen) return { mode: "reopen", payload: reopen };
+    return null;
+  });
+  const [editLoadError, setEditLoadError] = useState(null);
 
   // Load CDI rates for calculation
   const { data: cdiRates, isLoading: loadingRates } = useQuery({
@@ -75,19 +97,11 @@ export default function Simulator() {
   const loadContractForEdit = React.useCallback(async (contractId) => {
     try {
       const contract = await base44.entities.LoanContract.get(contractId);
-      const scheduleData = JSON.parse(contract.schedule_data);
-
-      // Parsear exchange_rates ANTES de montar o objeto, para que o mesmo
-      // objeto sirva tanto para inicializar o formulário (reopenData) quanto
-      // para os botões de Salvar/Enviar (formParams) — sem essa peça faltando.
-      let parsedExchangeRates = null;
-      if (contract.exchange_rates) {
-        try {
-          parsedExchangeRates = JSON.parse(contract.exchange_rates);
-        } catch (err) {
-          console.error("Erro ao parsear exchange_rates do contrato:", err);
-        }
-      }
+      // schedule_data / exchange_rates vêm do Postgres como JSONB — o driver
+      // já devolve objeto. JSON.parse(objeto) vira "[object Object]" e quebra
+      // a reabertura, deixando o formulário vazio.
+      const scheduleData = parseJsonField(contract.schedule_data, { schedule: [] }) || { schedule: [] };
+      const parsedExchangeRates = parseJsonField(contract.exchange_rates, null);
 
       // contractFormData: valores NUMÉRICOS (ou string com PONTO decimal),
       // no mesmo formato que o payload processado do submit do ContractForm
@@ -203,42 +217,59 @@ export default function Simulator() {
       setHasUnsavedChanges(false);
       setUploadedPdfUrl(contract.contract_pdf_url || null);
 
-      // Load result
+      const scheduleRows = Array.isArray(scheduleData?.schedule)
+        ? scheduleData.schedule
+        : (Array.isArray(scheduleData) ? scheduleData : []);
       const resultData = {
-        schedule: scheduleData.schedule || [],
-        principal: scheduleData.schedule?.[0]?.sdInicial || 0,
-        totalJuros: (scheduleData.schedule || []).reduce((s, r) => s + (r.jurosFixosMes || 0) + (r.jurosVariaveisMes || 0), 0),
-        totalPrestacao: (scheduleData.schedule || []).reduce((s, r) => s + (r.prestacao || 0), 0),
-        cdiRatesSnapshot: scheduleData.cdiRates || [],
+        schedule: scheduleRows,
+        principal: scheduleRows?.[0]?.sdInicial || 0,
+        totalJuros: scheduleRows.reduce((s, r) => s + (r.jurosFixosMes || 0) + (r.jurosVariaveisMes || 0), 0),
+        totalPrestacao: scheduleRows.reduce((s, r) => s + (r.prestacao || 0), 0),
+        cdiRatesSnapshot: scheduleData?.cdiRates || [],
       };
 
-      setResult(resultData);
+      setResult(scheduleRows.length ? resultData : null);
 
       window.history.replaceState({}, "", window.location.pathname);
+      setEditLoadError(null);
+      setEditBootstrap(null);
     } catch (error) {
       console.error("Failed to load contract:", error);
-      alert("Erro ao carregar contrato: " + error.message);
+      setEditLoadError(error.message || "Erro ao carregar contrato");
+      setEditBootstrap(null);
     }
-  }, [loadingGroups, loadingEntities, loadingBanks]);
+  }, []);
 
   // Check for reopen or edit parameter on mount
+  const editLoadedRef = React.useRef(null);
   React.useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const editParam = urlParams.get("edit");
-    const reopenParam = urlParams.get("reopen");
-    
-    if (editParam && !loadingGroups && !loadingEntities && !loadingBanks) {
-      loadContractForEdit(editParam);
-    } else if (reopenParam) {
+    const boot = editBootstrap;
+    if (!boot) return;
+
+    if (boot.mode === "edit") {
+      if (editLoadedRef.current === boot.id) return;
+      editLoadedRef.current = boot.id;
+      loadContractForEdit(boot.id);
+      return;
+    }
+
+    if (boot.mode === "reopen") {
+      const marker = `reopen:${String(boot.payload || "").slice(0, 32)}`;
+      if (editLoadedRef.current === marker) return;
       try {
-        const data = JSON.parse(decodeURIComponent(reopenParam));
+        const data = JSON.parse(decodeURIComponent(boot.payload));
+        editLoadedRef.current = marker;
         setReopenData(data);
+        setFormParams(data);
         window.history.replaceState({}, "", window.location.pathname);
+        setEditBootstrap(null);
       } catch (e) {
         console.error("Failed to parse reopen data:", e);
+        setEditLoadError("Não foi possível ler os dados do contrato para reabrir");
+        setEditBootstrap(null);
       }
     }
-  }, [loadContractForEdit, loadingGroups, loadingEntities, loadingBanks]);
+  }, [editBootstrap, loadContractForEdit]);
 
   const { data: allCurrencies } = useQuery({
     queryKey: ["currencies"],
@@ -832,7 +863,18 @@ export default function Simulator() {
                   : "O aprovador solicitou ajustes neste contrato."}
               </div>
             )}
+            {editLoadError ? (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {editLoadError}
+              </div>
+            ) : null}
+            {editBootstrap ? (
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-600">
+                Carregando dados do contrato...
+              </div>
+            ) : (
             <ContractForm
+              key={editingContractId || "new"}
               narrowColumn={isModernLayout}
               onCalculate={handleCalculate}
               onIdentificationChange={(fields) =>
@@ -842,7 +884,7 @@ export default function Simulator() {
               entities={entities}
               banks={banks}
               currencies={currencies}
-              initialData={reopenData && !loadingGroups && !loadingEntities && !loadingBanks ? reopenData : null}
+              initialData={reopenData}
               isEditing={!!editingContractId}
               draftKey={editingContractId || "new"}
               isCalculating={isCalculating}
@@ -854,6 +896,7 @@ export default function Simulator() {
               onSaveDraft={handleSaveDraft}
               onSubmitForReview={handleSubmitForReview}
             />
+            )}
           </div>
         </div>
 

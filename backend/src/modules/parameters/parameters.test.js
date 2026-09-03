@@ -159,18 +159,25 @@ async function main() {
     if (layout !== "classic") fail(`após reset classic esperado, obteve ${layout}`);
   });
 
-  // parâmetros financeiros de título
+  // parâmetros financeiros / contábeis / integração
   await runWithTenant(scopeAdminA, async () => {
     await setParameter("finance.main_title_type", "NF", { scope: "TENANT" });
     await setParameter("finance.interest_title_type", "JU1", { scope: "TENANT" });
     await setParameter("finance.provisional_title_type", "PR1", { scope: "TENANT" });
     await setParameter("finance.main_title_nature", "1102011003", { scope: "TENANT" });
     await setParameter("finance.interest_title_nature", "1102011004", { scope: "TENANT" });
+    await setParameter("accounting.main_title_account", "2110101001", { scope: "TENANT" });
+    await setParameter("accounting.interest_title_account", "3110101001", { scope: "TENANT" });
+    await setParameter("integrations.external_erp_enabled", false, { scope: "TENANT" });
 
     const mainType = await resolveParameter("finance.main_title_type");
     const interestNature = await resolveParameter("finance.interest_title_nature");
+    const mainAccount = await resolveParameter("accounting.main_title_account");
+    const erpEnabled = await resolveParameter("integrations.external_erp_enabled");
     if (mainType !== "NF") fail(`main_title_type NF esperado, obteve ${mainType}`);
     if (interestNature !== "1102011004") fail(`interest_title_nature esperado 1102011004, obteve ${interestNature}`);
+    if (mainAccount !== "2110101001") fail(`main_title_account esperado 2110101001, obteve ${mainAccount}`);
+    if (erpEnabled !== false) fail(`external_erp_enabled false esperado, obteve ${erpEnabled}`);
   });
 
   // parâmetro inexistente → classic
@@ -206,13 +213,16 @@ async function main() {
     const listA = await jsonRequest(server, { method: "GET", path: "/api/parameters", token: tokenAdminA });
     if (listA.status !== 200) fail(`list A status ${listA.status}`);
     const listKeys = (listA.json?.data || []).map((item) => item.key);
-    if (listKeys.length < 11) fail(`esperado >= 11 parâmetros implementados, obteve ${listKeys.length}`);
+    if (listKeys.length < 14) fail(`esperado >= 14 parâmetros implementados, obteve ${listKeys.length}`);
     for (const key of [
       "finance.main_title_type",
       "finance.interest_title_type",
       "finance.provisional_title_type",
       "finance.main_title_nature",
       "finance.interest_title_nature",
+      "accounting.main_title_account",
+      "accounting.interest_title_account",
+      "integrations.external_erp_enabled",
     ]) {
       if (!listKeys.includes(key)) fail(`parâmetro ausente na listagem: ${key}`);
     }

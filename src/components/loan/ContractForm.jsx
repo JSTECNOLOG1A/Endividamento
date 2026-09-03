@@ -101,11 +101,54 @@ function SubsectionHeading({ icon: Icon, children }) {
 }
 
 export default function ContractForm({ onCalculate, onIdentificationChange, initialData, groups, entities, banks, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf, draftKey = "new", hasResult = false, onSaveDraft, onSubmitForReview, isSaving = false, narrowColumn = false }) {
-  const [form, setForm] = useState(defaultForm);
+  const buildFormFromInitial = (data) => {
+    if (!data) return defaultForm;
+    return {
+      group_id: data.group_id || "",
+      entity_id: data.entity_id || "",
+      bank_id: data.bank_id || "",
+      currency_id: data.currency_id || "",
+      exchange_lag: data.exchange_lag !== undefined ? data.exchange_lag.toString() : "1",
+      contract_number: data.contract_number || "",
+      operation_category: data.operation_category || "",
+      operation_type: data.operation_type || "",
+      guarantee_real_type: data.guarantee_real_type || "",
+      guarantee_personal_type: data.guarantee_personal_type || "",
+      operation_value: data.operation_value || "",
+      amount_foreign: data.amount_foreign || "",
+      exchange_rate_closing: data.exchange_rate_closing || "",
+      signal_value: data.signal_value || "0",
+      iof_value: data.iof_value || "0",
+      iof_financed: data.iof_financed || false,
+      encargo_garantia_value: data.encargo_garantia_value || "0",
+      encargo_garantia_financed: data.encargo_garantia_financed || false,
+      other_fees: data.other_fees || "0",
+      other_fees_financed: data.other_fees_financed || false,
+      fixed_rate: data.fixed_rate || "",
+      indexer: data.indexer || "NA",
+      indexer_spread: data.indexer_spread || "0",
+      operation_date: data.operation_date || new Date().toISOString().split("T")[0],
+      calculation_system: data.calculation_system || "SAC",
+      total_term_months: data.total_term_months !== undefined && data.total_term_months !== null ? data.total_term_months.toString() : "",
+      final_maturity_date: data.final_maturity_date || "",
+      principal_grace_months: data.principal_grace_months || "0",
+      interest_grace_months: data.interest_grace_months || "0",
+      grace_action: data.grace_action || "capitalizar",
+      grace_interest_behavior: data.grace_interest_behavior || (data.grace_action === "pagar" ? "INTEREST_ONLY" : "CAPITALIZAR"),
+      amortization_trigger: data.amortization_trigger || "END_OF_GRACE",
+      principal_periodicity: data.principal_frequency || data.principal_periodicity || "1",
+      interest_periodicity: data.interest_frequency || data.interest_periodicity || "1",
+      first_payment_date: data.first_payment_date || "",
+      amortization_percentages: data.amortization_percentages || "",
+      percentage_base: data.percentage_base || "saldo_devedor",
+    };
+  };
+
+  const [form, setForm] = useState(() => buildFormFromInitial(initialData));
   const gridCols2 = cn("grid grid-cols-1 gap-4", !narrowColumn && "md:grid-cols-2");
   const gridCols3 = cn("grid grid-cols-1 gap-4", !narrowColumn && "md:grid-cols-3");
-  const [initialForm, setInitialForm] = useState(defaultForm);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [initialForm, setInitialForm] = useState(() => buildFormFromInitial(initialData));
+  const [isLoaded, setIsLoaded] = useState(() => Boolean(initialData) || !isEditing);
   const [draftBanner, setDraftBanner] = useState(null);
   const [lastAutoSavedAt, setLastAutoSavedAt] = useState(null);
   const draftStorageKey = `endividamento_draft_${draftKey}`;
@@ -113,54 +156,22 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
   // Update form when initialData changes
   React.useEffect(() => {
     if (initialData) {
-      const newForm = {
-        group_id: initialData.group_id || "",
-        entity_id: initialData.entity_id || "",
-        bank_id: initialData.bank_id || "",
-        currency_id: initialData.currency_id || "",
-        exchange_lag: initialData.exchange_lag !== undefined ? initialData.exchange_lag.toString() : "1",
-        contract_number: initialData.contract_number || "",
-        operation_category: initialData.operation_category || "",
-        operation_type: initialData.operation_type || "",
-        guarantee_real_type: initialData.guarantee_real_type || "",
-        guarantee_personal_type: initialData.guarantee_personal_type || "",
-        operation_value: initialData.operation_value || "",
-        amount_foreign: initialData.amount_foreign || "",
-        exchange_rate_closing: initialData.exchange_rate_closing || "",
-        signal_value: initialData.signal_value || "0",
-        iof_value: initialData.iof_value || "0",
-        iof_financed: initialData.iof_financed || false,
-        encargo_garantia_value: initialData.encargo_garantia_value || "0",
-        encargo_garantia_financed: initialData.encargo_garantia_financed || false,
-        other_fees: initialData.other_fees || "0",
-        other_fees_financed: initialData.other_fees_financed || false,
-        fixed_rate: initialData.fixed_rate || "",
-        indexer: initialData.indexer || "NA",
-        indexer_spread: initialData.indexer_spread || "0",
-        operation_date: initialData.operation_date || new Date().toISOString().split("T")[0],
-        calculation_system: initialData.calculation_system || "SAC",
-        total_term_months: initialData.total_term_months !== undefined && initialData.total_term_months !== null ? initialData.total_term_months.toString() : "",
-        final_maturity_date: initialData.final_maturity_date || "",
-        principal_grace_months: initialData.principal_grace_months || "0",
-        interest_grace_months: initialData.interest_grace_months || "0",
-        grace_action: initialData.grace_action || "capitalizar",
-        grace_interest_behavior: initialData.grace_interest_behavior || (initialData.grace_action === "pagar" ? "INTEREST_ONLY" : "CAPITALIZAR"),
-        amortization_trigger: initialData.amortization_trigger || "END_OF_GRACE",
-        principal_periodicity: initialData.principal_frequency || initialData.principal_periodicity || "1",
-        interest_periodicity: initialData.interest_frequency || initialData.interest_periodicity || "1",
-        first_payment_date: initialData.first_payment_date || "",
-        amortization_percentages: initialData.amortization_percentages || "",
-        percentage_base: initialData.percentage_base || "saldo_devedor",
-      };
+      const newForm = buildFormFromInitial(initialData);
       setForm(newForm);
       setInitialForm(newForm);
-      setTimeout(() => setIsLoaded(true), 100);
-    } else {
-      setForm(defaultForm);
-      setInitialForm(defaultForm);
       setIsLoaded(true);
+      return;
     }
-  }, [initialData]);
+
+    // Em edição, `initialData` pode ser null só enquanto o contrato carrega.
+    // Não zerar o formulário nesse intervalo — senão a Identificação some e
+    // o onIdentificationChange sobrescreve formParams com campos vazios.
+    if (isEditing) return;
+
+    setForm(defaultForm);
+    setInitialForm(defaultForm);
+    setIsLoaded(true);
+  }, [initialData, isEditing]);
 
   // Mantém o pai (Simulator) sincronizado com os campos de Identificação em
   // tempo real, e não só no momento em que o usuário clica em "Calcular".
@@ -207,7 +218,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
   //     usuário provavelmente nem lembra mais deles).
   const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
   React.useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded || isEditing) return;
     try {
       const raw = localStorage.getItem(draftStorageKey);
       if (!raw) return;
@@ -232,7 +243,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     } catch (err) {
       console.error("Erro ao ler rascunho salvo:", err);
     }
-  }, [draftStorageKey, isLoaded]);
+  }, [draftStorageKey, isLoaded, isEditing]);
 
   // Salvar rascunho automaticamente (com debounce) sempre que o formulário mudar,
   // para não perder o preenchimento em andamento caso a aba seja fechada/recarregada.
@@ -583,7 +594,11 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Grupo Econômico *</Label>
               <Combobox
                 value={form.group_id || ""}
-                onChange={(v) => update("group_id", v)}
+                onChange={(v) => {
+                  if (!v) return;
+                  update("group_id", v);
+                  update("entity_id", "");
+                }}
                 options={(groups || []).map((g) => ({ value: g.id, label: g.group_name }))}
                 placeholder="Selecione"
                 searchPlaceholder="Buscar grupo..."

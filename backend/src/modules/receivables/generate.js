@@ -78,6 +78,7 @@ export function buildReceivableTitles(contract, bank = null, entity = null, fina
     valor,
     saldo: valor,
     natureza: finance.mainTitleNature,
+    conta_contabil: finance.mainTitleAccount,
     historico: `SD Ini BRL do contrato ${contractNumber}`,
     status: "aberto",
     origem: "contrato",
@@ -141,12 +142,15 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
     const createdRows = [];
     for (const title of titles) {
       const id = randomUUID();
+      const contaContabil = String(title.conta_contabil || "").trim();
+      const extraJson = contaContabil ? { conta_contabil: contaContabil } : null;
       await client.query(
         `INSERT INTO receivable_titles (
            id, entity_id, contract_id, parcela, titulo_numero, tipo, prefixo,
            emissao, vencimento, valor, saldo, natureza, historico, status, origem,
-           cliente, cliente_loja, cliente_nome, filial, filial_origem, created_by, group_id
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
+           cliente, cliente_loja, cliente_nome, filial, filial_origem,
+           extra_json, created_by, group_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22,$23)`,
         [
           id,
           title.entity_id,
@@ -168,6 +172,7 @@ export async function generateReceivableTitlesForContract(contract, createdBy = 
           title.cliente_nome,
           title.filial,
           title.filial_origem,
+          extraJson ? JSON.stringify(extraJson) : null,
           createdBy,
           groupId,
         ]

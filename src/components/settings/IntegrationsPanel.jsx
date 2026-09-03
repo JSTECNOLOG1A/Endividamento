@@ -46,6 +46,7 @@ import {
   integrationsApi,
   prepareIntegrationPayload,
 } from "@/api/integrations";
+import { parametersApi } from "@/api/parameters";
 
 export default function IntegrationsPanel({ canManage = false, viewingAll = false }) {
   const [items, setItems] = useState([]);
@@ -58,18 +59,24 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
   const [editor, setEditor] = useState(null);
   const [details, setDetails] = useState(null);
   const [confirm, setConfirm] = useState(null);
+  const [externalErpEnabled, setExternalErpEnabled] = useState(true);
 
   const load = useCallback(async (page = pagination.page) => {
     setLoading(true);
     try {
-      const result = await integrationsApi.list({
-        search,
-        status,
-        page,
-        limit: pagination.limit,
-      });
+      const [result, erpParam] = await Promise.all([
+        integrationsApi.list({
+          search,
+          status,
+          page,
+          limit: pagination.limit,
+        }),
+        parametersApi.get("integrations.external_erp_enabled").catch(() => null),
+      ]);
       setItems(result.data || []);
       setPagination(result.pagination || { page: 1, limit: 10, total: 0, totalPages: 1 });
+      const resolved = erpParam?.data?.value;
+      setExternalErpEnabled(resolved !== false && resolved !== "false");
     } catch (error) {
       toast.error(error.message || "Não foi possível carregar as conexões");
     } finally {
@@ -172,6 +179,13 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
           Você está vendo todos os clientes. Selecione um cliente no topo para criar conexão ou integrar títulos.
         </p>
       ) : null}
+      {!viewingAll && !externalErpEnabled ? (
+        <p className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
+          Integração com ERP externo desativada neste cliente. Ative em{" "}
+          <span className="font-medium">Configurações → Parâmetros → Integrações</span>{" "}
+          (“Integra com outro ERP”) para cadastrar conexões.
+        </p>
+      ) : null}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <Input
           value={search}
@@ -194,8 +208,14 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
             <Button
               onClick={openCreate}
               className="gap-2"
-              disabled={viewingAll}
-              title={viewingAll ? "Selecione um cliente no topo para criar conexão" : undefined}
+              disabled={viewingAll || !externalErpEnabled}
+              title={
+                viewingAll
+                  ? "Selecione um cliente no topo para criar conexão"
+                  : !externalErpEnabled
+                    ? "Ative a integração com ERP em Parâmetros"
+                    : undefined
+              }
             >
               <Plus className="w-4 h-4" />
               Nova conexão
