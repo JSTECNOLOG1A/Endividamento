@@ -121,6 +121,19 @@ Se a tabela não existir ou o parâmetro não estiver definido:
 | appearance.menu_icons | appearance | true |
 | appearance.show_tenant | appearance | true |
 | appearance.button_radius | appearance | medium |
+| finance.main_title_type | finance | DEF |
+| finance.interest_title_type | finance | JUR |
+| finance.provisional_title_type | finance | PR |
+| finance.main_title_nature | finance | *(vazio)* |
+| finance.interest_title_nature | finance | *(vazio)* |
+| accounting.main_title_account | accounting | *(vazio)* |
+| accounting.interest_title_account | accounting | *(vazio)* |
+| integrations.external_erp_enabled | integrations | true |
+
+### Contas contábeis e ERP
+
+- `accounting.main_title_account` / `accounting.interest_title_account`: códigos do plano de contas usados na geração de títulos (gravados em `extra_json.conta_contabil`).
+- `integrations.external_erp_enabled`: quando `false`, a tela **Configurações → Integrações** bloqueia novas conexões e orienta a reativar o parâmetro.
 
 ## Como adicionar um novo parâmetro (sem alterar schema)
 

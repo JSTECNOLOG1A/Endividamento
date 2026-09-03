@@ -138,7 +138,9 @@ function ParameterControl({ param, value, onChange, disabled, modern }) {
     <Input
       className={cn(
         controlClassName(modern),
-        param.key.startsWith("finance.") && "font-mono uppercase tracking-wide"
+        param.key.startsWith("finance.") || param.key.startsWith("accounting.")
+          ? "font-mono uppercase tracking-wide"
+          : null
       )}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}

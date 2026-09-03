@@ -79,6 +79,8 @@ export function normalizeFinanceTitleParams(raw = {}) {
     provisionalTitleType: String(raw.provisionalTitleType ?? raw.provisional_title_type ?? "PR").trim() || "PR",
     mainTitleNature: String(raw.mainTitleNature ?? raw.main_title_nature ?? "").trim(),
     interestTitleNature: String(raw.interestTitleNature ?? raw.interest_title_nature ?? "").trim(),
+    mainTitleAccount: String(raw.mainTitleAccount ?? raw.main_title_account ?? "").trim(),
+    interestTitleAccount: String(raw.interestTitleAccount ?? raw.interest_title_account ?? "").trim(),
   };
 }
 
@@ -89,12 +91,16 @@ export async function loadFinanceTitleParams(groupId) {
     provisionalTitleType,
     mainTitleNature,
     interestTitleNature,
+    mainTitleAccount,
+    interestTitleAccount,
   ] = await Promise.all([
     resolveParameter("finance.main_title_type", { groupId }),
     resolveParameter("finance.interest_title_type", { groupId }),
     resolveParameter("finance.provisional_title_type", { groupId }),
     resolveParameter("finance.main_title_nature", { groupId }),
     resolveParameter("finance.interest_title_nature", { groupId }),
+    resolveParameter("accounting.main_title_account", { groupId }),
+    resolveParameter("accounting.interest_title_account", { groupId }),
   ]);
   return normalizeFinanceTitleParams({
     mainTitleType,
@@ -102,6 +108,8 @@ export async function loadFinanceTitleParams(groupId) {
     provisionalTitleType,
     mainTitleNature,
     interestTitleNature,
+    mainTitleAccount,
+    interestTitleAccount,
   });
 }
 
@@ -191,6 +199,7 @@ export function buildPayableTitles(contract, bank = null, entity = null, finance
         valor: amortValor,
         saldo: amortValor,
         natureza: finance.mainTitleNature,
+        conta_contabil: finance.mainTitleAccount,
         historico: `Amortização parcela ${parcela} do contrato ${contractNumber}`,
       });
     }
@@ -204,6 +213,7 @@ export function buildPayableTitles(contract, bank = null, entity = null, finance
         valor: jurosValor,
         saldo: jurosValor,
         natureza: finance.interestTitleNature,
+        conta_contabil: finance.interestTitleAccount,
         historico: `Juros parcela ${parcela} do contrato ${contractNumber}`,
       });
     }
@@ -217,6 +227,7 @@ export function buildPayableTitles(contract, bank = null, entity = null, finance
         valor: iofValor,
         saldo: iofValor,
         natureza: finance.interestTitleNature,
+        conta_contabil: finance.interestTitleAccount,
         historico: `IOF parcela ${parcela} do contrato ${contractNumber}`,
       });
     }
@@ -571,12 +582,15 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
       const natureza = title.natureza || "";
       const filial = title.filial || template?.filial || "";
       const filialOrigem = title.filial_origem || template?.filial_origem || "";
+      const contaContabil = String(title.conta_contabil || "").trim();
+      const extraJson = contaContabil ? { conta_contabil: contaContabil } : null;
       const inserted = await client.query(
         `INSERT INTO payable_titles (
            id, entity_id, contract_id, parcela, titulo_numero, tipo, prefixo,
            emissao, vencimento, valor, saldo, natureza, historico, status, origem,
-           fornecedor, fornecedor_loja, fornecedor_nome, filial, filial_origem, created_by, group_id
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+           fornecedor, fornecedor_loja, fornecedor_nome, filial, filial_origem,
+           extra_json, created_by, group_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22,$23)
          ON CONFLICT (contract_id, prefixo, parcela) WHERE status = 'aberto' DO NOTHING
          RETURNING id, prefixo, titulo_numero, parcela, tipo, contract_id`,
         [
@@ -600,6 +614,7 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
           fornecedorNome,
           filial,
           filialOrigem,
+          extraJson ? JSON.stringify(extraJson) : null,
           createdBy,
           groupId,
         ]

@@ -34,6 +34,7 @@ export function Combobox({
 }) {
   const [open, setOpen] = React.useState(false);
   const selected = options?.find((o) => o.value === value);
+  const displayLabel = selected?.label || (value ? String(value) : null);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -46,11 +47,11 @@ export function Combobox({
           disabled={disabled}
           className={cn(
             "h-9 w-full justify-between font-normal",
-            !selected && "text-muted-foreground",
+            !displayLabel && "text-muted-foreground",
             className
           )}
         >
-          <span className="truncate">{selected ? selected.label : placeholder}</span>
+          <span className="truncate">{displayLabel || placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
