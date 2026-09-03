@@ -30,6 +30,59 @@ function parseJsonField(raw, fallback = null) {
   }
 }
 
+const EDIT_SESSION_KEY = "endividamento_simulator_edit_session";
+
+function readEditSession() {
+  try {
+    const raw = sessionStorage.getItem(EDIT_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeEditSession(payload) {
+  try {
+    sessionStorage.setItem(EDIT_SESSION_KEY, JSON.stringify(payload));
+  } catch (err) {
+    console.error("Erro ao persistir sessão de edição:", err);
+  }
+}
+
+function clearEditSession() {
+  try {
+    sessionStorage.removeItem(EDIT_SESSION_KEY);
+  } catch (err) {
+    console.error("Erro ao limpar sessão de edição:", err);
+  }
+}
+
+function resolveEditBootstrap() {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const edit = params.get("edit");
+  if (edit) {
+    writeEditSession({ mode: "edit", id: edit });
+    return { mode: "edit", id: edit };
+  }
+  const reopen = params.get("reopen");
+  if (reopen) {
+    writeEditSession({ mode: "reopen", payload: reopen });
+    return { mode: "reopen", payload: reopen };
+  }
+  const saved = readEditSession();
+  if (saved?.mode === "edit" && saved.id) {
+    return { mode: "edit", id: saved.id, snapshot: saved.snapshot || null };
+  }
+  if (saved?.mode === "reopen" && saved.payload) {
+    return { mode: "reopen", payload: saved.payload };
+  }
+  return null;
+}
+
 export default function Simulator() {
   const navigate = useNavigate();
   const { layoutMode } = useLayoutMode();
@@ -47,17 +100,9 @@ export default function Simulator() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [uploadedPdfUrl, setUploadedPdfUrl] = useState(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
-  // Se a URL já pede edição/reabertura, não monta o formulário vazio antes dos
-  // dados — isso gerava autosave de rascunho em branco e campos "sumindo".
-  const [editBootstrap, setEditBootstrap] = useState(() => {
-    if (typeof window === "undefined") return null;
-    const params = new URLSearchParams(window.location.search);
-    const edit = params.get("edit");
-    if (edit) return { mode: "edit", id: edit };
-    const reopen = params.get("reopen");
-    if (reopen) return { mode: "reopen", payload: reopen };
-    return null;
-  });
+  // URL ?edit= / sessão: não monta formulário vazio antes dos dados.
+  // A sessão sobrevive a remount do LayoutProvider (que limpava a URL).
+  const [editBootstrap, setEditBootstrap] = useState(() => resolveEditBootstrap());
   const [editLoadError, setEditLoadError] = useState(null);
 
   // Load CDI rates for calculation
@@ -230,6 +275,24 @@ export default function Simulator() {
 
       setResult(scheduleRows.length ? resultData : null);
 
+      writeEditSession({
+        mode: "edit",
+        id: contractId,
+        snapshot: {
+          reopenData: reopenFormData,
+          formParams: contractFormData,
+          result: scheduleRows.length ? resultData : null,
+          editingContractMeta: {
+            status: contract.status || "rascunho",
+            rejectionComments: contract.rejection_comments || "",
+          },
+          recalcFlag: contract.recalculation_flag || null,
+          uploadedPdfUrl: contract.contract_pdf_url || null,
+        },
+      });
+
+      // Limpa a query da URL, mas a sessão permanece — se o Layout remountar
+      // a Calculadora, ainda conseguimos reidratar o contrato em edição.
       window.history.replaceState({}, "", window.location.pathname);
       setEditLoadError(null);
       setEditBootstrap(null);
@@ -240,13 +303,30 @@ export default function Simulator() {
     }
   }, []);
 
-  // Check for reopen or edit parameter on mount
+  // Check for reopen or edit parameter on mount / remount
   const editLoadedRef = React.useRef(null);
   React.useEffect(() => {
     const boot = editBootstrap;
     if (!boot) return;
 
     if (boot.mode === "edit") {
+      if (boot.snapshot?.reopenData) {
+        // Remount: reidrata do sessionStorage sem esperar a API de novo.
+        setEditingContractId(boot.id);
+        setEditingContractMeta(boot.snapshot.editingContractMeta || null);
+        setRecalcFlag(boot.snapshot.recalcFlag || null);
+        setReopenData(boot.snapshot.reopenData);
+        setFormParams(boot.snapshot.formParams || boot.snapshot.reopenData);
+        setLastCalculatedParams(boot.snapshot.formParams || boot.snapshot.reopenData);
+        setResult(boot.snapshot.result || null);
+        setUploadedPdfUrl(boot.snapshot.uploadedPdfUrl || null);
+        setHasUnsavedChanges(false);
+        editLoadedRef.current = boot.id;
+        setEditBootstrap(null);
+        // Atualiza em background para pegar mudanças recentes.
+        loadContractForEdit(boot.id);
+        return;
+      }
       if (editLoadedRef.current === boot.id) return;
       editLoadedRef.current = boot.id;
       loadContractForEdit(boot.id);
@@ -261,11 +341,13 @@ export default function Simulator() {
         editLoadedRef.current = marker;
         setReopenData(data);
         setFormParams(data);
+        writeEditSession({ mode: "reopen", payload: boot.payload });
         window.history.replaceState({}, "", window.location.pathname);
         setEditBootstrap(null);
       } catch (e) {
         console.error("Failed to parse reopen data:", e);
         setEditLoadError("Não foi possível ler os dados do contrato para reabrir");
+        clearEditSession();
         setEditBootstrap(null);
       }
     }
@@ -620,6 +702,8 @@ export default function Simulator() {
 
   const handleReset = () => {
     clearDraft(editingContractId || "new");
+    clearEditSession();
+    editLoadedRef.current = null;
     setResult(null);
     setFormParams(null);
     setLastCalculatedParams(null);
@@ -629,6 +713,7 @@ export default function Simulator() {
     setRecalcFlag(null);
     setReopenData(null);
     setUploadedPdfUrl(null);
+    setEditLoadError(null);
   };
 
   // Sai da edição sem salvar — volta para o Fechamento Contábil de origem se
@@ -637,6 +722,8 @@ export default function Simulator() {
   // com certeza se o usuário alterou algo no formulário.
   const handleBack = () => {
     if (!window.confirm("Sair sem salvar? Alterações não salvas neste contrato serão perdidas.")) return;
+    clearEditSession();
+    editLoadedRef.current = null;
     if (recalcFlag?.returnTo) navigate(recalcFlag.returnTo);
     else navigate(createPageUrl("Contracts"));
   };
@@ -730,6 +817,8 @@ export default function Simulator() {
 
       await base44.entities.LoanContract.update(editingContractId, closeContractData);
       clearDraft(editingContractId);
+      clearEditSession();
+      editLoadedRef.current = null;
       if (recalcFlag?.returnTo) {
         navigate(recalcFlag.returnTo);
       } else {

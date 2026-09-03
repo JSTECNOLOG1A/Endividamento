@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { usePlatform } from "@/lib/PlatformContext";
 import { parametersApi } from "@/api/parameters";
@@ -13,12 +13,17 @@ export function LayoutProvider({ children }) {
   const groupId = user?.group_id || currentTenant?.group_id || null;
   const [layoutMode, setLayoutMode] = useState("classic");
   const [loading, setLoading] = useState(true);
+  // Só o primeiro resolve bloqueia a UI. Refresh posterior (troca de tenant,
+  // parâmetros, etc.) NÃO pode setLoading(true) — o AppLayout desmonta as
+  // páginas e a Calculadora perde o contrato aberto para edição.
+  const bootedRef = useRef(false);
 
   const refreshLayout = useCallback(async () => {
     if (!isAuthenticated || isLoadingAuth || platformLoading) {
       if (!isAuthenticated) {
         setLayoutMode("classic");
         setLoading(false);
+        bootedRef.current = false;
       }
       return;
     }
@@ -26,12 +31,13 @@ export function LayoutProvider({ children }) {
     if (user?.platform_admin && !getPlatformTenantId()) {
       setLayoutMode("classic");
       setLoading(false);
+      bootedRef.current = true;
       return;
     }
 
     const cached = groupId ? readLayoutCache(groupId) : "classic";
     setLayoutMode(cached);
-    setLoading(true);
+    if (!bootedRef.current) setLoading(true);
 
     try {
       const result = await parametersApi.get("appearance.default_layout");
@@ -41,6 +47,7 @@ export function LayoutProvider({ children }) {
     } catch {
       setLayoutMode(groupId ? readLayoutCache(groupId) : "classic");
     } finally {
+      bootedRef.current = true;
       setLoading(false);
     }
   }, [groupId, isAuthenticated, isLoadingAuth, platformLoading, user?.platform_admin]);
