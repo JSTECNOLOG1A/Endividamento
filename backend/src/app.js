@@ -74,7 +74,13 @@ export function createApp() {
     next();
   }, requireAuth, attachTenant, (req, res, next) => {
     const filename = String(req.path || "").replace(/^\/+/, "");
-    if (!filename || filename.includes("..") || filename.includes("/")) {
+    // Bloqueia "/" (sem subpastas no nome vindo da URL — quem decide a subpasta
+    // por tenant é o servidor, não o cliente) e ".." só como segmento de path
+    // traversal — não como substring, senão nomes de arquivo legítimos com
+    // ".." no meio (ex.: "9..79mi.pdf", de um valor "R$ 9,79 milhões" salvo
+    // com ponto duplo) ficam bloqueados sem motivo. Sem "/", ".." só é
+    // perigoso se for o nome inteiro.
+    if (!filename || filename === ".." || filename.includes("/")) {
       res.status(404).json({ error: "Arquivo não encontrado", code: "NOT_FOUND" });
       return;
     }
