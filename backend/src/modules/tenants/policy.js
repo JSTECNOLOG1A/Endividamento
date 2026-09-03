@@ -204,6 +204,12 @@ export function assertCanApproveContract(contract) {
   if (isViewer() || !isTenantAdmin()) {
     throw httpError(403, "Apenas administradores podem aprovar contratos.", "ADMIN_REQUIRED");
   }
+  // Dono do tenant fica isento da segregação "quem cadastrou não pode
+  // aprovar" — mesma regra e mesmo motivo do canApprove em
+  // ContractWorkflow.jsx (operador único: o dono é a última instância).
+  // Sem essa isenção aqui, o botão liberado na tela só levava a um 403
+  // ao clicar, já que essa checagem roda de novo no servidor.
+  if (isOwner()) return;
   const email = actorEmail();
   if (email && sameEmail(contract?.created_by, email)) {
     throw httpError(403, "Quem cadastrou o contrato não pode aprová-lo. Peça a outro administrador.", "SELF_APPROVAL");
