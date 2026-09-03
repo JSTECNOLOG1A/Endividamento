@@ -2,6 +2,7 @@ import { refreshPayableTitlesFromErp } from "../payables/erpIntegrate.js";
 import { convertPayablePrToTx } from "../payables/convertPrToTx.js";
 import { refreshReceivableTitlesFromErp } from "../receivables/erpIntegrate.js";
 import { syncPtaxToCurrencies, syncRatesToCdiRates } from "../functions/bacen.js";
+import { runAutomaticClosingForGroup } from "../accounting/automaticClosing.js";
 
 export const TASKS = {
   consultar_titulos_pagar: {
@@ -107,6 +108,19 @@ export const TASKS = {
         message: parts.join(" · "),
         detalhes: result.summary,
       };
+    },
+  },
+  fechamento_contabil_automatico: {
+    key: "fechamento_contabil_automatico",
+    label: "Fechamento contábil automático",
+    rotina: "Fechamento Contábil",
+    descricao: "Para empresas em modo API, deriva as baixas do ERP e roda o fechamento do mês — só posta os lançamentos se a empresa estiver em aprovação automática.",
+    defaultNome: "Fechamento contábil automático",
+    defaultModo: "mensal",
+    defaultDiaMes: 31,
+    defaultHoraExecucao: "22:00",
+    async run() {
+      return runAutomaticClosingForGroup();
     },
   },
 };

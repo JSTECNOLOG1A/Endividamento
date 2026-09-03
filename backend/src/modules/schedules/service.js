@@ -20,6 +20,7 @@ const TAREFA_ENUM = [
   "converter_titulos_pr_tx",
   "atualizar_ptax_bacen",
   "atualizar_indices_bacen",
+  "fechamento_contabil_automatico",
 ];
 const MODO_ENUM = ["intervalo", "mensal"];
 
