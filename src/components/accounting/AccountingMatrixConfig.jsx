@@ -350,7 +350,10 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
           <Tabs value={category} onValueChange={setCategory}>
             <TabsList className="bg-slate-100">
               {OPERATION_CATEGORIES.map((c) => (
-                <TabsTrigger key={c.value} value={c.value} className="text-xs">{c.label}</TabsTrigger>
+                <TabsTrigger key={c.value} value={c.value} className="text-xs">
+                  {c.label}
+                  {CATEGORY_HINTS[c.value] && <InfoTip text={CATEGORY_HINTS[c.value]} side="bottom" />}
+                </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>

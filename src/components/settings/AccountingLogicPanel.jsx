@@ -134,7 +134,7 @@ export default function AccountingLogicPanel() {
                 isso, o estado de rascunho (campos editados mas não salvos)
                 vaza de uma empresa pra outra, já que fica guardado
                 localmente, não por entityId. */}
-            <AccountingMatrixFields key={entityId} entityId={entityId} stacked />
+            <AccountingMatrixFields key={entityId} entityId={entityId} />
           </CardContent>
         )}
       </Card>
