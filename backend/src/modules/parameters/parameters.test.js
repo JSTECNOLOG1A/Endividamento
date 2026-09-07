@@ -121,24 +121,24 @@ async function main() {
     tenantRole: "OWNER",
   };
 
-  // GLOBAL fallback → classic when no tenant override
+  // GLOBAL / catálogo → modern (padrão da plataforma)
   await runWithTenant(scopeAdminB, async () => {
     const layout = await resolveParameter("appearance.default_layout");
-    if (layout !== "classic") fail(`fallback classic esperado, obteve ${layout}`);
+    if (layout !== "modern") fail(`fallback modern esperado, obteve ${layout}`);
   });
 
-  // TENANT override
+  // TENANT override explícito para classic
   await runWithTenant(scopeAdminA, async () => {
-    await setParameter("appearance.default_layout", "modern", { scope: "TENANT" });
+    await setParameter("appearance.default_layout", "classic", { scope: "TENANT" });
     const layout = await resolveParameter("appearance.default_layout");
-    if (layout !== "modern") fail(`tenant override modern esperado, obteve ${layout}`);
+    if (layout !== "classic") fail(`tenant override classic esperado, obteve ${layout}`);
   });
 
-  // USER override
+  // USER override para modern
   await runWithTenant(scopeAdminA, async () => {
-    await setParameter("appearance.default_layout", "classic", { scope: "USER" });
+    await setParameter("appearance.default_layout", "modern", { scope: "USER" });
     const layout = await resolveParameter("appearance.default_layout");
-    if (layout !== "classic") fail(`user override classic esperado, obteve ${layout}`);
+    if (layout !== "modern") fail(`user override modern esperado, obteve ${layout}`);
   });
 
   // ENUM inválido
@@ -151,12 +151,12 @@ async function main() {
     }
   });
 
-  // reset → default
+  // reset → default modern da plataforma
   await runWithTenant(scopeAdminA, async () => {
     await resetParameter("appearance.default_layout", { scope: "USER" });
     await resetParameter("appearance.default_layout", { scope: "TENANT" });
     const layout = await resolveParameter("appearance.default_layout");
-    if (layout !== "classic") fail(`após reset classic esperado, obteve ${layout}`);
+    if (layout !== "modern") fail(`após reset modern esperado, obteve ${layout}`);
   });
 
   // parâmetros financeiros / contábeis / integração
@@ -182,7 +182,7 @@ async function main() {
 
   // parâmetro inexistente → classic
   const unknown = await runWithTenant(scopeAdminA, () => resolveParameter("appearance.default_layout"));
-  if (unknown !== "classic") fail("default_layout inexistente deveria ser classic");
+  if (unknown !== "modern") fail("default_layout inexistente deveria ser modern");
 
   // USER sem permissão
   await runWithTenant(scopeUserA, async () => {

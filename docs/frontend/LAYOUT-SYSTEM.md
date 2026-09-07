@@ -22,11 +22,13 @@ AppLayout
 
 ## Resolução via parâmetro
 
-Parâmetro: `appearance.default_layout`  
-Valores: `classic` | `modern`  
-Default: **`classic`**
+Parâmetro: `appearance.default_layout`
+Valores: `classic` | `modern`
+Default da plataforma: **`modern`**
 
-Precedência (backend): USER → TENANT → GLOBAL → catálogo → fallback `classic`
+Precedência (backend): USER → TENANT → GLOBAL → catálogo → fallback `modern`
+
+Cada tenant (ou usuário) pode escolher **Clássico** em Configurações → Parâmetros.
 
 ### Fluxo no frontend
 
@@ -39,10 +41,10 @@ Precedência (backend): USER → TENANT → GLOBAL → catálogo → fallback `c
 
 | Condição | Resultado |
 |----------|-----------|
-| API indisponível | cache local ou `classic` |
-| Valor inválido | `classic` |
-| Parâmetro ausente | `classic` |
-| Master sem tenant | GLOBAL/default → `classic` |
+| API indisponível | cache local ou `modern` |
+| Valor inválido | `modern` |
+| Parâmetro ausente | `modern` |
+| Master sem tenant | shell Moderno (control plane) |
 
 ## Estrutura de arquivos
 

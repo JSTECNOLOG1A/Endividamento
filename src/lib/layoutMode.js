@@ -1,9 +1,13 @@
-/** Resolução segura do modo de layout (testável). */
+/** Resolução segura do modo de layout (testável).
+ * Padrão da plataforma: modern. Classic permanece disponível por escolha explícita.
+ */
 export const LAYOUT_MODES = ["classic", "modern"];
+export const DEFAULT_LAYOUT_MODE = "modern";
 
 export function resolveLayoutMode(raw) {
+  if (raw === "classic") return "classic";
   if (raw === "modern") return "modern";
-  return "classic";
+  return DEFAULT_LAYOUT_MODE;
 }
 
 export function layoutCacheKey(groupId) {
@@ -13,9 +17,10 @@ export function layoutCacheKey(groupId) {
 export function readLayoutCache(groupId) {
   try {
     const value = localStorage.getItem(layoutCacheKey(groupId));
+    if (value == null) return DEFAULT_LAYOUT_MODE;
     return resolveLayoutMode(value);
   } catch {
-    return "classic";
+    return DEFAULT_LAYOUT_MODE;
   }
 }
 

@@ -8,6 +8,7 @@ import { writeAudit } from "../../middleware/audit.js";
 import { loadTenantForEmail } from "../tenants/access.js";
 import { issueAuthResponse } from "./token.js";
 import { writeAccessLog } from "../platform/service.js";
+import { markFirstLoginIfNeeded } from "../firstAccess/service.js";
 
 export const authRouter = Router();
 
@@ -41,6 +42,17 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
     }
     await pool.query("UPDATE users SET last_login_at = now() WHERE id = $1", [user.id]);
     const tenant = user.platform_admin ? null : await loadTenantForEmail(user.email);
+    if (!user.platform_admin && tenant) {
+      const lifecycle = tenant.lifecycle_status || (
+        tenant.billing_status === "suspended" ? "SUSPENDED" : "ACTIVE"
+      );
+      if (["SUSPENDED", "DISABLED", "CANCELLED"].includes(lifecycle) || tenant.billing_status === "suspended") {
+        const err = new Error("O acesso da sua organização ao AllDebt está temporariamente suspenso.");
+        err.status = 403;
+        err.code = "TENANT_SUSPENDED";
+        throw err;
+      }
+    }
     const auth = issueAuthResponse(user, tenant);
     req.user = {
       sub: user.id,
@@ -53,7 +65,7 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
     };
     await writeAudit({
       req,
-      action: "LOGIN",
+      action: user.platform_admin ? "PLATFORM_MASTER_LOGIN" : "LOGIN",
       resourceType: "User",
       resourceId: user.id,
       registro: user.email,
@@ -65,8 +77,9 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
         platform_admin: user.platform_admin === true,
       },
     });
+    await markFirstLoginIfNeeded(req, user.id);
     if (user.platform_admin) {
-      await writeAccessLog({ req, action: "LOGIN", tenant: null });
+      await writeAccessLog({ req, action: "PLATFORM_MASTER_LOGIN", tenant: null, purpose: "seguranca" });
     }
     res.json(auth);
   } catch (error) {

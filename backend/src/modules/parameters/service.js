@@ -140,7 +140,7 @@ export async function getUserParameter(key, { groupId = groupIdOrThrow(), userId
 export async function resolveParameter(key, { groupId, userId } = {}) {
   const definition = getDefinition(key);
   if (!definition) {
-    if (key === "appearance.default_layout") return "classic";
+    if (key === "appearance.default_layout") return "modern";
     return null;
   }
 
@@ -181,7 +181,7 @@ export async function resolveParameter(key, { groupId, userId } = {}) {
   }
 
   if (resolved == null && key === "appearance.default_layout") {
-    resolved = "classic";
+    resolved = "modern";
   }
 
   setCached(ck, resolved);

@@ -1,7 +1,9 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { LogOut, Shield } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { usePlatform } from "@/lib/PlatformContext";
+import { createPageUrl } from "@/utils";
 import ModernGroupSelector from "./ModernGroupSelector";
 import {
   Select,
@@ -92,6 +94,48 @@ function ModernTenantSelector({ collapsed }) {
   );
 }
 
+function ModernPlatformMasterLink({ collapsed }) {
+  const { isMaster } = usePlatform();
+  if (!isMaster) return null;
+
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link
+            to={createPageUrl("Platform")}
+            className={cn(
+              "w-full flex items-center justify-center rounded-lg p-2.5",
+              "text-[#67E8F9] hover:bg-white/[0.06] hover:text-white transition-colors"
+            )}
+            aria-label="Administração da plataforma"
+          >
+            <Shield className="w-4 h-4" />
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent side="right">Administração da plataforma</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Link
+      to={createPageUrl("Platform")}
+      className={cn(
+        "flex flex-col gap-0.5 rounded-lg border border-[#67E8F9]/25 bg-white/[0.04] px-3 py-2.5",
+        "hover:bg-white/[0.08] transition-colors"
+      )}
+    >
+      <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#67E8F9]">
+        PLATFORM MASTER
+      </span>
+      <span className="text-xs font-medium text-white underline underline-offset-2">
+        Administração da plataforma
+      </span>
+    </Link>
+  );
+}
+
 function initials(name, email) {
   const base = name || email || "?";
   const parts = base.trim().split(/\s+/);
@@ -106,6 +150,7 @@ export default function ModernSidebarFooter({ collapsed, onLogout }) {
   if (collapsed) {
     return (
       <div className="border-t border-white/10 p-2 shrink-0 space-y-1">
+        <ModernPlatformMasterLink collapsed />
         <ModernTenantSelector collapsed />
         <ModernGroupSelector collapsed />
         <button
@@ -132,6 +177,7 @@ export default function ModernSidebarFooter({ collapsed, onLogout }) {
           <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
         </div>
       </div>
+      <ModernPlatformMasterLink />
       <ModernTenantSelector />
       <ModernGroupSelector />
       <button

@@ -320,7 +320,7 @@ export default function Contracts() {
 
   return (
     // Largura máxima da tela, como o padrão em todas as telas do sistema.
-    <div className="w-full px-4 sm:px-6 py-8">
+    <div className="w-full px-4 sm:px-6 py-8" data-tour="contracts-workspace">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contratos</h1>
         <p className="text-sm text-slate-600 mt-0.5">Visualize e gerencie os contratos cadastrados</p>

@@ -27,3 +27,7 @@ export function SettingsLog() {
 export function SettingsAccount() {
   return <SettingsView section="conta" />;
 }
+
+export function SettingsPrivacy() {
+  return <SettingsView section="privacidade" />;
+}

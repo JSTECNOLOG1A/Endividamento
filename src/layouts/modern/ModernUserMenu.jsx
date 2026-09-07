@@ -1,8 +1,9 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { LogOut, Settings, Shield, User } from "lucide-react";
+import { HelpCircle, LogOut, Settings, Shield, User } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { usePlatform } from "@/lib/PlatformContext";
+import { useFirstAccess } from "@/lib/FirstAccessContext";
 import { createPageUrl } from "@/utils";
 import {
   DropdownMenu,
@@ -46,11 +47,12 @@ function initials(name, email) {
 export default function ModernUserMenu() {
   const { user, logout } = useAuth();
   const { isMaster, tenants, tenantId, selectTenant } = usePlatform();
+  const { startManualTour } = useFirstAccess();
 
   if (!user) return null;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2" data-tour="user-menu">
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-2 py-1.5 hover:bg-[#F7F9FC] transition-colors duration-150 outline-none">
           <div className="w-8 h-8 rounded-lg bg-[#06B6D4]/15 text-[#06B6D4] flex items-center justify-center text-xs font-semibold">
@@ -71,6 +73,19 @@ export default function ModernUserMenu() {
             <p className="text-xs text-muted-foreground truncate">{user.email}</p>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {isMaster ? (
+            <DropdownMenuItem asChild>
+              <Link to={createPageUrl("Platform")} className="flex items-center gap-2 cursor-pointer">
+                <Shield className="w-4 h-4 text-[#06B6D4]" />
+                <span className="flex flex-col">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-[#06B6D4] leading-none mb-0.5">
+                    PLATFORM MASTER
+                  </span>
+                  Administração da plataforma
+                </span>
+              </Link>
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem asChild>
             <Link to={createPageUrl("SettingsAccount")} className="flex items-center gap-2 cursor-pointer">
               <User className="w-4 h-4" />
@@ -78,10 +93,20 @@ export default function ModernUserMenu() {
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
+            <Link to={createPageUrl("SettingsPrivacy")} className="flex items-center gap-2 cursor-pointer">
+              <Shield className="w-4 h-4" />
+              Privacidade e Dados
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
             <Link to={createPageUrl("SettingsIntegrations")} className="flex items-center gap-2 cursor-pointer">
               <Settings className="w-4 h-4" />
               Preferências
             </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={startManualTour} className="cursor-pointer">
+            <HelpCircle className="w-4 h-4 mr-2" />
+            Rever tour do sistema
           </DropdownMenuItem>
           {isMaster ? (
             <>

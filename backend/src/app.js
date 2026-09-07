@@ -27,6 +27,7 @@ import { platformRouter } from "./modules/platform/routes.js";
 import { billingRouter } from "./modules/billing/routes.js";
 import { onboardingRouter } from "./modules/onboarding/routes.js";
 import { parametersRouter } from "./modules/parameters/routes.js";
+import { legalRouter, meFirstAccessRouter } from "./modules/firstAccess/routes.js";
 import { openApiDocument } from "./openapi.js";
 import * as store from "./modules/entities/store.js";
 
@@ -128,6 +129,8 @@ export function createApp() {
   app.use("/api/platform", platformRouter);
   app.use("/api/billing", billingRouter);
   app.use("/api/onboarding", onboardingRouter);
+  app.use("/api/me", meFirstAccessRouter);
+  app.use("/api/legal", legalRouter);
   app.use("/api/entities", entitiesRouter);
   app.use("/api/functions", functionsRouter);
   app.use("/api/audit-events", auditRouter);

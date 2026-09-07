@@ -17,6 +17,9 @@ import CompleteSignup from '@/components/CompleteSignup';
 import ForgotPassword from '@/components/ForgotPassword';
 import SetPassword from '@/components/SetPassword';
 import Onboarding from '@/components/Onboarding';
+import LegalFirstAccessModal from '@/components/firstAccess/LegalFirstAccessModal';
+import ProductTour from '@/components/firstAccess/ProductTour';
+import { FirstAccessBootScreen, FirstAccessProvider, useFirstAccess } from '@/lib/FirstAccessContext';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -88,40 +91,58 @@ const AuthenticatedApp = () => {
     <PlatformProvider>
     <GroupProvider>
     <LayoutProvider>
-    <Routes>
-      <Route path="/" element={
-        <LayoutWrapper currentPageName={mainPageKey}>
-          <MainPage />
-        </LayoutWrapper>
-      } />
-      {Object.entries(Pages).map(([path, Page]) => (
-        <Route
-          key={path}
-          path={`/${path}`}
-          element={
-            <LayoutWrapper currentPageName={path}>
-              <Page />
-            </LayoutWrapper>
-          }
-        />
-      ))}
-      <Route path="/onboarding" element={
-        <LayoutWrapper currentPageName="Onboarding">
-          <Onboarding />
-        </LayoutWrapper>
-      } />
-      <Route path="/criar-conta" element={<Navigate to="/" replace />} />
-      <Route path="/concluir-cadastro" element={<Navigate to="/" replace />} />
-      <Route path="/esqueci-senha" element={<Navigate to="/" replace />} />
-      <Route path="/redefinir-senha" element={<Navigate to="/" replace />} />
-      <Route path="/aceitar-convite" element={<Navigate to="/" replace />} />
-      <Route path="*" element={<PageNotFound />} />
-    </Routes>
+    <FirstAccessProvider>
+      <AuthenticatedShell />
+    </FirstAccessProvider>
     </LayoutProvider>
     </GroupProvider>
     </PlatformProvider>
   );
 };
+
+function AuthenticatedShell() {
+  const { loading, needsLegal, tourMode } = useFirstAccess();
+
+  if (loading) {
+    return <FirstAccessBootScreen />;
+  }
+
+  return (
+    <>
+      <Routes>
+        <Route path="/" element={
+          <LayoutWrapper currentPageName={mainPageKey}>
+            <MainPage />
+          </LayoutWrapper>
+        } />
+        {Object.entries(Pages).map(([path, Page]) => (
+          <Route
+            key={path}
+            path={`/${path}`}
+            element={
+              <LayoutWrapper currentPageName={path}>
+                <Page />
+              </LayoutWrapper>
+            }
+          />
+        ))}
+        <Route path="/onboarding" element={
+          <LayoutWrapper currentPageName="Onboarding">
+            <Onboarding />
+          </LayoutWrapper>
+        } />
+        <Route path="/criar-conta" element={<Navigate to="/" replace />} />
+        <Route path="/concluir-cadastro" element={<Navigate to="/" replace />} />
+        <Route path="/esqueci-senha" element={<Navigate to="/" replace />} />
+        <Route path="/redefinir-senha" element={<Navigate to="/" replace />} />
+        <Route path="/aceitar-convite" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<PageNotFound />} />
+      </Routes>
+      {needsLegal ? <LegalFirstAccessModal /> : null}
+      {!needsLegal && tourMode ? <ProductTour /> : null}
+    </>
+  );
+}
 
 
 function App() {

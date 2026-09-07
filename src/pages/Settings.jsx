@@ -20,6 +20,7 @@ import UsersPanel from "@/components/settings/UsersPanel";
 import PlanPanel from "@/components/settings/PlanPanel";
 import ParametersPanel from "@/components/settings/ParametersPanel";
 import AccountingLogicPanel from "@/components/settings/AccountingLogicPanel";
+import PrivacyDataPanel from "@/components/settings/PrivacyDataPanel";
 
 const ROLE_LABELS = {
   admin: "Administrador",
@@ -50,6 +51,9 @@ const SECTION_COPY = {
   conta: {
     description: "Plano, dados da sessão e encerramento de acesso neste navegador.",
   },
+  privacidade: {
+    description: "Documentos legais, consentimentos opcionais e direitos do titular (LGPD).",
+  },
 };
 
 export function SettingsView({ section = "integracoes" }) {
@@ -70,7 +74,10 @@ export function SettingsView({ section = "integracoes" }) {
   const copy = SECTION_COPY[section];
 
   return (
-    <div className={cn(isModernLayout ? "w-full" : "w-full px-4 sm:px-6 py-8")}>
+    <div
+      className={cn(isModernLayout ? "w-full" : "w-full px-4 sm:px-6 py-8")}
+      data-tour="settings-workspace"
+    >
       <div className={cn("mb-6", isModernLayout && "shrink-0")}>
         <h1 className={cn(
           "text-2xl font-bold tracking-tight",
@@ -161,6 +168,9 @@ function SettingsPanel({ section, isTenantAdmin, isOwner, viewingAll, user, logo
         </CardContent>
       </Card>
     );
+  }
+  if (section === "privacidade") {
+    return <PrivacyDataPanel />;
   }
   if (section === "conta") {
     return (

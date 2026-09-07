@@ -22,7 +22,7 @@ GLOBAL
   ↓ se ausente
 DEFAULT do catálogo (código)
   ↓ se indisponível
-Fallback seguro (ex.: appearance.default_layout → classic)
+Fallback seguro (ex.: appearance.default_layout → modern)
 ```
 
 ## Escopos
@@ -100,13 +100,13 @@ TTL padrão: 60s. Invalidado em set/reset.
 `049_parameter_system.sql`:
 
 - Cria `system_parameters`
-- Seed `appearance.default_layout = classic` para **todos os tenants existentes**
+- Seed histórico `appearance.default_layout = classic` (migration 049); desde a **053** o padrão da plataforma é **`modern`**
 
 ## Compatibilidade
 
 Se a tabela não existir ou o parâmetro não estiver definido:
 
-- `appearance.default_layout` → **`classic`**
+- `appearance.default_layout` → **`modern`**
 - Demais chaves → default do catálogo ou `null`
 
 **Nenhum parâmetro de aparência altera o layout enquanto o consumidor não for implementado.** O layout clássico permanece o comportamento atual.
@@ -115,7 +115,7 @@ Se a tabela não existir ou o parâmetro não estiver definido:
 
 | Key | Categoria | Default |
 |-----|-----------|---------|
-| appearance.default_layout | appearance | classic |
+| appearance.default_layout | appearance | modern |
 | appearance.theme | appearance | light |
 | appearance.interface_density | appearance | comfortable |
 | appearance.menu_icons | appearance | true |
@@ -168,4 +168,4 @@ Salvamento manual: **Cancelar** / **Salvar alterações**.
 
 ## Layout moderno
 
-`appearance.default_layout = modern` está **preparado** no catálogo e na UI, mas **não implementado**. Até a segunda fase, o sistema continua visualmente idêntico com `classic`.
+`appearance.default_layout = modern` é o **padrão da plataforma**. O layout **classic** permanece disponível por escolha do tenant/usuário em Parâmetros.
