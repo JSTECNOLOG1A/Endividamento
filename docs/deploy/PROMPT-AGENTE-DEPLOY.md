@@ -1,15 +1,19 @@
 # Prompt — entrega segura (Git + Deploy AllDebt)
 
-Cole este bloco no Cursor (Agent) ao **terminar um ajuste** ou quando pedir deploy. Pode acrescentar no final o que mudou.
+Para quem usa **Claude Code** ou **Cursor**.  
+Cole o bloco abaixo ao **terminar um ajuste** ou ao pedir deploy. Acrescente no final o que mudou.
+
+No Claude Code, o arquivo `CLAUDE.md` na raiz já lembra essas regras em toda sessão; ainda assim, cole o prompt na entrega para forçar a sequência completa.
 
 ---
 
 ```text
-Você é o agente de entrega do AllDebt (repo Endividamento-git).
+Você é o agente de entrega do AllDebt (repo Endividamento-git). Ferramenta: Claude Code ou Cursor.
 
 Objetivo: garantir que o trabalho fique SALVO no Git e, se eu pedir, vá a produção COM SEGURANÇA.
 
 Siga SEMPRE esta ordem. Não pule etapas. Não improvise atalhos perigosos.
+Leia e obedeça também CLAUDE.md e docs/deploy/UPDATE.md.
 
 ## Regras absolutas
 1. Nunca commitar ou enviar ao remoto: `.env`, `.env.production`, senhas, tokens, chaves, dumps de banco.
@@ -45,7 +49,7 @@ Pré-condições obrigatórias — se falhar alguma, PARE e diga o que falta:
 - [ ] Credencial/SSH de deploy disponível (não inventar senha; não colar secrets no chat se evitável)
 
 No VPS (`/var/www/html/alldebt`):
-1. Sincronizar código do commit ( `git pull` se o server for clone; senão rsync/scp do tree commitado ).
+1. Sincronizar código do commit (`git pull` se o server for clone; senão rsync/scp do tree commitado).
 2. Rodar:
    `docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build`
    (rebuild parcial `web` ou `api` só se a mudança for claramente só de um lado).
@@ -69,10 +73,17 @@ Comece agora pela etapa que eu pedi nesta mensagem.
 
 ---
 
-## Exemplos de uso
+## Como o colega usa no Claude Code
+
+1. Abre o projeto no Claude Code (ele lê `CLAUDE.md` automaticamente).
+2. Faz o ajuste normalmente.
+3. No fim, cola o prompt acima **ou** digita só:
+   - `Salvar no git, push e deploy no VPS. Ajuste: …`
+4. Confirma ações destrutivas / SSH se o Claude pedir aprovação.
+
+## Exemplos
 
 **Só salvar:**
-> [colar o prompt]  
 > Salvar no git. Ajuste: consulta CNPJ no cadastro de entidade.
 
 **Salvar + remoto + produção:**
@@ -80,5 +91,4 @@ Comece agora pela etapa que eu pedi nesta mensagem.
 > Salvar no git, push e deploy no VPS. Ajuste: corrige tela X.
 
 **Só produção (já commitado):**
-> [colar o prompt]  
 > Só deploy do commit atual no VPS. Não criar commit novo.

@@ -105,8 +105,9 @@ Traefik pode responder `404` enquanto o container está `starting`/`unhealthy` �
 
 ---
 
-## Prompt para o agente (Cursor)
+## Prompt para o agente (Claude Code / Cursor)
 
-Use o texto em [`PROMPT-AGENTE-DEPLOY.md`](./PROMPT-AGENTE-DEPLOY.md) em toda entrega.
+- **Claude Code:** o arquivo [`CLAUDE.md`](../../CLAUDE.md) na raiz já aplica as regras em toda sessão. Na entrega, use também [`PROMPT-AGENTE-DEPLOY.md`](./PROMPT-AGENTE-DEPLOY.md) ou diga: “Salvar no git, push e deploy”.
+- **Cursor:** cole o prompt em [`PROMPT-AGENTE-DEPLOY.md`](./PROMPT-AGENTE-DEPLOY.md) ou @ a rule `deploy-seguro`.
 
 Primeiro deploy / secrets: [`FIRST-DEPLOY.md`](./FIRST-DEPLOY.md).

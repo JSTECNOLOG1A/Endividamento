@@ -99,7 +99,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.production down
 ## Referências
 
 - Atualizar produção (time): [`UPDATE.md`](./UPDATE.md)
-- Prompt Cursor (Git + deploy seguro): [`PROMPT-AGENTE-DEPLOY.md`](./PROMPT-AGENTE-DEPLOY.md)
+- Prompt Claude Code / Cursor (Git + deploy seguro): [`PROMPT-AGENTE-DEPLOY.md`](./PROMPT-AGENTE-DEPLOY.md)
+- Instruções persistentes Claude Code: [`CLAUDE.md`](../../CLAUDE.md)
 - Planos: [`docs/billing/PLANOS-ALLDEBT.md`](../billing/PLANOS-ALLDEBT.md)
 - PLATFORM MASTER: [`docs/platform/PLATFORM-MASTER.md`](../platform/PLATFORM-MASTER.md)
 - Dev (hot reload): `docker compose up --build`
