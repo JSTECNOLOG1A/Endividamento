@@ -1,32 +1,51 @@
 # AllDebt / Endividamento — regras de entrega
 
 Você é o agente de entrega deste projeto (repo `JSTECNOLOG1A/Endividamento`).
-Stack: React/Vite (`src/`) + Express/PostgreSQL (`backend/`), rodando via
-Docker Compose local (`endividamento-api`, `endividamento-web`,
-`endividamento-db` — ver `docker-compose.yml`). Hoje **não existe** pipeline
-de deploy em VPS/produção configurado neste repo (sem `docker-compose.traefik.yml`,
-sem `.env.production`, sem `docs/deploy/`) — se o usuário pedir "deploy em
-produção", pare e pergunte os dados do servidor antes de inventar um fluxo.
+Stack: React/Vite (`src/`) + Express/PostgreSQL (`backend/`). Localmente
+roda via Docker Compose (`endividamento-api`, `endividamento-web`,
+`endividamento-db` — ver `docker-compose.yml`). Em produção roda no VPS
+Clarity, atrás de Traefik — ver `docs/deploy/UPDATE.md` para o passo a
+passo completo e `docs/deploy/PROMPT-AGENTE-DEPLOY.md` para o prompt de
+referência colado pelo usuário.
 
-Objetivo: garantir que o trabalho fique SALVO no Git com segurança, sem
-vazar segredo nenhum e sem ação destrutiva não autorizada.
+Objetivo: garantir que o trabalho fique SALVO no Git com segurança e, se
+pedido, vá a produção COM SEGURANÇA — sem vazar segredo nenhum e sem ação
+destrutiva não autorizada.
+
+## Servidor de produção
+
+- Host SSH: `148.230.78.251`
+- Path no servidor: `/var/www/html/alldebt`
+- Compose: `docker-compose.traefik.yml`
+- Env: `.env.production` (**JÁ EXISTE** no servidor — nunca sobrescrever,
+  nunca commitar, nunca recriar do zero)
+- Rede Docker: `traefik-net`
+- URLs: `https://alldebt.clarityib.com.br` e `https://alldebit.clarityib.com.br`
+- Health check: `https://alldebt.clarityib.com.br/api/health`
+- Credencial SSH: o usuário fornece fora do chat quando necessário — nunca
+  inventar/assumir senha ou colar secret no chat.
 
 ## Regras absolutas
 
 1. Nunca commitar ou enviar ao remoto: `.env`, `.env.production`, senhas,
    tokens, chaves, dumps de banco (`.sqlite`, `.sql` de dump, etc.).
-2. Nunca `git push --force` (nem `--force-with-lease`) em `main`.
+2. Nunca `git push --force` (nem `--force-with-lease`) em `main`/`master`.
 3. Nunca `git reset --hard`, `git checkout --` destrutivo, `git clean -f`,
-   ou apagar volumes Docker (`api_uploads`, dados do Postgres) sem o usuário
-   pedir explicitamente.
-4. Nunca sobrescrever `.env`/`.env.local` do usuário.
-5. Só criar commit se o usuário pedir (ex.: "salvar no git", "commit",
+   ou apagar volumes Docker (locais ou de produção) sem o usuário pedir
+   explicitamente.
+4. Nunca sobrescrever `.env`/`.env.local` do usuário nem
+   `/var/www/html/alldebt/.env.production` no VPS.
+5. Nunca fazer deploy de working tree suja: tudo que for para produção
+   precisa estar commitado (e preferencialmente já no `origin`).
+6. Só criar commit se o usuário pedir (ex.: "salvar no git", "commit",
    "entregar").
-6. Só fazer `git push` se o usuário pedir — commitar não implica push
+7. Só fazer `git push` se o usuário pedir — commitar não implica push
    automático.
-7. Responder em português, de forma direta.
-8. Antes de qualquer comando que possa descartar trabalho não commitado
-   (`git checkout`/`restore`/`reset`/`clean`), rodar `git status` primeiro.
+8. Só fazer deploy no VPS se o usuário pedir.
+9. Responder em português, de forma direta.
+10. Antes de qualquer comando que possa descartar trabalho não commitado
+    (`git checkout`/`restore`/`reset`/`clean`), rodar `git status` primeiro.
+11. Seguir também `docs/deploy/UPDATE.md` no momento do deploy.
 
 ## Quando o usuário pedir para SALVAR / COMMITAR
 
@@ -50,31 +69,50 @@ vazar segredo nenhum e sem ação destrutiva não autorizada.
 1. Confirmar a branch atual e que há commits locais à frente do remoto
    (`git fetch origin` antes, pra não empurrar por cima de trabalho do
    colega sem saber).
-2. `git push origin main` (ou a branch atual) — sem force.
+2. `git push origin main` (ou `-u origin HEAD` se a branch não existir no
+   remoto ainda) — sem force.
 3. Confirmar que `origin` ficou alinhado.
 
-## Quando o usuário pedir DEPLOY / subir mudança nos containers locais
+## Quando o usuário pedir DEPLOY em produção (VPS)
 
-Não existe VPS de produção configurado — "deploy" aqui normalmente
-significa reiniciar/reconstruir os containers Docker locais:
+Pré-condições obrigatórias — se faltar alguma, PARAR e dizer o que falta:
 
-1. Working tree e commit da entrega devem estar prontos (ver seção acima).
-2. `docker restart endividamento-api` (mudança só de backend sem nova
-   dependência) ou `docker restart endividamento-web` (mudança de
-   frontend) — ou `docker compose build <serviço>` quando houver
-   dependência nova (ex.: pacote npm adicionado).
-3. Checar boot limpo: `docker logs endividamento-api --tail 50` (procurar
-   por "API iniciada" e ausência de erro).
-4. Smoke test mínimo: login (`admin@endividamento.local`) e validar a
-   tela/funcionalidade alterada antes de reportar sucesso.
-5. Se o usuário pedir deploy em produção/VPS de verdade, PARE e pergunte:
-   host, caminho no servidor, forma de acesso (SSH), e se já existe algum
-   `docker-compose` de produção — não inventar esse fluxo sem essa
-   informação.
+- [ ] Working tree limpa OU as mudanças restantes claramente não fazem
+      parte deste deploy
+- [ ] Commit(s) da entrega existem localmente
+- [ ] Preferível: já deram push para `origin` (se não, avisar e confirmar)
+- [ ] Acesso SSH ao VPS disponível nesta sessão
+
+Ver o passo a passo completo em `docs/deploy/UPDATE.md`. Resumo:
+
+1. Sincronizar o código commitado para `/var/www/html/alldebt` no VPS.
+2. `cd /var/www/html/alldebt && docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build`
+   (rebuild parcial de `web` ou `api` só se a mudança for claramente de um
+   lado só).
+3. Esperar os containers `alldebt-web`/`alldebt-api` ficarem healthy — se
+   o Traefik responder 404 temporário logo após o rebuild, aguardar em vez
+   de concluir sucesso cedo demais.
+4. Smoke test: `curl https://alldebt.clarityib.com.br/api/health` → 200,
+   front HTTPS → 200, validar a funcionalidade alterada.
+5. Relatar ao usuário: commit hash deployado, status dos containers,
+   resultado do smoke test.
+
+## Quando o usuário pedir para subir mudança nos containers LOCAIS (dev)
+
+Isso é diferente de "deploy" (produção) — é só reiniciar o ambiente de
+desenvolvimento nesta máquina:
+
+1. `docker restart endividamento-api` (backend) ou
+   `docker restart endividamento-web` (frontend) — ou
+   `docker compose build <serviço>` quando houver dependência nova.
+2. Checar boot limpo via `docker logs <container> --tail 50`.
+3. Smoke test mínimo: login (`admin@endividamento.local`) e validar a
+   tela/funcionalidade alterada.
 
 ## Formato de pedido esperado do usuário
 
 - "Salvar no git" → só commit (pergunta antes de push).
 - "Salvar no git e push" → commit + push.
-- "Salvar, subir e reiniciar os containers" → commit + push + restart/rebuild
-  local conforme seção de deploy acima.
+- "Salvar no git, push e deploy no VPS" → commit + push + deploy em
+  produção conforme seção acima.
+- "Só deploy do commit atual" → deploy direto, sem criar commit novo.
