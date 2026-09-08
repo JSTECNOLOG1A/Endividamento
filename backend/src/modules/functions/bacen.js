@@ -354,30 +354,61 @@ function isoDaysAgo(isoDate, days) {
   return toIsoDate(d);
 }
 
-// Usada pela tarefa de Agendamento "atualizar_ptax_bacen": busca a cotação
-// PTAX mais recente disponível (janela de 10 dias já embutida em
-// getPTAXFromBACEN, cobre fins de semana/feriados) e grava/atualiza direto
-// no cadastro de Moedas — o mesmo destino da importação manual por CSV
-// (src/components/loan/PTAXImporter.jsx), pra o resto do sistema (inclusive
-// o botão "Conciliar PTAX") continuar enxergando os dois caminhos como um só
-// histórico.
+// Usada pela tarefa de Agendamento "atualizar_ptax_bacen": busca TODAS as
+// cotações PTAX publicadas nos últimos 10 dias (mesma janela e mesma lógica
+// de backfill de syncRatesToCdiRates logo abaixo — cobre fins de semana,
+// feriados e qualquer intervalo em que o agendamento tenha ficado pausado)
+// e grava/atualiza no cadastro de Moedas — o mesmo destino da importação
+// manual "Importar automaticamente do BACEN" (getPTAXRangeFromBACEN acima,
+// usada em src/components/loan/PTAXImporter.jsx), pra o resto do sistema
+// (inclusive o botão "Conciliar PTAX") continuar enxergando os dois
+// caminhos como um só histórico.
+//
+// Antes esta função buscava só a cotação de UM dia (getPTAXFromBACEN) —
+// se o agendamento ficasse pausado por alguns dias, ou rodasse manualmente
+// depois de um hiato, a lacuna nunca era preenchida, só a data mais recente
+// entrava. Trocado para o mesmo padrão de janela + backfill do resto do
+// arquivo.
 export async function syncPtaxToCurrencies() {
   const today = todayIsoInSaoPaulo();
-  const { official } = await getPTAXFromBACEN({ targetDate: today, lag: 0 });
-  const existing = await store.filter("Currency", { currency_code: "USD", rate_date: official.rate_date }, "-rate_date", 1);
-  const entry = {
-    currency_code: "USD",
-    currency_name: "Dólar Americano",
-    exchange_rate: official.ptax_rate,
-    rate_date: official.rate_date,
-    status: "ativa",
-  };
-  if (existing?.[0]) {
-    await store.update("Currency", existing[0].id, entry);
-    return { ok: true, action: "updated", rate_date: official.rate_date, exchange_rate: official.ptax_rate };
+  const startDate = isoDaysAgo(today, 10);
+  const { rates } = await getPTAXRangeFromBACEN({ startDate, endDate: today });
+  if (!rates.length) {
+    return { ok: false, action: "none", created: 0, updated: 0, fetched: 0, message: "Nenhuma cotação PTAX publicada no período" };
   }
-  await store.create("Currency", entry, "sistema-bacen");
-  return { ok: true, action: "created", rate_date: official.rate_date, exchange_rate: official.ptax_rate };
+  const existing = await store.filter("Currency", { currency_code: "USD" }, "-rate_date", 10000);
+  const existingByDate = new Map(existing.map((row) => [row.rate_date, row]));
+  let created = 0;
+  let updated = 0;
+  for (const { rate_date, ptax_rate } of rates) {
+    const match = existingByDate.get(rate_date);
+    const entry = {
+      currency_code: "USD",
+      currency_name: "Dólar Americano",
+      exchange_rate: ptax_rate,
+      rate_date,
+      status: "ativa",
+    };
+    if (match) {
+      if (Number(match.exchange_rate) !== ptax_rate) {
+        await store.update("Currency", match.id, entry);
+        updated += 1;
+      }
+    } else {
+      await store.create("Currency", entry, "sistema-bacen");
+      created += 1;
+    }
+  }
+  const latest = rates[rates.length - 1];
+  return {
+    ok: true,
+    action: created || updated ? "synced" : "unchanged",
+    rate_date: latest.rate_date,
+    exchange_rate: latest.ptax_rate,
+    created,
+    updated,
+    fetched: rates.length,
+  };
 }
 
 // Usada pela tarefa de Agendamento "atualizar_indices_bacen": busca CDI e
