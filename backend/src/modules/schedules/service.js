@@ -86,6 +86,98 @@ export async function list() {
   return store.list();
 }
 
+const EXPORT_FORMAT = "alldebt.schedules";
+const EXPORT_VERSION = 1;
+
+function normalizeImportBundle(body) {
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.schedules)) return body.schedules;
+  if (Array.isArray(body?.connections)) return body.connections;
+  if (Array.isArray(body?.data)) return body.data;
+  return null;
+}
+
+function toExportItem(job) {
+  return {
+    nome: job.nome,
+    tarefa: job.tarefa,
+    modo: job.modo || (job.diaMes ? "mensal" : "intervalo"),
+    intervaloMinutos: job.intervaloMinutos,
+    diaMes: job.diaMes ?? null,
+    horaExecucao: job.horaExecucao ? String(job.horaExecucao).slice(0, 5) : null,
+    ativo: job.ativo !== false,
+  };
+}
+
+export async function exportAll() {
+  const jobs = await store.list();
+  const schedules = (Array.isArray(jobs) ? jobs : []).map(toExportItem);
+  return {
+    format: EXPORT_FORMAT,
+    version: EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    count: schedules.length,
+    schedules,
+  };
+}
+
+export async function importMany(body, createdBy) {
+  const rawItems = normalizeImportBundle(body);
+  if (!rawItems?.length) {
+    throw httpError(400, "Arquivo inválido: esperado { schedules: [...] }");
+  }
+
+  const created = [];
+  const updated = [];
+  const errors = [];
+
+  for (let index = 0; index < rawItems.length; index += 1) {
+    const raw = rawItems[index] || {};
+    const label = raw.nome || raw.tarefa || `item ${index + 1}`;
+    try {
+      const parsed = createSchema.parse({
+        nome: raw.nome,
+        tarefa: raw.tarefa,
+        modo: raw.modo,
+        intervaloMinutos: raw.intervaloMinutos,
+        diaMes: raw.diaMes,
+        horaExecucao: raw.horaExecucao,
+        ativo: raw.ativo !== false,
+      });
+
+      const existing = await store.findByTarefa(parsed.tarefa);
+      if (existing) {
+        const row = await updateById(existing.id, parsed);
+        updated.push({ id: row.id, nome: row.nome, tarefa: row.tarefa });
+      } else {
+        const row = await create(parsed, createdBy);
+        created.push({ id: row.id, nome: row.nome, tarefa: row.tarefa });
+      }
+    } catch (error) {
+      let message = error?.message || "Falha ao importar";
+      if (error?.details && typeof error.details === "object") {
+        message = Object.values(error.details)[0] || message;
+      } else if (error?.name === "ZodError" && Array.isArray(error.issues)) {
+        message = error.issues[0]?.message || message;
+      }
+      errors.push({ index, nome: label, message });
+    }
+  }
+
+  if (!created.length && !updated.length) {
+    throw httpError(400, errors[0]?.message || "Nenhum agendamento foi importado", { errors });
+  }
+
+  return {
+    imported: created.length + updated.length,
+    created: created.length,
+    updated: updated.length,
+    failed: errors.length,
+    items: { created, updated },
+    errors,
+  };
+}
+
 export async function getById(id) {
   const row = await store.findById(id);
   if (!row) throw httpError(404, "Agendamento não encontrado");

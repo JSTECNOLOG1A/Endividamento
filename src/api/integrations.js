@@ -32,6 +32,12 @@ export const integrationsApi = {
     });
     return result?.data ?? result;
   },
+  exportAll() {
+    return apiRequest("/integrations/export");
+  },
+  importBundle(data) {
+    return apiRequest("/integrations/import", { method: "POST", body: data });
+  },
 };
 
 export const AUTH_TYPE_OPTIONS = [

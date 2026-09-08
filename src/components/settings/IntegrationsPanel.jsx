@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Eye, Pencil, Plus, Power, Trash2 } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Download, Eye, Pencil, Plus, Power, Trash2, Upload } from "lucide-react";
 import { toast } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,11 +55,14 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
   const [status, setStatus] = useState("todos");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [errors, setErrors] = useState({});
   const [editor, setEditor] = useState(null);
   const [details, setDetails] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [externalErpEnabled, setExternalErpEnabled] = useState(true);
+  const fileInputRef = useRef(null);
 
   const load = useCallback(async (page = pagination.page) => {
     setLoading(true);
@@ -124,6 +127,62 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
     }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const bundle = await integrationsApi.exportAll();
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 10);
+      anchor.href = url;
+      anchor.download = `conexoes-erp-${stamp}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      toast.success(
+        bundle.count
+          ? `${bundle.count} conexão(ões) exportada(s)`
+          : "Arquivo exportado (sem conexões)"
+      );
+    } catch (error) {
+      toast.error(error.message || "Falha ao exportar conexões");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImportFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error("Arquivo JSON inválido");
+      }
+      const result = await integrationsApi.importBundle(parsed);
+      await load(1);
+      if (result.failed) {
+        toast.warning(
+          `${result.imported} importada(s), ${result.failed} com erro` +
+            (result.errors?.[0]?.message ? `: ${result.errors[0].message}` : "")
+        );
+      } else {
+        toast.success(`${result.imported} conexão(ões) importada(s)`);
+      }
+    } catch (error) {
+      toast.error(error.message || "Falha ao importar conexões");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const save = async () => {
     if (!editor) return;
     setSaving(true);
@@ -172,6 +231,8 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
     }
   };
 
+  const manageDisabled = viewingAll || !externalErpEnabled;
+
   return (
     <div className="space-y-4">
       {viewingAll ? (
@@ -203,23 +264,66 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
             <SelectItem value="inativo">Inativo</SelectItem>
           </SelectContent>
         </Select>
-        <div className="sm:ml-auto">
+        <div className="sm:ml-auto flex flex-wrap gap-2">
           {canManage ? (
-            <Button
-              onClick={openCreate}
-              className="gap-2"
-              disabled={viewingAll || !externalErpEnabled}
-              title={
-                viewingAll
-                  ? "Selecione um cliente no topo para criar conexão"
-                  : !externalErpEnabled
-                    ? "Ative a integração com ERP em Parâmetros"
-                    : undefined
-              }
-            >
-              <Plus className="w-4 h-4" />
-              Nova conexão
-            </Button>
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                disabled={manageDisabled || exporting || importing}
+                title={
+                  viewingAll
+                    ? "Selecione um cliente no topo"
+                    : !externalErpEnabled
+                      ? "Ative a integração com ERP em Parâmetros"
+                      : "Exportar conexões em JSON (inclui credenciais)"
+                }
+                onClick={handleExport}
+              >
+                <Download className="w-4 h-4" />
+                {exporting ? "Exportando..." : "Exportar"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                disabled={manageDisabled || exporting || importing}
+                title={
+                  viewingAll
+                    ? "Selecione um cliente no topo"
+                    : !externalErpEnabled
+                      ? "Ative a integração com ERP em Parâmetros"
+                      : "Importar conexões de um JSON exportado"
+                }
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="w-4 h-4" />
+                {importing ? "Importando..." : "Importar"}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+              <Button
+                onClick={openCreate}
+                className="gap-2"
+                disabled={manageDisabled}
+                title={
+                  viewingAll
+                    ? "Selecione um cliente no topo para criar conexão"
+                    : !externalErpEnabled
+                      ? "Ative a integração com ERP em Parâmetros"
+                      : undefined
+                }
+              >
+                <Plus className="w-4 h-4" />
+                Nova conexão
+              </Button>
+            </>
           ) : null}
         </div>
       </div>
@@ -227,10 +331,6 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
         <Table>
           <TableHeader>
-            {/* Sem reordenação por clique: a lista é paginada no servidor
-                (só a página atual fica carregada no cliente) — ordenar
-                mudaria a página visível, não a lista inteira, e enganaria o
-                usuário. Só o estilo visual do cabeçalho é padronizado. */}
             <TableRow>
               <TableHead className={SORT_HEAD_CLASS}>Nome</TableHead>
               <TableHead className={SORT_HEAD_CLASS}>ERP</TableHead>

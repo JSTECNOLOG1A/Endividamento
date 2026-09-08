@@ -92,4 +92,10 @@ export const schedulesApi = {
   runTask(tarefa) {
     return apiRequest("/schedules/run-task", { method: "POST", body: { tarefa } });
   },
+  exportAll() {
+    return apiRequest("/schedules/export");
+  },
+  importBundle(data) {
+    return apiRequest("/schedules/import", { method: "POST", body: data });
+  },
 };

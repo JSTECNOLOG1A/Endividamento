@@ -4,28 +4,47 @@ import { pool } from "./pool.js";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
 
+/**
+ * Garante um único PLATFORM_MASTER = ADMIN_EMAIL.
+ * Se o e-mail não existir, cria com ADMIN_PASSWORD.
+ * Não promove “primeiro admin” aleatório quando ADMIN_EMAIL está definido.
+ */
 async function ensurePlatformAdmin() {
-  const targeted = await pool.query(
-    `UPDATE users
-     SET platform_admin = (lower(email) = lower($1)), updated_date = now()
-     WHERE platform_admin IS TRUE OR lower(email) = lower($1)
-     RETURNING email, platform_admin`,
-    [config.adminEmail]
-  );
-  const master = targeted.rows.find((row) => row.platform_admin);
-  if (master) {
-    logger.info({ email: master.email }, "usuário master da plataforma");
+  const email = String(config.adminEmail || "").trim().toLowerCase();
+  if (!email) {
+    logger.warn("ADMIN_EMAIL vazio — PLATFORM_MASTER não foi provisionado");
     return;
   }
-  const first = await pool.query(
-    `UPDATE users SET platform_admin = TRUE, updated_date = now()
-     WHERE id = (SELECT id FROM users WHERE role = 'admin' ORDER BY created_date ASC LIMIT 1)
-       AND NOT EXISTS (SELECT 1 FROM users WHERE platform_admin IS TRUE)
-     RETURNING email`
+
+  const existing = await pool.query(
+    `SELECT id, email, platform_admin FROM users WHERE lower(email) = lower($1)`,
+    [email]
   );
-  if (first.rows[0]) {
-    logger.info({ email: first.rows[0].email }, "usuário master da plataforma (primeiro admin)");
+
+  if (!existing.rows[0]) {
+    const hash = await bcrypt.hash(config.adminPassword, config.bcryptRounds);
+    await pool.query(
+      `INSERT INTO users (id, email, password_hash, full_name, role, status, platform_admin, created_by)
+       VALUES ($1, $2, $3, $4, 'admin', 'active', TRUE, 'system')`,
+      [randomUUID(), email, hash, "Administrador"]
+    );
+    logger.info({ email }, "usuário master da plataforma criado");
+  } else {
+    await pool.query(
+      `UPDATE users
+       SET platform_admin = TRUE, role = 'admin', status = 'active', blocked = FALSE, updated_date = now()
+       WHERE lower(email) = lower($1)`,
+      [email]
+    );
+    logger.info({ email }, "usuário master da plataforma");
   }
+
+  await pool.query(
+    `UPDATE users
+     SET platform_admin = FALSE, updated_date = now()
+     WHERE platform_admin IS TRUE AND lower(email) <> lower($1)`,
+    [email]
+  );
 }
 
 export async function seed() {
