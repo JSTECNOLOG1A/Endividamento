@@ -28,7 +28,7 @@
  * 🔐 VERSÃO DO MOTOR DE CÁLCULO
  * Incrementar sempre que houver mudança matemática
  */
-export const ENGINE_VERSION = "1.2.2"; // +Ancoragem de vencimentos no dia de referência + próximo DU
+export const ENGINE_VERSION = "1.2.3"; // +PRICE prefixado usa taxa mensal fixa (30/360) em vez de dias corridos, pra prestação não variar com o dia de vencimento
 
 /**
  * 🔐 BUILD ID DO MOTOR
@@ -1015,13 +1015,26 @@ export async function calculateAmortizationSchedule(params) {
     const du = businessDaysBetween(prevDate, evt.date, holidays);
 
     // Calcular juros sobre SD Inicial USD (já atualizado com capitalizações anteriores).
-    // Base por dias corridos para TODOS os sistemas (inclusive PRICE) — o motor sempre
-    // gera uma linha por mês para conciliação contábil, então uma "taxa do período"
-    // (ex.: trimestral) aplicada linha a linha superestimaria juros nos meses
-    // intermediários sem pagamento. PRICEStrategy deriva sua taxa de período a partir
-    // do juros já calculado aqui (ver PRICEStrategy.js), então uma base única e
-    // consistente com SAC/AMERICANO/BULLET/%RESIDUAL é obrigatória.
-    const fixedInterestRate = fixedRateForPeriod(fixedRate, dias);
+    // Base por dias corridos para TODOS os sistemas — o motor sempre gera uma linha
+    // por mês para conciliação contábil, então uma "taxa do período" (ex.: trimestral)
+    // aplicada linha a linha superestimaria juros nos meses intermediários sem
+    // pagamento. Consistente com SAC/AMERICANO/BULLET/%RESIDUAL.
+    //
+    // EXCEÇÃO: PRICE com taxa prefixada (sem indexador). PRICEStrategy deriva sua
+    // taxa de período a partir do juros calculado aqui (ver PRICEStrategy.js) e
+    // recalcula o PMT a cada parcela — o que só reproduz a prestação fixa clássica
+    // do Price se essa taxa de período for REALMENTE constante. Como o motor ancora
+    // vencimentos no dia de referência (empurrando fim de semana/feriado pro próximo
+    // dia útil), o número de dias corridos entre parcelas varia (28 a 33), fazendo a
+    // taxa prorateada por dia variar mês a mês e a prestação "balançar" — divergindo
+    // da metodologia bancária padrão (mensal, base 30/360, prestação fixa). Toda
+    // linha já representa exatamente 1 mês nominal (datas geradas por addMonths),
+    // então usar dias=30 aqui reproduz a taxa mensal-equivalente constante — sem
+    // mexer em PRICEStrategy.js. PRICE indexado (CDI/SELIC) fica de fora: ali a
+    // taxa futura é desconhecida e precisa refletir o dia corrido real (ver
+    // docstring de PRICEStrategy.js sobre por que recalcula o PMT nesse caso).
+    const priceFixedNoIndexer = calculationSystem === "PRICE" && indexer === "NA";
+    const fixedInterestRate = fixedRateForPeriod(fixedRate, priceFixedNoIndexer ? 30 : dias);
     const jurosFixosMes = sdInicialUSD * fixedInterestRate;
 
     let jurosVariaveisMes = 0;
