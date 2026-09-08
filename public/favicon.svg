@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AllDebt">
+  <rect width="64" height="64" rx="12" fill="#0B1D31"/>
+  <path fill="none" stroke="#5EC8E8" stroke-width="4.5" stroke-linejoin="round"
+        d="M32 8 L52 20 V44 L32 56 L12 44 V20 Z"/>
+  <rect x="19" y="36" width="6.5" height="11" rx="1.2" fill="#5EC8E8"/>
+  <rect x="28.75" y="29" width="6.5" height="18" rx="1.2" fill="#5EC8E8"/>
+  <rect x="38.5" y="22" width="6.5" height="25" rx="1.2" fill="#5EC8E8"/>
+</svg>
