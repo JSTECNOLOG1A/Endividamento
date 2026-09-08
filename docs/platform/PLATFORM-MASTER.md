@@ -107,7 +107,7 @@ Todas as ações críticas exigem **step-up** (senha recente) e geram auditoria.
 
 | Ação | Onde | Observação |
 | --- | --- | --- |
-| Novo tenant | Tenants → **Novo tenant** | Só dados administrativos necessários |
+| Novo tenant | Tenants → **Novo tenant** | Cria tenant + usuário OWNER; envia e-mail com link `/aceitar-convite` para definir senha (7 dias). Sem SMTP, o link aparece na UI. |
 | Ver detalhes | ⋯ → Ver detalhes | Control plane |
 | Alterar plano | Detalhe → aba Plano | Com step-up |
 | Suspender | ⋯ → Suspender | Motivo obrigatório |

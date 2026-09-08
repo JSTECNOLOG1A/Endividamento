@@ -13,9 +13,8 @@ docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --
 
 Hosts TLS (DNS A → VPS):
 
-- https://alldebt.clarityib.com.br
-- https://endividamento.clarityib.com.br
-- https://staging-alldebt.clarityib.com.br
+- https://alldebit.clarityib.com.br (**canônico**)
+- Legado (redireciona): `alldebt.clarityib.com.br`, `endividamento.clarityib.com.br`, `staging-alldebt.clarityib.com.br`
 
 Aguarde o healthcheck do `alldebt-web` ficar **healthy** (Traefik ignora containers `starting`/`unhealthy`).
 

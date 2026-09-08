@@ -45,15 +45,25 @@ export default function ProductTour() {
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const cardRef = useRef(null);
-  const startedRef = useRef(false);
+  const sessionRef = useRef(0);
+  const waitTimerRef = useRef(null);
+  const startedApiRef = useRef(false);
 
   const active = Boolean(tourMode);
   const step = TOUR_STEPS[index];
   const total = TOUR_STEPS.length;
 
+  const clearWait = useCallback(() => {
+    if (waitTimerRef.current != null) {
+      window.clearTimeout(waitTimerRef.current);
+      waitTimerRef.current = null;
+    }
+  }, []);
+
   const measure = useCallback(() => {
-    if (!step) return;
-    const el = findTarget(step.target);
+    const current = TOUR_STEPS[index];
+    if (!current) return;
+    const el = findTarget(current.target);
     if (!el) {
       setRect(null);
       return;
@@ -65,62 +75,86 @@ export default function ProductTour() {
       width: r.width,
       height: r.height,
     });
-  }, [step]);
+  }, [index]);
 
   const goToStep = useCallback(
-    async (nextIndex) => {
+    (nextIndex) => {
       const next = TOUR_STEPS[nextIndex];
       if (!next) return;
+      const session = sessionRef.current;
+      clearWait();
       setReady(false);
+      setRect(null);
       setIndex(nextIndex);
       if (next.route) {
         navigate(next.route);
       }
-      // Aguarda montagem da página / alvo
+
       let attempts = 0;
       const wait = () => {
+        if (session !== sessionRef.current) return;
         attempts += 1;
         const el = findTarget(next.target);
         if (el || attempts > 40) {
-          measure();
+          if (el) {
+            const r = el.getBoundingClientRect();
+            setRect({
+              top: r.top,
+              left: r.left,
+              width: r.width,
+              height: r.height,
+            });
+          } else {
+            setRect(null);
+          }
           setReady(true);
           return;
         }
-        window.setTimeout(wait, 50);
+        waitTimerRef.current = window.setTimeout(wait, 50);
       };
-      window.setTimeout(wait, 80);
+      waitTimerRef.current = window.setTimeout(wait, 80);
     },
-    [navigate, measure]
+    [navigate, clearWait]
   );
 
+  // Inicia o tour UMA vez por sessão de UI — nunca reentra por mudança de callback.
   useEffect(() => {
     if (!active) {
-      startedRef.current = false;
+      sessionRef.current += 1;
+      clearWait();
+      startedApiRef.current = false;
       setIndex(0);
       setReady(false);
+      setRect(null);
       return undefined;
     }
 
+    const session = ++sessionRef.current;
     let cancelled = false;
+
     (async () => {
-      if (tourMode === "auto" && !startedRef.current) {
-        startedRef.current = true;
+      if (tourMode === "auto" && !startedApiRef.current) {
+        startedApiRef.current = true;
         try {
           await firstAccessApi.startTour();
-          await refresh();
+          // silent: não remonta o app / não apaga o overlay
+          await refresh({ silent: true });
         } catch {
-          /* tour visual ainda pode seguir; shown pode já existir */
+          /* tour visual ainda pode seguir */
         }
       }
-      if (!cancelled) {
+      if (!cancelled && session === sessionRef.current) {
         goToStep(0);
       }
     })();
 
     return () => {
       cancelled = true;
+      clearWait();
     };
-  }, [active, tourMode, goToStep, refresh]);
+    // Intencionalmente sem goToStep/refresh nas deps — evita loop de navegação.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, tourMode]);
 
   useLayoutEffect(() => {
     if (!active || !ready) return undefined;
@@ -134,45 +168,47 @@ export default function ProductTour() {
     };
   }, [active, ready, measure, index]);
 
+  const finish = useCallback(async (kind) => {
+    if (busy) return;
+    setBusy(true);
+    sessionRef.current += 1;
+    clearWait();
+    try {
+      if (tourMode === "auto") {
+        if (kind === "complete") await firstAccessApi.completeTour();
+        else await firstAccessApi.skipTour();
+        await refresh({ silent: true });
+      }
+    } finally {
+      setBusy(false);
+      endTourUi();
+      navigate("/Simulator", { replace: true });
+    }
+  }, [busy, clearWait, endTourUi, navigate, refresh, tourMode]);
+
   useEffect(() => {
     if (!active) return undefined;
     const onKey = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        handleSkip();
+        finish("skip");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, index]);
-
-  const finish = async (kind) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      if (tourMode === "auto") {
-        if (kind === "complete") await firstAccessApi.completeTour();
-        else await firstAccessApi.skipTour();
-        await refresh();
-      }
-    } finally {
-      setBusy(false);
-      endTourUi();
-      navigate("/Simulator");
-    }
-  };
+  }, [active, finish]);
 
   const handleSkip = () => finish("skip");
   const handleComplete = () => finish("complete");
 
   const handleNext = () => {
+    if (busy) return;
     if (index >= total - 1) handleComplete();
     else goToStep(index + 1);
   };
 
   const handlePrev = () => {
-    if (index <= 0) return;
+    if (busy || index <= 0) return;
     goToStep(index - 1);
   };
 
@@ -195,26 +231,35 @@ export default function ProductTour() {
 
   return (
     <div className="fixed inset-0 z-[95]" role="dialog" aria-modal="true" aria-label="Tour do sistema">
+      {/* Backdrop bloqueia a página, mas não o card */}
       {hole ? (
         <div
-          className="pointer-events-none absolute rounded-xl ring-2 ring-[#155EEF]/80 transition-all duration-200"
-          style={{
-            top: hole.top,
-            left: hole.left,
-            width: hole.width,
-            height: hole.height,
-            boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.48)",
-          }}
-        />
+          className="pointer-events-auto absolute inset-0"
+          onClick={handleSkip}
+          aria-hidden
+        >
+          <div
+            className="pointer-events-none absolute rounded-xl ring-2 ring-[#155EEF]/80 transition-all duration-200"
+            style={{
+              top: hole.top,
+              left: hole.left,
+              width: hole.width,
+              height: hole.height,
+              boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.48)",
+            }}
+          />
+        </div>
       ) : (
-        <div className="pointer-events-none absolute inset-0 bg-slate-900/45" />
+        <div
+          className="pointer-events-auto absolute inset-0 bg-slate-900/45"
+          onClick={handleSkip}
+          aria-hidden
+        />
       )}
-
-      <div className="absolute inset-0" aria-hidden />
 
       <div
         ref={cardRef}
-        className="absolute z-[96] rounded-2xl border bg-white p-5 shadow-xl transition-all duration-200"
+        className="pointer-events-auto absolute z-[96] rounded-2xl border bg-white p-5 shadow-xl transition-all duration-200"
         style={{
           top: placement.top,
           left: placement.left,
@@ -222,6 +267,7 @@ export default function ProductTour() {
           borderColor: LOGIN.border,
           maxWidth: "calc(100vw - 24px)",
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
@@ -246,6 +292,10 @@ export default function ProductTour() {
         <p className="text-sm leading-relaxed" style={{ color: LOGIN.muted }}>
           {step.description}
         </p>
+
+        {!ready && !rect ? (
+          <p className="mt-2 text-xs text-slate-400">Localizando o elemento na tela…</p>
+        ) : null}
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
           <button

@@ -217,7 +217,6 @@ export default function PlatformTenants() {
         <CreateTenantModal
           onClose={() => setCreateOpen(false)}
           onCreated={async () => {
-            setCreateOpen(false);
             await load();
             await refreshTenants();
           }}
@@ -241,14 +240,17 @@ function CreateTenantModal({ onClose, onCreated }) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      await platformApi.createTenant(form);
-      onCreated();
+      const created = await platformApi.createTenant(form);
+      setResult(created);
+      await onCreated?.(created);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -256,11 +258,71 @@ function CreateTenantModal({ onClose, onCreated }) {
     }
   };
 
+  const copyInvite = async () => {
+    if (!result?.invite_url) return;
+    try {
+      await navigator.clipboard.writeText(result.invite_url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  if (result) {
+    return (
+      <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/40 p-4">
+        <div className="w-full max-w-lg rounded-2xl border bg-white p-6 shadow-xl space-y-4" style={{ borderColor: LOGIN.border }}>
+          <h2 className="text-lg font-bold text-slate-900">Tenant criado</h2>
+          <p className="text-sm text-slate-600">
+            Conta de administrador preparada para <strong>{result.owner?.email || form.admin_email}</strong>.
+          </p>
+          {result.email_sent ? (
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+              E-mail de confirmação enviado com o link para definir a senha (válido por 7 dias).
+            </p>
+          ) : (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              SMTP não confirmou o envio. Use o link abaixo e envie ao responsável.
+            </p>
+          )}
+          {result.invite_url ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Link para definir senha</p>
+              <div className="rounded-lg border bg-slate-50 px-3 py-2 text-xs break-all text-slate-700" style={{ borderColor: LOGIN.border }}>
+                {result.invite_url}
+              </div>
+              <button
+                type="button"
+                onClick={copyInvite}
+                className="rounded-lg border px-3 py-2 text-sm font-medium"
+                style={{ borderColor: LOGIN.border }}
+              >
+                {copied ? "Copiado" : "Copiar link"}
+              </button>
+            </div>
+          ) : null}
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg bg-[#155EEF] px-3 py-2 text-sm font-semibold text-white"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/40 p-4">
       <form onSubmit={submit} className="w-full max-w-lg rounded-2xl border bg-white p-6 shadow-xl space-y-3" style={{ borderColor: LOGIN.border }}>
         <h2 className="text-lg font-bold text-slate-900">Novo tenant</h2>
-        <p className="text-sm text-slate-500">Somente dados administrativos necessários (minimização LGPD).</p>
+        <p className="text-sm text-slate-500">
+          O e-mail administrativo receberá um link para confirmar a conta e definir a senha.
+        </p>
         {[
           ["legal_name", "Razão social", true],
           ["trade_name", "Nome fantasia", false],
@@ -310,7 +372,7 @@ function CreateTenantModal({ onClose, onCreated }) {
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: LOGIN.border }}>Cancelar</button>
           <button type="submit" disabled={saving} className="rounded-lg bg-[#155EEF] px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">
-            {saving ? "Criando…" : "Criar tenant"}
+            {saving ? "Criando…" : "Criar e enviar e-mail"}
           </button>
         </div>
       </form>

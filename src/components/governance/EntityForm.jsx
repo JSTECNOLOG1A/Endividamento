@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/lib/notify";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,10 +11,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, Save, X } from "lucide-react";
+import { Users, Save, X, Loader2 } from "lucide-react";
+import { digitsOnly, formatCnpj, signupApi } from "@/api/signup";
 
 function resolveGroupId(initialData, groupId, groups) {
   return initialData?.group_id || groupId || (groups.length === 1 ? groups[0].id : "") || "";
+}
+
+function formatCpf(value) {
+  const digits = digitsOnly(value).slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
 export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, initialData, submitting = false }) {
@@ -31,6 +40,11 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
     payment_source: initialData?.payment_source || "manual",
     posting_approval: initialData?.posting_approval || "required",
   }));
+  const [lookuping, setLookuping] = useState(false);
+  const [lookupError, setLookupError] = useState(null);
+  const [companyInfo, setCompanyInfo] = useState(null);
+  const lastFetchedCnpj = useRef("");
+  const skipInitialLookup = useRef(Boolean(initialData?.document_number));
 
   useEffect(() => {
     setForm((prev) => {
@@ -41,6 +55,65 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
     });
   }, [groupId, groups, initialData]);
 
+  const cnpjDigits = useMemo(
+    () => (form.document_type === "CNPJ" ? digitsOnly(form.document_number) : ""),
+    [form.document_type, form.document_number]
+  );
+
+  useEffect(() => {
+    if (form.entity_type !== "empresa" || form.document_type !== "CNPJ") {
+      setLookupError(null);
+      setCompanyInfo(null);
+      return undefined;
+    }
+    if (cnpjDigits.length !== 14) {
+      setLookupError(null);
+      setCompanyInfo(null);
+      lastFetchedCnpj.current = "";
+      return undefined;
+    }
+    if (skipInitialLookup.current) {
+      skipInitialLookup.current = false;
+      lastFetchedCnpj.current = cnpjDigits;
+      return undefined;
+    }
+    if (cnpjDigits === lastFetchedCnpj.current) return undefined;
+
+    const timer = setTimeout(async () => {
+      setLookuping(true);
+      setLookupError(null);
+      try {
+        const data = await signupApi.lookupCnpj(cnpjDigits);
+        lastFetchedCnpj.current = cnpjDigits;
+        setCompanyInfo(data);
+        setForm((prev) => ({
+          ...prev,
+          document_number: formatCnpj(data.cnpj || cnpjDigits),
+          entity_name: data.razao_social || data.nome_fantasia || prev.entity_name,
+        }));
+      } catch (err) {
+        lastFetchedCnpj.current = "";
+        setCompanyInfo(null);
+        setLookupError(err.message || "Não foi possível consultar o CNPJ");
+      } finally {
+        setLookuping(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [cnpjDigits, form.document_type, form.entity_type]);
+
+  const inactiveCompany = useMemo(() => {
+    const situacao = String(companyInfo?.situacao || "").toUpperCase();
+    return situacao && !situacao.includes("ATIVA");
+  }, [companyInfo]);
+
+  const handleDocumentChange = (value) => {
+    const next =
+      form.document_type === "CPF" ? formatCpf(value) : formatCnpj(value);
+    setForm((prev) => ({ ...prev, document_number: next }));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.group_id) {
@@ -49,6 +122,10 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
     }
     if (!String(form.entity_name || "").trim() || !String(form.document_number || "").trim()) {
       toast.warning("Preencha nome e documento");
+      return;
+    }
+    if (form.document_type === "CNPJ" && digitsOnly(form.document_number).length !== 14) {
+      toast.warning("Informe um CNPJ completo");
       return;
     }
     const codigoEmpresa = String(form.codigo_empresa || "").trim();
@@ -93,11 +170,18 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
             <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Tipo de Entidade *</Label>
             <Select
               value={form.entity_type}
-              onValueChange={(v) => setForm({
-                ...form,
-                entity_type: v,
-                document_type: v === "pf" ? "CPF" : "CNPJ",
-              })}
+              onValueChange={(v) => {
+                const nextType = v === "pf" ? "CPF" : "CNPJ";
+                setCompanyInfo(null);
+                setLookupError(null);
+                lastFetchedCnpj.current = "";
+                setForm({
+                  ...form,
+                  entity_type: v,
+                  document_type: nextType,
+                  document_number: "",
+                });
+              }}
             >
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -110,20 +194,38 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
             <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
               {form.document_type === "CPF" ? "CPF" : "CNPJ"} *
             </Label>
-            <Input
-              value={form.document_number}
-              onChange={(e) => setForm({ ...form, document_number: e.target.value })}
-              placeholder={form.document_type === "CPF" ? "000.000.000-00" : "00.000.000/0000-00"}
-              className="h-9"
-              required
-            />
+            <div className="relative">
+              <Input
+                value={form.document_number}
+                onChange={(e) => handleDocumentChange(e.target.value)}
+                placeholder={form.document_type === "CPF" ? "000.000.000-00" : "00.000.000/0000-00"}
+                className="h-9 pr-9"
+                inputMode="numeric"
+                required
+              />
+              {lookuping ? (
+                <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-slate-400" />
+              ) : null}
+            </div>
+            {form.document_type === "CNPJ" ? (
+              <p className="text-xs text-slate-500">
+                Ao completar o CNPJ, os dados são buscados automaticamente na Receita Federal.
+              </p>
+            ) : null}
+            {lookupError ? <p className="text-xs text-red-600">{lookupError}</p> : null}
+            {companyInfo?.situacao ? (
+              <p className={`text-xs ${inactiveCompany ? "text-amber-700" : "text-slate-500"}`}>
+                Situação cadastral: {companyInfo.situacao}
+                {companyInfo.municipio ? ` · ${companyInfo.municipio}/${companyInfo.uf}` : ""}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nome *</Label>
             <Input
               value={form.entity_name}
               onChange={(e) => setForm({ ...form, entity_name: e.target.value })}
-              placeholder="Nome da empresa ou pessoa"
+              placeholder={lookuping ? "Consultando Receita Federal..." : "Nome da empresa ou pessoa"}
               className="h-9"
               required
             />
@@ -214,7 +316,7 @@ export default function EntityForm({ groups = [], groupId, onSubmit, onCancel, i
             <Button type="button" variant="outline" onClick={onCancel} className="gap-1.5" disabled={submitting}>
               <X className="w-3.5 h-3.5" /> Cancelar
             </Button>
-            <Button type="submit" className="bg-green-600 hover:bg-green-700 gap-1.5" disabled={submitting || groups.length === 0}>
+            <Button type="submit" className="bg-green-600 hover:bg-green-700 gap-1.5" disabled={submitting || lookuping || groups.length === 0}>
               <Save className="w-3.5 h-3.5" /> {submitting ? "Salvando..." : initialData ? "Atualizar" : "Criar"}
             </Button>
           </div>

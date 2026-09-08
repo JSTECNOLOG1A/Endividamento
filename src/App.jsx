@@ -4,7 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { PlatformProvider } from '@/lib/PlatformContext';
@@ -29,10 +29,24 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
 
+function isPublicAccountTokenPath(pathname) {
+  return pathname === "/aceitar-convite" || pathname === "/redefinir-senha";
+}
+
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, login } = useAuth();
+  const location = useLocation();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, login, logout } = useAuth();
   const [loginError, setLoginError] = React.useState(null);
   const [loginLoading, setLoginLoading] = React.useState(false);
+
+  // Convite / reset de senha devem funcionar mesmo com sessão master aberta.
+  React.useEffect(() => {
+    if (isAuthenticated && isPublicAccountTokenPath(location.pathname)) {
+      logout();
+    }
+    // logout é estável o suficiente para este fluxo; evita reexecução por identidade.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, location.pathname]);
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -53,6 +67,10 @@ const AuthenticatedApp = () => {
         </div>
       </div>
     );
+  }
+
+  if (isPublicAccountTokenPath(location.pathname)) {
+    return <SetPassword />;
   }
 
   if (!isAuthenticated) {
@@ -134,8 +152,6 @@ function AuthenticatedShell() {
         <Route path="/criar-conta" element={<Navigate to="/" replace />} />
         <Route path="/concluir-cadastro" element={<Navigate to="/" replace />} />
         <Route path="/esqueci-senha" element={<Navigate to="/" replace />} />
-        <Route path="/redefinir-senha" element={<Navigate to="/" replace />} />
-        <Route path="/aceitar-convite" element={<Navigate to="/" replace />} />
         <Route path="*" element={<PageNotFound />} />
       </Routes>
       {needsLegal ? <LegalFirstAccessModal /> : null}

@@ -1,8 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { pool } from "../../db/pool.js";
 import { writeAudit } from "../../middleware/audit.js";
 import { config } from "../../config.js";
+import { issueAccountToken } from "../account/tokens.js";
+import { sendMail, tenantOwnerWelcomeEmail } from "../signup/mailer.js";
 
 function httpError(status, message, code, details) {
   const err = new Error(message);
@@ -238,6 +240,7 @@ export async function createTenant(req, body) {
   const adminEmail = String(body.admin_email || body.owner_email || "").trim().toLowerCase();
   const phone = String(body.phone || "").trim() || null;
   const responsible = String(body.responsible_name || "").trim() || null;
+  const fullName = responsible || adminEmail.split("@")[0] || "Administrador";
   const plan = String(body.plan || "STARTER").toUpperCase();
   const billingPeriod = body.billing_period === "yearly" ? "yearly" : "monthly";
   const userLimit = body.user_limit != null ? Number(body.user_limit) : null;
@@ -250,11 +253,22 @@ export async function createTenant(req, body) {
   if (!PLANS.includes(plan)) throw httpError(400, "Plano inválido", "VALIDATION");
   if (document && document.length !== 14) throw httpError(400, "CNPJ inválido", "VALIDATION");
 
+  const existingUser = await pool.query(
+    `SELECT id, email, full_name, platform_admin FROM users WHERE lower(email) = lower($1)`,
+    [adminEmail]
+  );
+  if (existingUser.rows[0]?.platform_admin) {
+    throw httpError(409, "Este e-mail pertence a um usuário master da plataforma", "ADMIN_EMAIL_MASTER");
+  }
+
   const groupId = newIds("grp");
   const tenantId = newIds("tnt");
   const lifecycle = startTrial ? "TRIAL" : (LIFECYCLE.includes(body.lifecycle_status) ? body.lifecycle_status : "ACTIVE");
   const billing = BILLING_FROM_LIFECYCLE[lifecycle] || "active";
   const trialEnds = startTrial ? new Date(Date.now() + trialDays * 86400000) : null;
+  const actor = req.user.email;
+  let ownerUserId = existingUser.rows[0]?.id || null;
+  let ownerCreated = false;
 
   const client = await pool.connect();
   try {
@@ -262,7 +276,7 @@ export async function createTenant(req, body) {
     await client.query(
       `INSERT INTO groups (id, group_name, cnpj_group, status, created_by)
        VALUES ($1,$2,$3,'ativo',$4)`,
-      [groupId, tradeName || legalName, document || null, req.user.email]
+      [groupId, tradeName || legalName, document || null, actor]
     );
     await client.query(
       `INSERT INTO tenants (
@@ -283,17 +297,51 @@ export async function createTenant(req, body) {
         plan, billing, lifecycle, billingPeriod,
         adminEmail, phone, responsible,
         trialEnds, userLimit, plan === "STARTER" ? 10 : plan === "PRO" ? 50 : null,
-        req.user.email,
+        actor,
       ]
     );
+
+    if (!ownerUserId) {
+      ownerUserId = randomUUID();
+      const hash = await bcrypt.hash(randomBytes(24).toString("hex"), config.bcryptRounds);
+      await client.query(
+        `INSERT INTO users (
+           id, email, password_hash, full_name, role, status, blocked, created_by
+         ) VALUES ($1,$2,$3,$4,'admin','active',FALSE,$5)`,
+        [ownerUserId, adminEmail, hash, fullName, actor]
+      );
+      ownerCreated = true;
+    }
+
+    await client.query(
+      `INSERT INTO tenant_users (id, tenant_id, group_id, user_email, role, joined_at, created_by)
+       VALUES ($1,$2,$3,$4,'OWNER',now(),$5)
+       ON CONFLICT (tenant_id, user_email) DO UPDATE SET role = 'OWNER', updated_date = now()`,
+      [
+        `tuser_${ownerUserId.replaceAll("-", "").slice(0, 12)}`,
+        tenantId,
+        groupId,
+        adminEmail,
+        actor,
+      ]
+    );
+
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
-    if (error.code === "23505") throw httpError(409, "Domínio ou identificador já existente", "CONFLICT");
+    if (error.code === "23505") throw httpError(409, "Domínio, e-mail ou identificador já existente", "CONFLICT");
     throw error;
   } finally {
     client.release();
   }
+
+  const invite = await sendTenantOwnerInvite({
+    userId: ownerUserId,
+    email: adminEmail,
+    fullName: existingUser.rows[0]?.full_name || fullName,
+    companyName: tradeName || legalName,
+    createdBy: actor,
+  });
 
   const tenant = await getTenant(tenantId);
   await writeAccessLog({
@@ -301,7 +349,13 @@ export async function createTenant(req, body) {
     action: "TENANT_CREATED",
     tenant,
     purpose: "administracao_plataforma",
-    metadata: { plan, lifecycle_status: lifecycle },
+    metadata: {
+      plan,
+      lifecycle_status: lifecycle,
+      owner_email: adminEmail,
+      owner_created: ownerCreated,
+      email_sent: invite.email_sent,
+    },
   });
   await writeAudit({
     req,
@@ -310,9 +364,39 @@ export async function createTenant(req, body) {
     resourceId: tenantId,
     rotina: "Plataforma",
     registro: tenant.tenant_name,
-    after: { id: tenantId, plan, lifecycle_status: lifecycle },
+    after: {
+      id: tenantId,
+      plan,
+      lifecycle_status: lifecycle,
+      owner_email: adminEmail,
+      owner_created: ownerCreated,
+      email_sent: invite.email_sent,
+    },
   });
-  return tenant;
+
+  return {
+    ...tenant,
+    owner: {
+      id: ownerUserId,
+      email: adminEmail,
+      full_name: existingUser.rows[0]?.full_name || fullName,
+      created: ownerCreated,
+    },
+    ...invite,
+  };
+}
+
+async function sendTenantOwnerInvite({ userId, email, fullName, companyName, createdBy }) {
+  const token = await issueAccountToken({ kind: "invite", userId, createdBy });
+  const inviteUrl = `${config.appPublicUrl.replace(/\/$/, "")}/aceitar-convite?token=${token.raw}`;
+  const mail = tenantOwnerWelcomeEmail({ fullName, companyName, inviteUrl });
+  const sent = await sendMail({ to: email, ...mail });
+  // Control plane: sempre devolve o link ao master (fallback se SMTP falhar).
+  return {
+    email_sent: Boolean(sent.sent),
+    invite_pending: true,
+    invite_url: inviteUrl,
+  };
 }
 
 export async function updateTenant(req, id, body) {

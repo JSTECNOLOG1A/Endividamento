@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { firstAccessApi } from "@/api/firstAccess";
@@ -18,14 +19,19 @@ export function FirstAccessProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tourMode, setTourMode] = useState(null); // null | 'auto' | 'manual'
+  const bootedRef = useRef(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ silent = false } = {}) => {
     if (!isAuthenticated || !user) {
       setState(null);
       setLoading(false);
+      bootedRef.current = false;
+      setTourMode(null);
       return null;
     }
-    setLoading(true);
+    // Só o primeiro fetch bloqueia a UI. Refresh no meio do tour/legal
+    // NÃO pode setLoading(true) — desmonta rotas e causa flicker.
+    if (!silent && !bootedRef.current) setLoading(true);
     setError(null);
     try {
       const data = await firstAccessApi.getOnboarding();
@@ -36,6 +42,7 @@ export function FirstAccessProvider({ children }) {
       setState(null);
       return null;
     } finally {
+      bootedRef.current = true;
       setLoading(false);
     }
   }, [isAuthenticated, user]);
@@ -50,10 +57,11 @@ export function FirstAccessProvider({ children }) {
       setTourMode(null);
       return;
     }
-    if (state.gate?.needsTour && tourMode == null) {
-      setTourMode("auto");
+    // Auto-start uma única vez enquanto o gate ainda pede tour.
+    if (state.gate?.needsTour) {
+      setTourMode((current) => (current == null ? "auto" : current));
     }
-  }, [state, loading, tourMode]);
+  }, [state, loading]);
 
   const startManualTour = useCallback(() => {
     setTourMode("manual");
