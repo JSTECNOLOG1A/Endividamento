@@ -390,7 +390,12 @@ export async function syncPtaxToCurrencies() {
       status: "ativa",
     };
     if (match) {
-      if (Number(match.exchange_rate) !== ptax_rate) {
+      // Registro do catálogo compartilhado (sem group_id): store.update
+      // bloqueia edição nele de propósito (evita um tenant sobrescrever
+      // dado global) — só corrige quando a divergência é num registro do
+      // próprio tenant; a data já constar no compartilhado é suficiente
+      // pra não tentar recriar/duplicar.
+      if (match.group_id && Number(match.exchange_rate) !== ptax_rate) {
         await store.update("Currency", match.id, entry);
         updated += 1;
       }
