@@ -63,14 +63,16 @@ export async function seed() {
       `INSERT INTO banks (id, bank_code, bank_name, bank_type, status, created_date, updated_date, created_by) VALUES
        ('bank_001', '001', 'Banco do Brasil', 'publico', 'ativo', $1, $1, $2),
        ('bank_341', '341', 'Itaú Unibanco', 'privado', 'ativo', $1, $1, $2),
-       ('bank_237', '237', 'Bradesco', 'privado', 'ativo', $1, $1, $2)`,
+       ('bank_237', '237', 'Bradesco', 'privado', 'ativo', $1, $1, $2)
+       ON CONFLICT (id) DO NOTHING`,
       [now, createdBy]
     );
     await pool.query(
       `INSERT INTO currencies (id, currency_code, currency_name, exchange_rate, rate_date, status, created_date, updated_date, created_by) VALUES
        ('cur_brl', 'BRL', 'Real Brasileiro', 1, CURRENT_DATE, 'ativa', $1, $1, $2),
        ('cur_usd', 'USD', 'Dólar Americano', 5.5, CURRENT_DATE, 'ativa', $1, $1, $2),
-       ('cur_eur', 'EUR', 'Euro', 6.1, CURRENT_DATE, 'ativa', $1, $1, $2)`,
+       ('cur_eur', 'EUR', 'Euro', 6.1, CURRENT_DATE, 'ativa', $1, $1, $2)
+       ON CONFLICT (id) DO NOTHING`,
       [now, createdBy]
     );
     await pool.query(

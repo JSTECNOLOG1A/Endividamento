@@ -1,0 +1,88 @@
+# Deploy no VPS Clarity (Traefik + TLS).
+# Uso no servidor:
+#   docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build
+#
+# Rede externa `traefik-net` e host alldebt.clarityib.com.br (DNS já no ar).
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: alldebt-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - alldebt_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - alldebt-net
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: alldebt-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      UPLOAD_DIR: /app/uploads
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL}
+      APP_BASE_URL: ${APP_BASE_URL:-${APP_PUBLIC_URL}}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: "${SMTP_FROM:-AllDebt <noreply@clarityib.com.br>}"
+    volumes:
+      - alldebt_uploads:/app/uploads
+    networks:
+      - alldebt-net
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web.prod
+    container_name: alldebt-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-net
+      - traefik.http.routers.alldebt-web.rule=Host(`alldebt.clarityib.com.br`) || Host(`endividamento.clarityib.com.br`) || Host(`staging-alldebt.clarityib.com.br`)
+      - traefik.http.routers.alldebt-web.entrypoints=websecure
+      - traefik.http.routers.alldebt-web.tls.certresolver=myresolver
+      - traefik.http.services.alldebt-web.loadbalancer.server.port=80
+    networks:
+      - alldebt-net
+      - traefik-net
+
+volumes:
+  alldebt_pgdata:
+  alldebt_uploads:
+
+networks:
+  alldebt-net:
+    name: alldebt-net
+  traefik-net:
+    external: true

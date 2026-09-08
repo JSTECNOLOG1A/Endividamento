@@ -2,6 +2,25 @@
 
 Checklist operacional para o **primeiro** ambiente de produção (ou staging público).
 
+## Produção no VPS Clarity (Traefik)
+
+No servidor Hostinger com Traefik já ativo:
+
+```bash
+# código em /var/www/html/alldebt
+docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build
+```
+
+Hosts TLS (DNS A → VPS):
+
+- https://alldebt.clarityib.com.br
+- https://endividamento.clarityib.com.br
+- https://staging-alldebt.clarityib.com.br
+
+Aguarde o healthcheck do `alldebt-web` ficar **healthy** (Traefik ignora containers `starting`/`unhealthy`).
+
+---
+
 ## Pré-requisitos
 
 - [ ] Código deste pacote commitado (migrations `051`–`053`, platform master, first access, planos)
