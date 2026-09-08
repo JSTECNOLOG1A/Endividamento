@@ -130,22 +130,26 @@ export default function ModernSidebar({ currentPageName, collapsed, onToggleColl
       >
         <div
           className={cn(
-            "border-b border-white/10 shrink-0 flex items-center justify-center",
-            collapsed ? "h-[72px] px-2" : "h-[88px] px-4 py-5"
+            "border-b border-white/10 shrink-0 flex items-center",
+            collapsed ? "h-[72px] px-2 justify-center" : "h-[88px] px-4 py-5 justify-start"
           )}
         >
           <Link
             to={createPageUrl("Simulator")}
-            className="flex items-center justify-center rounded-xl transition-transform duration-150 hover:scale-[1.03]"
+            className="flex items-center min-w-0 rounded-xl transition-transform duration-150 hover:scale-[1.03]"
             aria-label="AllDebt BACEN"
           >
-            <AllDebtLogoModern
-              variant="icon"
-              className={cn(
-                "drop-shadow-[0_0_18px_rgba(6,182,212,0.35)]",
-                collapsed ? "h-9 w-9" : "h-14 w-14"
-              )}
-            />
+            {collapsed ? (
+              <AllDebtLogoModern
+                variant="icon"
+                className="drop-shadow-[0_0_18px_rgba(6,182,212,0.35)] h-9 w-9"
+              />
+            ) : (
+              <AllDebtLogoModern
+                variant="brand"
+                className="drop-shadow-[0_0_18px_rgba(6,182,212,0.35)]"
+              />
+            )}
           </Link>
         </div>
 
