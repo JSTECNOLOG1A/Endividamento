@@ -11,11 +11,6 @@ import { createPageUrl } from "../utils";
 import ContractForm from "../components/loan/ContractForm";
 import AmortizationTable from "../components/loan/AmortizationTable";
 import ScheduleChart from "../components/loan/ScheduleChart";
-import EngineTestSuite from "../components/loan/EngineTestSuite";
-import SnapshotValidationTest from "../components/loan/SnapshotValidationTest";
-import ZeroRiskRegressionTest from "../components/loan/ZeroRiskRegressionTest";
-import IntegrityValidator from "../components/loan/IntegrityValidator";
-import ScenarioTests from "../components/loan/ScenarioTests";
 import { calculateAmortizationSchedule } from "../lib/runCalculation";
 import { toBRDecimalString } from "../lib/brNumber";
 import { useLayoutMode } from "@/lib/LayoutContext";
@@ -1013,37 +1008,12 @@ export default function Simulator() {
                 <TabsList className="bg-slate-100">
                   <TabsTrigger value="tabela" className="text-xs">Memória de Cálculo</TabsTrigger>
                   <TabsTrigger value="graficos" className="text-xs">Gráficos</TabsTrigger>
-                  <TabsTrigger value="snapshot" className="text-xs">🔐 Snapshot</TabsTrigger>
-                  <TabsTrigger value="testes" className="text-xs">🧪 Testes</TabsTrigger>
-                  <TabsTrigger value="regression" className="text-xs">🔐 Zero Risk</TabsTrigger>
-                  <TabsTrigger value="integrity" className="text-xs">🔐 Integridade</TabsTrigger>
-                  <TabsTrigger value="scenarios" className="text-xs">🧪 Cenários</TabsTrigger>
                 </TabsList>
                 <TabsContent value="tabela" className="mt-4">
                  <AmortizationTable result={result} params={formParams} onRecalculate={handleRecalculate} highlightParcela={recalcFlag?.parcela} />
                 </TabsContent>
                 <TabsContent value="graficos" className="mt-4">
                  <ScheduleChart schedule={result.schedule} />
-                </TabsContent>
-                <TabsContent value="snapshot" className="mt-4">
-                 <SnapshotValidationTest calculationResult={result} />
-                </TabsContent>
-                <TabsContent value="testes" className="mt-4">
-                 <EngineTestSuite />
-                </TabsContent>
-                <TabsContent value="regression" className="mt-4">
-                  <ZeroRiskRegressionTest />
-                </TabsContent>
-                <TabsContent value="integrity" className="mt-4">
-                  <IntegrityValidator 
-                    beforeResult={result} 
-                    afterResult={result} 
-                    currency={formParams?.currencyId ? "USD" : "BRL"}
-                    phaseName="FASE 4-6"
-                  />
-                </TabsContent>
-                <TabsContent value="scenarios" className="mt-4">
-                  <ScenarioTests />
                 </TabsContent>
                 </Tabs>
             </div>
