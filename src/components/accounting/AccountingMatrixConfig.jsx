@@ -225,8 +225,15 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
   // JSX (26x972 elementos recriados a cada render), o que deixava a matriz
   // lenta pra abrir com um plano de contas grande (Grupo Cangaia tem quase
   // mil contas).
+  //
+  // Só contas analíticas entram aqui — conta sintética é só agrupador/
+  // totalizador do plano de contas, não recebe lançamento contábil direto
+  // (regra contábil básica), então nunca deveria aparecer como opção de
+  // débito/crédito na matriz.
   const accountOptions = useMemo(
-    () => chartOfAccounts.map((a) => ({ value: a.id, label: `${a.account_code} — ${a.account_name}` })),
+    () => chartOfAccounts
+      .filter((a) => a.account_type !== "sintetica")
+      .map((a) => ({ value: a.id, label: `${a.account_code} — ${a.account_name}` })),
     [chartOfAccounts]
   );
 
