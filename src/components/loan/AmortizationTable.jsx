@@ -610,7 +610,8 @@ export default function AmortizationTable({ result, params, onRecalculate, highl
       )}
       
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <SummaryCard icon={DollarSign} label="Valor Total Financiado" value={formatCurrency(principal)} color="blue" />
         <SummaryCard icon={TrendingDown} label="Total Juros" value={formatCurrency(totalJuros)} color="amber" />
         <SummaryCard icon={BarChart3} label="Total Prestações" value={formatCurrency(totalPrestacao)} color="emerald" />
         <SummaryCard icon={AlertCircle} label="CET Anual" value={`${cet?.toFixed(2) || 0}% a.a.`} color="red" subtitle={`Taxa Nominal: ${fixedRateNominal?.toFixed(4) || 0}%`} />
