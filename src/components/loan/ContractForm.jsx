@@ -33,6 +33,7 @@ const defaultForm = {
   group_id: "",
   entity_id: "",
   bank_id: "",
+  disbursement_bank_account_id: "",
   currency_id: "",
   exchange_lag: "1",
   contract_number: "",
@@ -100,13 +101,14 @@ function SubsectionHeading({ icon: Icon, children }) {
   );
 }
 
-export default function ContractForm({ onCalculate, onIdentificationChange, initialData, groups, entities, banks, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf, draftKey = "new", hasResult = false, onSaveDraft, onSubmitForReview, isSaving = false, narrowColumn = false }) {
+export default function ContractForm({ onCalculate, onIdentificationChange, initialData, groups, entities, banks, bankAccounts, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf, draftKey = "new", hasResult = false, onSaveDraft, onSubmitForReview, isSaving = false, narrowColumn = false }) {
   const buildFormFromInitial = (data) => {
     if (!data) return defaultForm;
     return {
       group_id: data.group_id || "",
       entity_id: data.entity_id || "",
       bank_id: data.bank_id || "",
+      disbursement_bank_account_id: data.disbursement_bank_account_id || "",
       currency_id: data.currency_id || "",
       exchange_lag: data.exchange_lag !== undefined ? data.exchange_lag.toString() : "1",
       contract_number: data.contract_number || "",
@@ -186,6 +188,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       group_id: form.group_id,
       entity_id: form.entity_id,
       bank_id: form.bank_id,
+      disbursement_bank_account_id: form.disbursement_bank_account_id,
       contract_number: form.contract_number,
       operation_category: form.operation_category,
       operation_type: form.operation_type,
@@ -197,6 +200,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     form.group_id,
     form.entity_id,
     form.bank_id,
+    form.disbursement_bank_account_id,
     form.contract_number,
     form.operation_category,
     form.operation_type,
@@ -630,6 +634,21 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nº Contrato *</Label>
               <Input value={form.contract_number} onChange={(e) => update("contract_number", e.target.value)} placeholder="000.000.000" className="h-9" required />
+            </div>
+          </div>
+          <div className={gridCols2}>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Conta Bancária de Liberação</Label>
+              <Combobox
+                value={form.disbursement_bank_account_id || ""}
+                onChange={(v) => update("disbursement_bank_account_id", v || "")}
+                options={(bankAccounts || [])
+                  .filter((a) => !form.bank_id || a.bank_id === form.bank_id)
+                  .map((a) => ({ value: a.id, label: `${a.nome} — Ag ${a.agencia}, CC ${a.conta}${a.digito ? `-${a.digito}` : ""}` }))}
+                placeholder="Opcional — em qual conta o recurso cai"
+                searchPlaceholder="Buscar conta bancária..."
+                disabled={!form.bank_id}
+              />
             </div>
           </div>
           <div className={gridCols2}>

@@ -24,7 +24,7 @@ export const ENTITIES = {
     table: "bank_accounts",
     columns: [
       "group_id", "entity_id", "bank_id", "empresa", "filial", "bank_code", "agencia", "conta",
-      "digito", "nome", "tipo", "moeda", "conta_contabil", "natureza", "origem", "status",
+      "digito", "nome", "tipo", "moeda", "conta_contabil", "chart_account_id", "natureza", "origem", "status",
     ],
     booleans: [],
     numbers: [],
@@ -67,7 +67,7 @@ export const ENTITIES = {
   LoanContract: {
     table: "loan_contracts",
     columns: [
-      "group_id", "entity_id", "bank_id", "contract_number", "operation_category", "operation_type",
+      "group_id", "entity_id", "bank_id", "disbursement_bank_account_id", "contract_number", "operation_category", "operation_type",
       "operation_value", "amount_foreign", "exchange_rate_closing", "signal_value", "iof_value",
       "iof_financed", "encargo_garantia_value", "encargo_garantia_financed", "other_fees",
       "other_fees_financed", "mip_value", "mip_embedded", "dfi_value",

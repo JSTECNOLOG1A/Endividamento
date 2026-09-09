@@ -13,10 +13,12 @@ import {
 } from "@/components/ui/select";
 import { Wallet, Save, X } from "lucide-react";
 import { entityLabel, normalizeEmpresaCode } from "@/lib/empresaCode";
+import { Combobox } from "@/components/ui/combobox";
 
 export default function BankAccountForm({
   banks = [],
   entities = [],
+  chartOfAccounts = [],
   bankId,
   onSubmit,
   onCancel,
@@ -32,8 +34,13 @@ export default function BankAccountForm({
     digito: "",
     nome: "",
     tipo: "",
+    chart_account_id: "",
     status: "ativo",
   });
+
+  const accountOptions = chartOfAccounts
+    .filter((a) => a.account_type !== "sintetica")
+    .map((a) => ({ value: a.id, label: `${a.account_code} — ${a.account_name}` }));
 
   const selectedEntity = entities.find((entity) => entity.id === form.entity_id) || null;
   const empresaCode = normalizeEmpresaCode(selectedEntity?.codigo_empresa || form.empresa);
@@ -73,6 +80,7 @@ export default function BankAccountForm({
       digito: form.digito || "",
       nome: form.nome,
       tipo: form.tipo || "",
+      chart_account_id: form.chart_account_id || null,
       status: form.status || "ativo",
       origem: initialData?.origem || "manual",
     });
@@ -185,6 +193,20 @@ export default function BankAccountForm({
                 className="h-9"
               />
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Conta Contábil</Label>
+            <Combobox
+              value={form.chart_account_id || ""}
+              onChange={(v) => setForm({ ...form, chart_account_id: v || "" })}
+              options={accountOptions}
+              placeholder="Selecione (opcional)"
+              searchPlaceholder="Buscar conta..."
+            />
+            <p className="text-xs text-slate-500">
+              Vincula esta conta bancária a uma conta do plano de contas — o fechamento contábil usa
+              essa conta pra liberação/pagamento feitos por aqui, em vez da conta padrão da matriz.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Status</Label>

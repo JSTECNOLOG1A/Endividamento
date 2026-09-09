@@ -647,7 +647,8 @@ export default function FechamentoContabil({ entityId, entityName }) {
   // ---- STEP 3: lançamentos e aprovação ----
   const handleBuildJournal = () => {
     if (!calcResult) return;
-    const result = buildJournalEntries(calcResult, eventMappings, dataBase);
+    const bankAccountsById = new Map(bankAccounts.map((a) => [a.id, a]));
+    const result = buildJournalEntries(calcResult, eventMappings, dataBase, bankAccountsById);
     setJournalResult(result);
   };
 

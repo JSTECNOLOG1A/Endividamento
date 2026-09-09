@@ -305,7 +305,7 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     const interestPaidRow = settlement ? r2(settlement.interest_paid || 0) : (row.jurosPagos || 0);
 
     if (isWithinMonth) {
-      if (newPrincipalRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.LIBERACAO, amount: r2(newPrincipalRow), date: row.dataVencimento });
+      if (newPrincipalRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.LIBERACAO, amount: r2(newPrincipalRow), date: row.dataVencimento, bankAccountId: contract.disbursement_bank_account_id || null });
       if (interestAccruedRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.JUROS_APROPRIADOS, amount: r2(interestAccruedRow), date: row.dataVencimento });
       if (fxAccruedRow) {
         result.events.push({
@@ -314,8 +314,8 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
           date: row.dataVencimento,
         });
       }
-      if (principalPaidRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.PAGAMENTO_PRINCIPAL, amount: r2(principalPaidRow), date: row.dataVencimento, extraordinary: settlement?.extraordinary_amortization });
-      if (interestPaidRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.PAGAMENTO_JUROS, amount: r2(interestPaidRow), date: row.dataVencimento });
+      if (principalPaidRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.PAGAMENTO_PRINCIPAL, amount: r2(principalPaidRow), date: row.dataVencimento, extraordinary: settlement?.extraordinary_amortization, bankAccountId: settlement?.bank_account_id || null });
+      if (interestPaidRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.PAGAMENTO_JUROS, amount: r2(interestPaidRow), date: row.dataVencimento, bankAccountId: settlement?.bank_account_id || null });
 
       // IOF: despesa integral no mês da liberação (não amortizado — é um
       // tributo incidente na operação, diferente do fee de estruturação
@@ -565,11 +565,23 @@ const RECLASSIFICATION_EVENT_TYPES = new Set([
   SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_JUROS,
 ]);
 
+// Pra esses 3 eventos, a perna "Banco" pode ser resolvida pela conta
+// bancária real da operação (contract.disbursement_bank_account_id na
+// liberação, settlement.bank_account_id no pagamento) em vez da conta
+// fixa da matriz — ver buildJournalEntries abaixo. Os demais eventos
+// (juros apropriados, IOF, tarifas, reclassificações etc.) não têm perna
+// de banco e continuam 100% pela matriz.
+const BANK_LEG_BY_EVENT = {
+  [SETTLEMENT_EVENT_TYPES.LIBERACAO]: "debito",
+  [SETTLEMENT_EVENT_TYPES.PAGAMENTO_PRINCIPAL]: "credito",
+  [SETTLEMENT_EVENT_TYPES.PAGAMENTO_JUROS]: "credito",
+};
+
 function mappingKey(eventType, operationCategory) {
   return `${eventType}::${operationCategory || "emprestimos"}`;
 }
 
-export function buildJournalEntries(reconciliation, eventMappings, entryDate) {
+export function buildJournalEntries(reconciliation, eventMappings, entryDate, bankAccountsById = new Map()) {
   const mappingByType = new Map(
     eventMappings
       .filter((m) => m.status !== "inativo")
@@ -598,6 +610,19 @@ export function buildJournalEntries(reconciliation, eventMappings, entryDate) {
     if (RECLASSIFICATION_EVENT_TYPES.has(evt.type) && evt.direction === "to_nao_circulante") {
       debitAccountId = mapping.credit_account_id;
       creditAccountId = mapping.debit_account_id;
+    }
+    // Sobrescreve a perna Banco pela conta bancária real da operação,
+    // quando ela existir e tiver conta contábil vinculada — senão, fica a
+    // conta da matriz (fallback, comportamento idêntico ao de antes desta
+    // opção existir).
+    const bankLeg = BANK_LEG_BY_EVENT[evt.type];
+    if (bankLeg) {
+      const bankAccount = evt.bankAccountId ? bankAccountsById.get(evt.bankAccountId) : null;
+      const bankChartAccountId = bankAccount?.chart_account_id || null;
+      if (bankChartAccountId) {
+        if (bankLeg === "debito") debitAccountId = bankChartAccountId;
+        else creditAccountId = bankChartAccountId;
+      }
     }
     entries.push({
       contract_id: evt.contractId,

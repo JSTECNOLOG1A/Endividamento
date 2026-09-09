@@ -134,6 +134,12 @@ export default function Simulator() {
     initialData: [],
   });
 
+  const { data: bankAccounts } = useQuery({
+    queryKey: ["bank-accounts"],
+    queryFn: () => base44.entities.BankAccount.list("", 500),
+    initialData: [],
+  });
+
   const loadContractForEdit = React.useCallback(async (contractId) => {
     try {
       const contract = await base44.entities.LoanContract.get(contractId);
@@ -153,6 +159,7 @@ export default function Simulator() {
         group_id: contract.group_id,
         entity_id: contract.entity_id,
         bank_id: contract.bank_id,
+        disbursement_bank_account_id: contract.disbursement_bank_account_id || "",
         currency_id: contract.currency_id || "",
         exchange_lag: contract.exchange_lag !== undefined ? contract.exchange_lag : 1,
         // Alias em camelCase — é o que persistContract() lê ao montar os
@@ -556,6 +563,7 @@ export default function Simulator() {
       group_id: formParams.group_id || null,
       entity_id: formParams.entity_id || null,
       bank_id: formParams.bank_id || null,
+      disbursement_bank_account_id: formParams.disbursement_bank_account_id || null,
       currency_id: formParams.currency_id || null,
       exchange_lag: formParams.exchangeLag !== undefined ? formParams.exchangeLag : 1,
       exchange_rates: formParams.exchangeRates ? JSON.stringify(formParams.exchangeRates) : null,
@@ -967,6 +975,7 @@ export default function Simulator() {
               groups={groups}
               entities={entities}
               banks={banks}
+              bankAccounts={bankAccounts}
               currencies={currencies}
               initialData={reopenData}
               isEditing={!!editingContractId}
