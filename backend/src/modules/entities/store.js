@@ -12,6 +12,7 @@ import {
   bumpContractsUsed,
   actorEmail,
   assertCanApproveContract,
+  assertCanRejectContract,
   resolveContractReopen,
 } from "../tenants/policy.js";
 import {
@@ -501,6 +502,9 @@ async function applyLoanContractRules(previous, data) {
       assertCanApproveContract(previous);
       data.approved_by = actorEmail();
       data.approved_date = new Date().toISOString().slice(0, 10);
+    }
+    if (nextStatus === "devolvido") {
+      assertCanRejectContract(previous);
     }
     if (previous.status === "aprovado" && nextStatus !== "aprovado") {
       const decision = await resolveContractReopen(previous);

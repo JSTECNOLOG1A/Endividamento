@@ -99,7 +99,7 @@ export default function Contracts() {
     rascunho: contracts.filter(c => c.status === "rascunho").length,
     pendente_aprovacao: contracts.filter(c => c.status === "pendente_aprovacao").length,
     aprovado: contracts.filter(c => c.status === "aprovado").length,
-    cancelado: contracts.filter(c => c.status === "cancelado").length,
+    devolvido: contracts.filter(c => c.status === "devolvido").length,
   };
 
   const filteredContracts = contracts.filter(c => {
@@ -248,7 +248,7 @@ export default function Contracts() {
                   onDuplicate={() => handleDuplicate(selected.contract)}
                 />
               </CardHeader>
-              {selected.contract.status === "cancelado" && selected.contract.rejection_comments && (
+              {selected.contract.status === "devolvido" && selected.contract.rejection_comments && (
                 <CardContent className="pt-0">
                   <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
                     <span className="font-semibold">Motivo da devolução: </span>
@@ -364,13 +364,13 @@ export default function Contracts() {
             <div className="text-2xl font-bold mt-1 text-green-600">{statusCounts.aprovado}</div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("cancelado")}>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("devolvido")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <RotateCcw className="w-4 h-4 text-red-500" />
+              <RotateCcw className="w-4 h-4 text-orange-500" />
               <div className="text-xs text-slate-600">Devolvido</div>
             </div>
-            <div className="text-2xl font-bold mt-1 text-red-600">{statusCounts.cancelado}</div>
+            <div className="text-2xl font-bold mt-1 text-orange-600">{statusCounts.devolvido}</div>
           </CardContent>
         </Card>
       </div>
@@ -387,7 +387,7 @@ export default function Contracts() {
               <SelectItem value="rascunho">Rascunho</SelectItem>
               <SelectItem value="pendente_aprovacao">Pendente</SelectItem>
               <SelectItem value="aprovado">Aprovado</SelectItem>
-              <SelectItem value="cancelado">Devolvido para Correção</SelectItem>
+              <SelectItem value="devolvido">Devolvido para Correção</SelectItem>
             </SelectContent>
           </Select>
         </div>

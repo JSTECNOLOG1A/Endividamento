@@ -216,6 +216,19 @@ export function assertCanApproveContract(contract) {
   }
 }
 
+// Mesma checagem de admin do aprovar (ver acima) — sem a isenção de
+// autocadastro, já que devolver não tem a mesma restrição de segregação
+// (canReject em ContractWorkflow.jsx também não checa isso).
+export function assertCanRejectContract(contract) {
+  if (isSystemActor()) return;
+  if (isViewer() || !isTenantAdmin()) {
+    throw httpError(403, "Apenas administradores podem devolver contratos.", "ADMIN_REQUIRED");
+  }
+  if (contract?.status !== "pendente_aprovacao") {
+    throw httpError(409, "Só é possível devolver um contrato que está pendente de aprovação.", "INVALID_TRANSITION");
+  }
+}
+
 async function countTenantAdmins() {
   const groupId = groupIdOrThrow();
   const result = await pool.query(

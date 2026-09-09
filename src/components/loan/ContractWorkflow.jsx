@@ -47,7 +47,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
   const { withProcessing } = useProcessing();
   const [erpBlock, setErpBlock] = useState(null);
 
-  const canSendApproval = contract.status === "rascunho" && canWrite(user);
+  const canSendApproval = ["rascunho", "devolvido"].includes(contract.status) && canWrite(user);
   // O dono do tenant (isOwner) fica isento da trava de "quem cria não pode
   // aprovar o próprio contrato" — faz sentido pra um operador único (o
   // dono é a última instância de qualquer forma), sem abrir mão da
@@ -125,9 +125,9 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
           break;
         case "reject":
           updateData = {
-            status: "rascunho",
+            status: "devolvido",
             rejection_comments: comments,
-            status_history: addToHistory("rascunho", comments),
+            status_history: addToHistory("devolvido", comments),
           };
           break;
       }
