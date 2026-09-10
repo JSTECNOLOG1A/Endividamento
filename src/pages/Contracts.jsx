@@ -230,7 +230,7 @@ export default function Contracts() {
                   <CardTitle className="flex items-center gap-3">
                     {bankName} — {selected.contract.contract_number}
                     <Badge variant={selected.contract.status === "aprovado" ? "default" : "secondary"}>
-                      {statusLabel(selected.contract.status)}
+                      {statusLabel(selected.contract.status, selected.contract)}
                     </Badge>
                   </CardTitle>
                   <p className="text-sm text-slate-600 mt-1">

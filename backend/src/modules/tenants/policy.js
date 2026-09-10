@@ -52,6 +52,11 @@ export function isTenantAdmin() {
   return userRole() === "admin";
 }
 
+export function actorApprovalLevel() {
+  if (isSystemActor() || isOwner()) return 2;
+  return Number(getTenantScope()?.approvalLevel || 0);
+}
+
 export async function loadScopedTenant() {
   const tenantId = tenantIdOrNull();
   if (!tenantId) {
@@ -199,30 +204,41 @@ export async function assertCanCreateUser() {
   }
 }
 
-export function assertCanApproveContract(contract) {
+// Alçada em 2 níveis, sempre nessa ordem. Autoaprovação é permitida (quem
+// cadastrou pode aprovar se tiver o nível necessário) — o controle real é o
+// nível atribuído ao usuário em Configurações > Usuários, não quem criou o
+// contrato. Nível 2 (aprovação final) reaproveita approved_by/approved_date,
+// que já existiam; nível 1 é registrado em level1_approved_by/at.
+export function assertCanApproveLevel1(contract) {
   if (isSystemActor()) return;
-  if (isViewer() || !isTenantAdmin()) {
-    throw httpError(403, "Apenas administradores podem aprovar contratos.", "ADMIN_REQUIRED");
+  if (isViewer()) {
+    throw httpError(403, "Seu perfil é apenas de visualização.", "READ_ONLY");
   }
-  // Dono do tenant fica isento da segregação "quem cadastrou não pode
-  // aprovar" — mesma regra e mesmo motivo do canApprove em
-  // ContractWorkflow.jsx (operador único: o dono é a última instância).
-  // Sem essa isenção aqui, o botão liberado na tela só levava a um 403
-  // ao clicar, já que essa checagem roda de novo no servidor.
-  if (isOwner()) return;
-  const email = actorEmail();
-  if (email && sameEmail(contract?.created_by, email)) {
-    throw httpError(403, "Quem cadastrou o contrato não pode aprová-lo. Peça a outro administrador.", "SELF_APPROVAL");
+  if (actorApprovalLevel() < 1) {
+    throw httpError(403, "Você não tem nível de aprovação suficiente (nível 1).", "APPROVAL_LEVEL_REQUIRED");
+  }
+  if (contract?.level1_approved_at) {
+    throw httpError(409, "Este contrato já tem a aprovação de nível 1 registrada.", "INVALID_TRANSITION");
   }
 }
 
-// Mesma checagem de admin do aprovar (ver acima) — sem a isenção de
-// autocadastro, já que devolver não tem a mesma restrição de segregação
-// (canReject em ContractWorkflow.jsx também não checa isso).
+export function assertCanApproveLevel2(contract) {
+  if (isSystemActor()) return;
+  if (isViewer()) {
+    throw httpError(403, "Seu perfil é apenas de visualização.", "READ_ONLY");
+  }
+  if (actorApprovalLevel() < 2) {
+    throw httpError(403, "Você não tem nível de aprovação suficiente (nível 2).", "APPROVAL_LEVEL_REQUIRED");
+  }
+  if (!contract?.level1_approved_at) {
+    throw httpError(409, "É preciso registrar a aprovação de nível 1 antes da aprovação final.", "INVALID_TRANSITION");
+  }
+}
+
 export function assertCanRejectContract(contract) {
   if (isSystemActor()) return;
-  if (isViewer() || !isTenantAdmin()) {
-    throw httpError(403, "Apenas administradores podem devolver contratos.", "ADMIN_REQUIRED");
+  if (isViewer() || actorApprovalLevel() < 1) {
+    throw httpError(403, "Você não tem nível de aprovação suficiente para devolver contratos.", "APPROVAL_LEVEL_REQUIRED");
   }
   if (contract?.status !== "pendente_aprovacao") {
     throw httpError(409, "Só é possível devolver um contrato que está pendente de aprovação.", "INVALID_TRANSITION");

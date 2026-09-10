@@ -30,7 +30,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ROLE_OPTIONS, YES_NO_OPTIONS, blockedLabel, roleLabel, usersApi } from "@/api/users";
+import {
+  APPROVAL_LEVEL_OPTIONS,
+  ROLE_OPTIONS,
+  YES_NO_OPTIONS,
+  approvalLevelLabel,
+  blockedLabel,
+  roleLabel,
+  usersApi,
+} from "@/api/users";
 
 function emptyForm() {
   return {
@@ -39,6 +47,7 @@ function emptyForm() {
     cargo: "",
     setor: "",
     role: "user",
+    approval_level: 0,
     password: "",
     password_confirm: "",
     blocked: false,
@@ -117,6 +126,7 @@ export default function UsersPanel() {
       cargo: item.cargo || "",
       setor: item.setor || "",
       role: item.role || "user",
+      approval_level: Number(item.approval_level || 0),
       tenant_role: item.tenant_role || null,
       is_owner: Boolean(item.is_owner),
       password: "",
@@ -146,6 +156,7 @@ export default function UsersPanel() {
         cargo: form.cargo.trim(),
         setor: form.setor.trim(),
         role: form.role,
+        approval_level: Number(form.approval_level || 0),
         blocked: Boolean(form.blocked),
       };
       if (form.password) {
@@ -208,6 +219,7 @@ export default function UsersPanel() {
               <TableHead>Cargo</TableHead>
               <TableHead>Setor</TableHead>
               <TableHead>Perfil</TableHead>
+              <TableHead>Nível de aprovação</TableHead>
               <TableHead>Bloqueado</TableHead>
               <TableHead>Último login</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -225,6 +237,9 @@ export default function UsersPanel() {
                 <TableCell className="text-sm text-slate-700">{item.setor || "—"}</TableCell>
                 <TableCell className="text-sm text-slate-700">
                   {item.is_owner ? "Proprietário" : roleLabel(item.role)}
+                </TableCell>
+                <TableCell className="text-sm text-slate-700">
+                  {item.is_owner ? "Nível 2" : approvalLevelLabel(item.approval_level)}
                 </TableCell>
                 <TableCell>
                   {item.invite_pending ? (
@@ -328,6 +343,30 @@ export default function UsersPanel() {
                     </SelectContent>
                   </Select>
                 )}
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label>Nível de aprovação</Label>
+                {editor.form.is_owner ? (
+                  <Input readOnly className="bg-slate-50" value="Nível 2 — proprietário sempre pode aprovar" />
+                ) : (
+                  <Select
+                    value={String(editor.form.approval_level ?? 0)}
+                    onValueChange={(value) => setEditor((current) => patchForm(current, { approval_level: Number(value) }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {APPROVAL_LEVEL_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={String(option.value)}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <p className="text-xs text-slate-500">
+                  Controla quem pode aprovar contratos: nível 1 e nível 2 são etapas sequenciais
+                  da aprovação — nível 2 também pode registrar a etapa de nível 1.
+                </p>
               </div>
               {editor.mode === "edit" ? (
                 <>

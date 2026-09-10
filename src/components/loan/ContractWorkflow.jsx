@@ -20,6 +20,15 @@ function isOwner(user) {
   return Boolean(user?.platform_admin || user?.tenant_role === "OWNER");
 }
 
+// Alçada em 2 níveis pra aprovação de contrato: dono/master sempre nível
+// máximo (mesma isenção do backend em actorApprovalLevel, tenants/policy.js);
+// demais usuários usam o nível configurado em Configurações > Usuários.
+// Reabertura de contrato aprovado continua usando isTenantAdmin (fora do
+// escopo desta alçada, regra própria já existente).
+function approvalLevel(user) {
+  return isOwner(user) ? 2 : Number(user?.approval_level || 0);
+}
+
 function canWrite(user) {
   return user?.role !== "viewer" && user?.tenant_role !== "VIEWER";
 }
@@ -48,16 +57,14 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
   const [erpBlock, setErpBlock] = useState(null);
 
   const canSendApproval = ["rascunho", "devolvido"].includes(contract.status) && canWrite(user);
-  // O dono do tenant (isOwner) fica isento da trava de "quem cria não pode
-  // aprovar o próprio contrato" — faz sentido pra um operador único (o
-  // dono é a última instância de qualquer forma), sem abrir mão da
-  // segregação de funções pra admins que não são donos (se um dia
-  // existirem múltiplos usuários no mesmo tenant, eles continuam
-  // precisando de outra pessoa pra aprovar o que submeteram).
-  const canApprove = contract.status === "pendente_aprovacao"
-    && isTenantAdmin(user)
-    && (isOwner(user) || !sameEmail(contract.created_by, user?.email));
-  const canReject = contract.status === "pendente_aprovacao" && isTenantAdmin(user);
+  // Alçada em 2 níveis, sempre nessa ordem. Autoaprovação é permitida —
+  // quem cadastrou pode aprovar (em qualquer nível) se tiver o nível
+  // necessário; o controle real é o nível atribuído ao usuário em
+  // Configurações > Usuários, não quem criou o contrato.
+  const level1Done = Boolean(contract.level1_approved_at);
+  const canApproveLevel1 = contract.status === "pendente_aprovacao" && !level1Done && approvalLevel(user) >= 1;
+  const canApproveLevel2 = contract.status === "pendente_aprovacao" && level1Done && approvalLevel(user) >= 2;
+  const canReject = contract.status === "pendente_aprovacao" && approvalLevel(user) >= 1;
   const reopenPending = Boolean(contract.reopen_requested_by);
   const canReopen = contract.status === "aprovado"
     && canWrite(user)
@@ -113,6 +120,12 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             status: "pendente_aprovacao",
             status_history: addToHistory("pendente_aprovacao"),
             ...(pdfUrl ? { contract_pdf_url: pdfUrl } : {}),
+          };
+          break;
+        case "approve_level1":
+          updateData = {
+            request_level1_approval: true,
+            status_history: addToHistory("pendente_aprovacao", comments || "Aprovação nível 1"),
           };
           break;
         case "approve":
@@ -238,7 +251,18 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             Enviar para Aprovação
           </Button>
         )}
-        {canApprove && (
+        {canApproveLevel1 && (
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => openDialog("approve_level1")}
+            className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700"
+          >
+            <CheckCircle className="w-3.5 h-3.5" />
+            Aprovar Nível 1
+          </Button>
+        )}
+        {canApproveLevel2 && (
           <Button
             size="sm"
             variant="default"
@@ -246,7 +270,7 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             className="gap-1.5 text-xs bg-green-600 hover:bg-green-700"
           >
             <CheckCircle className="w-3.5 h-3.5" />
-            Aprovar
+            Aprovar (Nível 2 — final)
           </Button>
         )}
         {canReject && (
@@ -284,12 +308,20 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
         ) : null}
       </div>
 
+      {contract.status === "pendente_aprovacao" && level1Done && (
+        <p className="text-xs text-slate-500">
+          Nível 1 aprovado por {contract.level1_approved_by} em{" "}
+          {new Date(contract.level1_approved_at).toLocaleString("pt-BR")} — aguardando aprovação nível 2.
+        </p>
+      )}
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {action === "send_approval" && "Enviar para Aprovação"}
-              {action === "approve" && "Aprovar Contrato"}
+              {action === "approve_level1" && "Aprovar Nível 1"}
+              {action === "approve" && "Aprovar Contrato (Nível 2 — final)"}
               {action === "reject" && "Recusar Contrato"}
               {action === "reopen" && "Reabrir Contrato para Edição"}
             </DialogTitle>
@@ -338,7 +370,14 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
                 {" "}Títulos baixados ou com movimentação impedem a reabertura.
               </p>
             )}
-            {(action === "approve" || action === "reject") && (
+            {action === "approve_level1" && (
+              <p className="text-sm text-slate-600">
+                Registra a aprovação de nível 1. O contrato continua pendente até a aprovação
+                final de nível 2, feita por outro usuário com esse nível (ou pelo mesmo, se
+                também tiver nível 2).
+              </p>
+            )}
+            {(action === "approve_level1" || action === "approve" || action === "reject") && (
               <div className="space-y-2">
                 <Label className="text-sm">
                   Comentários {action === "reject" && <span className="text-red-600">*</span>}

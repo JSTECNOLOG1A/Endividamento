@@ -250,7 +250,7 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
                   <TableCell className={cellClassRight}>{formatCurrency(longTerm)}</TableCell>
                   <TableCell className={cellClass}>
                     <Badge className={`text-[10px] border px-1.5 py-0 leading-4 ${statusBadgeClass(c.status)}`}>
-                      {statusLabel(c.status)}
+                      {statusLabel(c.status, c)}
                     </Badge>
                   </TableCell>
                   <TableCell className={cellClassRight}>

@@ -78,6 +78,7 @@ export const ENTITIES = {
       "principal_installments", "interest_installments", "principal_frequency", "interest_frequency",
       "calculation_system", "amortization_percentages", "percentage_base", "schedule_data",
       "contract_pdf_url", "status", "status_history", "approved_by", "approved_date",
+      "level1_approved_by", "level1_approved_at",
       "rejection_comments", "exported_to_payables", "exported_to_receivables",
       "reopen_requested_by", "reopen_requested_at",
       "current_snapshot_id", "approved_snapshot_id",

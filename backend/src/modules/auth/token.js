@@ -20,6 +20,7 @@ export function issueAuthResponse(user, tenant) {
       email: user.email,
       full_name: user.full_name,
       role: user.role,
+      approval_level: Number(user.approval_level || 0),
       platform_admin: platformAdmin,
       tenant_id: tenant?.id || null,
       group_id: tenant?.group_id || null,

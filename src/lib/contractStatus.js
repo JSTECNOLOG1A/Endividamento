@@ -34,7 +34,13 @@ export const STATUS_BADGE_CLASSES = {
 // Status a partir dos quais o contrato pode voltar para edição na Calculadora.
 export const EDITABLE_STATUSES = ["rascunho", "devolvido"];
 
-export function statusLabel(status) {
+// `contract` é opcional — quando informado e o status for "pendente_aprovacao"
+// com o nível 1 já registrado, mostra o sub-estado da alçada em 2 níveis
+// (ver ContractWorkflow.jsx). Não é um status novo no banco, só um rótulo.
+export function statusLabel(status, contract) {
+  if (status === "pendente_aprovacao" && contract?.level1_approved_at) {
+    return "Pendente — aguardando nível 2";
+  }
   return STATUS_LABELS[status] || status?.replace(/_/g, " ") || STATUS_LABELS.rascunho;
 }
 

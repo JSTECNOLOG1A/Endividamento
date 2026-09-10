@@ -11,7 +11,8 @@ import {
   assertOwner,
   bumpContractsUsed,
   actorEmail,
-  assertCanApproveContract,
+  assertCanApproveLevel1,
+  assertCanApproveLevel2,
   assertCanRejectContract,
   resolveContractReopen,
 } from "../tenants/policy.js";
@@ -30,6 +31,8 @@ export const CONTRACT_WORKFLOW_FIELDS = [
   "status",
   "approved_by",
   "approved_date",
+  "level1_approved_by",
+  "level1_approved_at",
   "status_history",
   "exported_to_payables",
   "exported_to_receivables",
@@ -497,14 +500,33 @@ function parseStatusHistory(raw) {
 
 async function applyLoanContractRules(previous, data) {
   const nextStatus = data.status;
+  // Gatilho da aprovação de nível 1: chave fora de CONTRACT_WORKFLOW_FIELDS,
+  // então sobrevive ao strip acima e chega aqui; nunca vai pro banco (é
+  // removida logo abaixo, o valor real gravado é level1_approved_by/at).
+  const wantsLevel1 = data.request_level1_approval === true;
+  delete data.request_level1_approval;
+  if (wantsLevel1) {
+    assertCanApproveLevel1(previous);
+    data.level1_approved_by = actorEmail();
+    data.level1_approved_at = new Date().toISOString();
+  }
   if (nextStatus && nextStatus !== previous.status) {
     if (nextStatus === "aprovado") {
-      assertCanApproveContract(previous);
+      assertCanApproveLevel2({
+        ...previous,
+        level1_approved_at: data.level1_approved_at ?? previous.level1_approved_at,
+      });
       data.approved_by = actorEmail();
       data.approved_date = new Date().toISOString().slice(0, 10);
     }
     if (nextStatus === "devolvido") {
       assertCanRejectContract(previous);
+      data.level1_approved_by = null;
+      data.level1_approved_at = null;
+    }
+    if (nextStatus === "pendente_aprovacao" && previous.status !== "pendente_aprovacao") {
+      data.level1_approved_by = null;
+      data.level1_approved_at = null;
     }
     if (previous.status === "aprovado" && nextStatus !== "aprovado") {
       const decision = await resolveContractReopen(previous);

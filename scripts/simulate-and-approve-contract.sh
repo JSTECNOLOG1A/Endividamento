@@ -135,6 +135,15 @@ PENDING=$(curl -s -X PATCH "$API/entities/LoanContract/$CONTRACT_ID" \
 
 PENDING_STATUS=$(echo "$PENDING" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("status",""))')
 
+# Alçada em 2 níveis (sempre nessa ordem): nível 1 primeiro, depois a
+# aprovação final (nível 2). O admin da simulação tem nível 2, que também
+# registra o nível 1 — ver assertCanApproveLevel1/2 em tenants/policy.js.
+curl -s -X PATCH "$API/entities/LoanContract/$CONTRACT_ID" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "X-Tenant-Id: $TENANT" \
+  -H "Content-Type: application/json" \
+  -d '{"request_level1_approval":true}' >/dev/null
+
 APPROVED=$(curl -s -X PATCH "$API/entities/LoanContract/$CONTRACT_ID" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "X-Tenant-Id: $TENANT" \

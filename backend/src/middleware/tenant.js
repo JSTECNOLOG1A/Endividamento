@@ -30,6 +30,7 @@ export async function attachTenant(req, res, next) {
       full_name: dbUser.full_name,
       role: dbUser.role,
       platform_admin: platformAdmin,
+      approval_level: Number(dbUser.approval_level || 0),
     };
 
     if (platformAdmin) {
@@ -56,6 +57,7 @@ export async function attachTenant(req, res, next) {
           fullName: dbUser.full_name,
           role: dbUser.role,
           tenantRole: "PLATFORM",
+          approvalLevel: dbUser.approval_level,
         },
         () => {
           if (tenant && !["GET", "HEAD", "OPTIONS"].includes(req.method)) {
@@ -100,6 +102,7 @@ export async function attachTenant(req, res, next) {
         fullName: dbUser.full_name,
         role: dbUser.role,
         tenantRole: tenant.tenant_role,
+        approvalLevel: dbUser.approval_level,
       },
       () => next()
     );

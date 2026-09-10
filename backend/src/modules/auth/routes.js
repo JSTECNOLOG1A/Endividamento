@@ -27,7 +27,7 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
     const result = await pool.query(
-      "SELECT id, email, password_hash, full_name, role, status, blocked, platform_admin FROM users WHERE email = $1",
+      "SELECT id, email, password_hash, full_name, role, approval_level, status, blocked, platform_admin FROM users WHERE email = $1",
       [body.email.toLowerCase()]
     );
     const user = result.rows[0];
@@ -86,7 +86,7 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
 authRouter.get("/me", requireAuth, async (req, res, next) => {
   try {
     const result = await pool.query(
-      "SELECT id, email, full_name, cargo, setor, role, status, blocked, blocked_at, last_login_at, platform_admin FROM users WHERE id = $1",
+      "SELECT id, email, full_name, cargo, setor, role, approval_level, status, blocked, blocked_at, last_login_at, platform_admin FROM users WHERE id = $1",
       [req.user.sub]
     );
     const me = result.rows[0];
@@ -104,6 +104,7 @@ authRouter.get("/me", requireAuth, async (req, res, next) => {
       cargo: me.cargo,
       setor: me.setor,
       role: me.role,
+      approval_level: Number(me.approval_level || 0),
       status: me.status,
       blocked: me.blocked,
       blocked_at: me.blocked_at,
