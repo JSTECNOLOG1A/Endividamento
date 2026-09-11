@@ -7,12 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, FileText, Edit, Clock, CheckCircle, RotateCcw, Plus } from "lucide-react";
+import { ArrowLeft, FileText, Edit, Clock, CheckCircle, RotateCcw, Plus, Wallet } from "lucide-react";
 import ContractsList from "../components/loan/ContractsList";
 import AmortizationTable from "../components/loan/AmortizationTable";
 import ScheduleChart from "../components/loan/ScheduleChart";
 import ContractWorkflow from "../components/loan/ContractWorkflow";
 import ContractSummary from "../components/loan/ContractSummary";
+import GuaranteedAccountFormDialog from "../components/loan/GuaranteedAccountFormDialog";
 import { createPageUrl } from "../utils";
 import { statusLabel } from "../lib/contractStatus";
 import { toBRDecimalString } from "../lib/brNumber";
@@ -30,6 +31,7 @@ export default function Contracts() {
   // lado no modo de revisão). Começa aberto automaticamente sempre que um
   // contrato com PDF anexado é selecionado.
   const [showPdf, setShowPdf] = useState(false);
+  const [newGuaranteedAccountOpen, setNewGuaranteedAccountOpen] = useState(false);
   const queryClient = useQueryClient();
 
   React.useEffect(() => {
@@ -327,13 +329,30 @@ export default function Contracts() {
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contratos</h1>
           <p className="text-sm text-slate-600 mt-0.5">Visualize e gerencie os contratos cadastrados</p>
         </div>
-        <Button asChild className="gap-1.5 shrink-0">
-          <Link to={createPageUrl("Simulator")}>
-            <Plus className="w-4 h-4" />
-            Novo Contrato
-          </Link>
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" className="gap-1.5" onClick={() => setNewGuaranteedAccountOpen(true)}>
+            <Wallet className="w-4 h-4" />
+            Nova Conta Garantida
+          </Button>
+          <Button asChild className="gap-1.5">
+            <Link to={createPageUrl("Simulator")}>
+              <Plus className="w-4 h-4" />
+              Novo Contrato
+            </Link>
+          </Button>
+        </div>
       </div>
+
+      <GuaranteedAccountFormDialog
+        open={newGuaranteedAccountOpen}
+        onOpenChange={setNewGuaranteedAccountOpen}
+        groups={groups}
+        entities={entities}
+        banks={banks}
+        onSaved={(created) => {
+          window.location.href = createPageUrl("GuaranteedAccounts") + "?open=" + created.id;
+        }}
+      />
 
       {/* Dashboard Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">

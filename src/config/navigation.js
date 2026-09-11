@@ -6,7 +6,6 @@ import {
   BookOpen,
   Settings,
   Wallet,
-  RefreshCw,
   Receipt,
   Banknote,
 } from "lucide-react";
@@ -16,7 +15,6 @@ import { SETTINGS_SECTIONS } from "./settingsNavigation";
 /** Navegação do layout Classic — links diretos (sem submenu). */
 export const NAV_ITEMS = [
   { name: "Contratos", page: "Contracts", icon: FolderOpen },
-  { name: "Contas Garantidas", page: "GuaranteedAccounts", icon: RefreshCw },
   { name: "Governança", page: "Governance", icon: Building },
   { name: "Contabilidade", page: "Accounting", icon: BarChart3 },
   { name: "Consolidação", page: "Consolidation", icon: BarChart3 },
@@ -39,6 +37,10 @@ export const PAGE_LABELS = {
   // Contratos — mas a rota /Simulator continua existindo (editar contrato,
   // reabrir, duplicar), então o breadcrumb ainda precisa de um rótulo.
   Simulator: "Calculadora",
+  // Contas Garantidas saiu da sidebar — acessada via "+ Nova Conta
+  // Garantida" dentro de Contratos — mas a rota continua existindo (extrato,
+  // renovação, deep-link a partir da lista de contratos).
+  GuaranteedAccounts: "Contas Garantidas",
 };
 
 function buildModernNavItems() {

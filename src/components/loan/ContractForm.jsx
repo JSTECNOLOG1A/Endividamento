@@ -429,7 +429,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
   const selectedGroup = groups?.find((g) => g.id === form.group_id);
   const filteredEntities = form.group_id ? entities?.filter((e) => e.group_id === form.group_id) : [];
   const selectedEntity = form.entity_id ? entities?.find((e) => e.id === form.entity_id) : null;
-  const missingData = !form.group_id || !form.entity_id || !form.bank_id;
+  const missingData = !form.group_id || !form.entity_id || !form.bank_id || !form.disbursement_bank_account_id;
   const selectedSystem = SYSTEMS.find((s) => s.value === form.calculation_system);
 
   const handleSubmit = async (e) => {
@@ -644,14 +644,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </div>
           <div className={gridCols2}>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Conta Bancária de Liberação</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Conta Bancária de Liberação *</Label>
               <Combobox
                 value={form.disbursement_bank_account_id || ""}
                 onChange={(v) => update("disbursement_bank_account_id", v || "")}
                 options={(bankAccounts || [])
                   .filter((a) => !form.bank_id || a.bank_id === form.bank_id)
                   .map((a) => ({ value: a.id, label: `${a.nome} — Ag ${a.agencia}, CC ${a.conta}${a.digito ? `-${a.digito}` : ""}` }))}
-                placeholder="Opcional — em qual conta o recurso cai"
+                placeholder="Em qual conta o recurso cai"
                 searchPlaceholder="Buscar conta bancária..."
                 disabled={!form.bank_id}
               />
@@ -740,7 +740,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           {missingData && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              Preencha grupo, entidade e banco antes de calcular.
+              Preencha grupo, entidade, banco e a conta bancária de liberação antes de calcular.
             </div>
           )}
         </CardContent>
