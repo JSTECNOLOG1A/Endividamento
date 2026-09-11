@@ -72,7 +72,7 @@ export const ENTITIES = {
       "iof_financed", "encargo_garantia_value", "encargo_garantia_financed", "other_fees",
       "other_fees_financed", "mip_value", "mip_embedded", "dfi_value",
       "dfi_embedded", "other_insurance_value", "other_insurance_embedded", "fixed_rate", "indexer",
-      "indexer_spread", "interest_day_count_convention", "currency_id", "exchange_lag", "exchange_rates", "operation_date",
+      "indexer_spread", "interest_day_count_convention", "indexer_capitalization_mode", "currency_id", "exchange_lag", "exchange_rates", "operation_date",
       "first_payment_date", "total_term_months", "final_maturity_date", "principal_grace_months",
       "interest_grace_months", "grace_action", "grace_interest_behavior", "amortization_trigger",
       "principal_installments", "interest_installments", "principal_frequency", "interest_frequency",

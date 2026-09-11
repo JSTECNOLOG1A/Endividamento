@@ -55,6 +55,7 @@ const defaultForm = {
   indexer: "NA",
   indexer_spread: "0",
   interest_day_count_convention: "dias_corridos_360",
+  indexer_capitalization_mode: "paga_junto",
   operation_date: new Date().toISOString().split("T")[0],
   calculation_system: "SAC",
   total_term_months: "",
@@ -131,6 +132,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       indexer: data.indexer || "NA",
       indexer_spread: data.indexer_spread || "0",
       interest_day_count_convention: data.interest_day_count_convention || "dias_corridos_360",
+      indexer_capitalization_mode: data.indexer_capitalization_mode || "paga_junto",
       operation_date: data.operation_date || new Date().toISOString().split("T")[0],
       calculation_system: data.calculation_system || "SAC",
       total_term_months: data.total_term_months !== undefined && data.total_term_months !== null ? data.total_term_months.toString() : "",
@@ -1092,6 +1094,61 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </p>
             </div>
           </div>
+          {form.indexer !== "NA" && (
+            <div className={gridCols2}>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                  O que acontece com a correção do indexador a cada vencimento?
+                </Label>
+                <div className="space-y-2">
+                  <label
+                    className={`flex gap-2.5 items-start rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
+                      form.indexer_capitalization_mode === "paga_junto"
+                        ? "border-blue-400 bg-blue-50/60"
+                        : "border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="indexer_capitalization_mode"
+                      className="mt-0.5"
+                      checked={form.indexer_capitalization_mode === "paga_junto"}
+                      onChange={() => update("indexer_capitalization_mode", "paga_junto")}
+                    />
+                    <span>
+                      <span className="font-medium text-sm block text-slate-800">Entra na parcela paga</span>
+                      <span className="text-xs text-slate-500">
+                        Padrão de hoje. O boleto de cada vencimento já inclui a correção do
+                        indexador junto com o spread.
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    className={`flex gap-2.5 items-start rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
+                      form.indexer_capitalization_mode === "capitaliza_saldo"
+                        ? "border-blue-400 bg-blue-50/60"
+                        : "border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="indexer_capitalization_mode"
+                      className="mt-0.5"
+                      checked={form.indexer_capitalization_mode === "capitaliza_saldo"}
+                      onChange={() => update("indexer_capitalization_mode", "capitaliza_saldo")}
+                    />
+                    <span>
+                      <span className="font-medium text-sm block text-slate-800">Fica dentro da dívida (capitaliza)</span>
+                      <span className="text-xs text-slate-500">
+                        Só o spread é cobrado no boleto. A correção do indexador se soma ao
+                        saldo devedor e é quitada junto com o principal.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
           <Separator />
           <div className="space-y-2">
             <SubsectionHeading icon={LayoutList}>Sistema de Amortização</SubsectionHeading>

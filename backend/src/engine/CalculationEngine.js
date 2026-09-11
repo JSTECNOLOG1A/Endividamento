@@ -556,6 +556,10 @@ export async function calculateAmortizationSchedule(params) {
     // Default preserva o comportamento histórico quando o contrato ainda
     // não tem a convenção salva (contratos criados antes desta feature).
     interestDayCountConvention = (indexer === "NA" ? "dias_corridos_360" : "dias_uteis_252"),
+    // Só se aplica ao modo SPREAD do indexador (não PERCENTAGE). Default
+    // preserva o comportamento histórico: indexador e spread sempre pagos
+    // juntos, num valor só.
+    indexerCapitalizationMode = "paga_junto",
     operationDate: rawOperationDate,
     firstPaymentDate: rawFirstPaymentDate, // Dia de referência dos vencimentos
     first_payment_date: rawFirstPaymentDateSnake,
@@ -1092,6 +1096,11 @@ export async function calculateAmortizationSchedule(params) {
     let jurosVariaveisMes = 0;
     let indexerPeriodRate = 0;
     let indexerProjected = false;
+    // Correção do indexador que não é paga na parcela — some do boleto e
+    // capitaliza direto no saldo (ver sdAtualizadoUSD mais abaixo). Só existe
+    // quando indexerCapitalizationMode === "capitaliza_saldo" no modo SPREAD;
+    // em qualquer outro caso fica 0 e nada muda.
+    let indexerCorrectionCapitalized = 0;
     if (indexer !== "NA") {
      // Delegar ao factory de indexadores
      const indexAccum = indexerFactory.getFactor(indexer, toISODateLocal(prevDate), toISODateLocal(evt.date), holidays);
@@ -1102,6 +1111,7 @@ export async function calculateAmortizationSchedule(params) {
        // spread — é uma fórmula multiplicativa própria, mutuamente exclusiva
        // com o modo SPREAD.
        indexerPeriodRate = Math.pow(indexAccum.factor, indexerPercentage / 100) - 1;
+       jurosVariaveisMes = sdInicialUSD * indexerPeriodRate;
      } else {
        // Convenção do spread contratual é configurável por contrato
        // (interestDayCountConvention) — o fator do indexador em si
@@ -1111,14 +1121,21 @@ export async function calculateAmortizationSchedule(params) {
          { dias, du, dias30360: days30360(prevDate, evt.date) },
          interestDayCountConvention
        );
-       // REGRA 1 (Imutável): CAPITALIZAÇÃO COMPOSTA
-       // Indexador e spread SEMPRE multiplicam (não somam)
-       // Fórmula: (índice × (1 + spread)) - 1
-       // Justificativa: Em mercado financeiro, dois fatores capitalizam compostos
-       // Diferença em milhões: centavos se tornam milhares ao longo dos anos
-       indexerPeriodRate = (indexAccum.factor * (1 + spreadRate)) - 1;
+       if (indexerCapitalizationMode === "capitaliza_saldo") {
+         // Só o spread é cobrado na parcela; a correção do indexador
+         // (fator - 1) não entra no que é pago — capitaliza no saldo.
+         jurosVariaveisMes = sdInicialUSD * indexAccum.factor * spreadRate;
+         indexerCorrectionCapitalized = sdInicialUSD * (indexAccum.factor - 1);
+       } else {
+         // REGRA 1 (Imutável): CAPITALIZAÇÃO COMPOSTA
+         // Indexador e spread SEMPRE multiplicam (não somam)
+         // Fórmula: (índice × (1 + spread)) - 1
+         // Justificativa: Em mercado financeiro, dois fatores capitalizam compostos
+         // Diferença em milhões: centavos se tornam milhares ao longo dos anos
+         indexerPeriodRate = (indexAccum.factor * (1 + spreadRate)) - 1;
+         jurosVariaveisMes = sdInicialUSD * indexerPeriodRate;
+       }
      }
-     jurosVariaveisMes = sdInicialUSD * indexerPeriodRate;
 
      // Rastrear se há projeção para warning
      if (indexAccum.hasProjection) {
@@ -1161,7 +1178,15 @@ export async function calculateAmortizationSchedule(params) {
 
     // Delegar cálculo de amortização e prestação à estratégia (em USD)
     const isLastPayment = i === mergedEvents.length - 1;
-    const strategyResult = strategy.calculatePayment(evt, jurosTotal, acumulatedUnpaidInterest, isLastPayment, sdInicialUSD + jurosTotal, sdInicialUSD, principalPaymentIndex, effectiveGraceInterestBehavior);
+    // Na última parcela, a correção do indexador capitalizada NESTE mesmo
+    // período (indexerCapitalizationMode === "capitaliza_saldo") precisa
+    // entrar no saldo que a estratégia usa pra liquidar tudo — senão o
+    // contrato fecha com sobra (o "isLastPayment ? sdInicial : ..." das
+    // estratégias absorve o saldo ANTES dessa correção, deixando resíduo).
+    // Fora da última parcela ou fora desse modo, indexerCorrectionCapitalized
+    // é 0 e isso não muda nada.
+    const sdInicialParaEstrategia = isLastPayment ? (sdInicialUSD + indexerCorrectionCapitalized) : sdInicialUSD;
+    const strategyResult = strategy.calculatePayment(evt, jurosTotal, acumulatedUnpaidInterest, isLastPayment, sdInicialParaEstrategia + jurosTotal, sdInicialParaEstrategia, principalPaymentIndex, effectiveGraceInterestBehavior);
     
     // 🔐 PADRONIZAÇÃO: Garantir que todos os campos obrigatórios existam
     const {
@@ -1192,7 +1217,14 @@ export async function calculateAmortizationSchedule(params) {
       // Pagamento normal: SD não é afetado por juros (serão pagos na prestação)
       sdAtualizadoUSD = sdInicialUSD;
     }
-    
+
+    // Correção do indexador não paga (indexerCapitalizationMode ===
+    // "capitaliza_saldo") soma no saldo independente do comportamento de
+    // carência acima — as duas capitalizações (carência e indexador) somam
+    // quando coincidirem, cada uma calculada separadamente. Fica 0 e não
+    // muda nada quando o modo é o padrão ("paga_junto").
+    sdAtualizadoUSD += indexerCorrectionCapitalized;
+
     // 🔐 ETAPA 2: Shadow Calculation para Saldo Atualizado
     if (precisionAudit && jurosCapitalizados > 0) {
       const sdAtualizadoUSD_decimal = toNumber(toDecimal(sdInicialUSD).plus(toDecimal(jurosCapitalizados)));
@@ -1331,6 +1363,8 @@ export async function calculateAmortizationSchedule(params) {
       jurosVariaveisMes: roundTo(jurosVariaveisBRL, 2),
       jurosAcruados: roundTo(jurosAcruados || 0, 2),
       jurosCapitalizados: roundTo(jurosCapitalizados, 2),
+      indexerCorrectionCapitalized: roundTo(indexerCorrectionCapitalized, 2),
+      indexerCorrectionCapitalizedBRL: roundTo(isUSD ? indexerCorrectionCapitalized * currentPtaxRate : indexerCorrectionCapitalized, 2),
       jurosPagos: roundTo(jurosPagos, 2),
       sdAtualizado: roundTo(sdAtualizadoBRL, 2),
       amortizacao: roundTo(amortizacaoBRL, 2),
@@ -1367,10 +1401,10 @@ export async function calculateAmortizationSchedule(params) {
       if (!Number.isFinite(f)) throw new Error(`[FINANCIAL_INTEGRITY_ERROR] Parcela ${i + 1}: Campo inválido`);
     });
     totalAmortization += (row.amortizacao || 0);
-    totalCapitalizado += (row.jurosCapitalizadosBRL || 0);
+    totalCapitalizado += (row.jurosCapitalizadosBRL || 0) + (row.indexerCorrectionCapitalizedBRL || 0);
     if (isUSD && row.amortizacao_USD !== null) {
       totalAmortizationUSD += (row.amortizacao_USD || 0);
-      totalCapitalizadoUSD += (row.jurosCapitalizados || 0);
+      totalCapitalizadoUSD += (row.jurosCapitalizados || 0) + (row.indexerCorrectionCapitalized || 0);
     }
     if (row.sdFinal < 0) maxNegativeValue = Math.min(maxNegativeValue, row.sdFinal);
     if (i < schedule.length - 1 && isUSD && Math.abs(row.sdFinal_USD - schedule[i + 1].sdInicial_USD) > 0.01) {
