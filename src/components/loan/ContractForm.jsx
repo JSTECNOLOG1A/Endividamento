@@ -54,6 +54,7 @@ const defaultForm = {
   fixed_rate: "",
   indexer: "NA",
   indexer_spread: "0",
+  interest_day_count_convention: "dias_corridos_360",
   operation_date: new Date().toISOString().split("T")[0],
   calculation_system: "SAC",
   total_term_months: "",
@@ -129,6 +130,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       fixed_rate: data.fixed_rate || "",
       indexer: data.indexer || "NA",
       indexer_spread: data.indexer_spread || "0",
+      interest_day_count_convention: data.interest_day_count_convention || "dias_corridos_360",
       operation_date: data.operation_date || new Date().toISOString().split("T")[0],
       calculation_system: data.calculation_system || "SAC",
       total_term_months: data.total_term_months !== undefined && data.total_term_months !== null ? data.total_term_months.toString() : "",
@@ -1066,6 +1068,29 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 <CurrencyInput type="percent" value={form.indexer_spread} onChange={(e) => update("indexer_spread", e.target.value)} className="h-9" />
               </div>
             )}
+          </div>
+          <div className={gridCols2}>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Convenção de Cálculo dos Juros Remuneratórios
+              </Label>
+              <Select
+                value={form.interest_day_count_convention}
+                onValueChange={(v) => update("interest_day_count_convention", v)}
+              >
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="dias_corridos_360">Dias corridos / 360</SelectItem>
+                  <SelectItem value="dias_corridos_365">Dias corridos / 365</SelectItem>
+                  <SelectItem value="dias_uteis_252">Dias úteis / 252</SelectItem>
+                  <SelectItem value="convencao_30_360">30/360</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500">
+                Padrão inicial da ferramenta. Confira a convenção prevista para a operação.
+                Não altera o cálculo do indexador (CDI/SELIC), que segue sempre 252 dias úteis.
+              </p>
+            </div>
           </div>
           <Separator />
           <div className="space-y-2">

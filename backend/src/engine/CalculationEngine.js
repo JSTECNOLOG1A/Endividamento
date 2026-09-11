@@ -325,6 +325,40 @@ function indexerFactorForPeriod(annualRate, businessDays) {
   return Math.pow(1 + annualRate / 100, businessDays / 252) - 1;
 }
 
+// Contagem 30E/360: cada mês tratado como 30 dias (dia 31 vira 30 em ambas
+// as pontas). Convenção documentada, distinta de dias corridos.
+function days30360(d1, d2) {
+  const date1 = new Date(d1);
+  const date2 = new Date(d2);
+  const day1 = date1.getDate() === 31 ? 30 : date1.getDate();
+  const day2 = date2.getDate() === 31 ? 30 : date2.getDate();
+  return (
+    (date2.getFullYear() - date1.getFullYear()) * 360 +
+    (date2.getMonth() - date1.getMonth()) * 30 +
+    (day2 - day1)
+  );
+}
+
+// Taxa do juro remuneratório/spread contratual pro período, na convenção
+// escolhida por contrato (interest_day_count_convention). NUNCA usada para o
+// fator do próprio indexador (CDI/SELIC etc.) — esse mantém sua convenção
+// própria (252 DU, ver indexers/CDIIndexer.js), imutável. `dias30360` é
+// calculado pelo chamador (não a partir de `dias`) pra poder respeitar o
+// mesmo override de 30 dias fixos do PRICE prefixado quando aplicável.
+function remuneratoryRateForPeriod(annualRate, { dias, du, dias30360: dias30 }, convention) {
+  switch (convention) {
+    case "dias_corridos_365":
+      return Math.pow(1 + annualRate / 100, dias / 365) - 1;
+    case "dias_uteis_252":
+      return Math.pow(1 + annualRate / 100, du / 252) - 1;
+    case "convencao_30_360":
+      return Math.pow(1 + annualRate / 100, dias30 / 360) - 1;
+    case "dias_corridos_360":
+    default:
+      return Math.pow(1 + annualRate / 100, dias / 360) - 1;
+  }
+}
+
 
 
 // Mapeia frequência para meses
@@ -517,6 +551,11 @@ export async function calculateAmortizationSchedule(params) {
     // Mutuamente exclusivos: em modo PERCENTAGE, indexerSpread é ignorado.
     indexerMode = "SPREAD",
     indexerPercentage = 100,
+    // Convenção de contagem de dias do juro remuneratório/spread (não do
+    // fator do indexador em si, que é sempre 252 DU — ver CDIIndexer.js).
+    // Default preserva o comportamento histórico quando o contrato ainda
+    // não tem a convenção salva (contratos criados antes desta feature).
+    interestDayCountConvention = (indexer === "NA" ? "dias_corridos_360" : "dias_uteis_252"),
     operationDate: rawOperationDate,
     firstPaymentDate: rawFirstPaymentDate, // Dia de referência dos vencimentos
     first_payment_date: rawFirstPaymentDateSnake,
@@ -1033,8 +1072,21 @@ export async function calculateAmortizationSchedule(params) {
     // mexer em PRICEStrategy.js. PRICE indexado (CDI/SELIC) fica de fora: ali a
     // taxa futura é desconhecida e precisa refletir o dia corrido real (ver
     // docstring de PRICEStrategy.js sobre por que recalcula o PMT nesse caso).
+    // NOTA: o override de dias=30 fixa só o numerador; se o contrato PRICE
+    // prefixado escolher a convenção "dias_uteis_252", `du` (dias úteis reais)
+    // ainda varia mês a mês e a prestação pode voltar a balançar — combinação
+    // incomum (DU/252 normalmente é convenção do próprio indexador), não
+    // resolvida nesta entrega.
     const priceFixedNoIndexer = calculationSystem === "PRICE" && indexer === "NA";
-    const fixedInterestRate = fixedRateForPeriod(fixedRate, priceFixedNoIndexer ? 30 : dias);
+    const fixedInterestRate = remuneratoryRateForPeriod(
+      fixedRate,
+      {
+        dias: priceFixedNoIndexer ? 30 : dias,
+        du,
+        dias30360: priceFixedNoIndexer ? 30 : days30360(prevDate, evt.date),
+      },
+      interestDayCountConvention
+    );
     const jurosFixosMes = sdInicialUSD * fixedInterestRate;
 
     let jurosVariaveisMes = 0;
@@ -1051,7 +1103,14 @@ export async function calculateAmortizationSchedule(params) {
        // com o modo SPREAD.
        indexerPeriodRate = Math.pow(indexAccum.factor, indexerPercentage / 100) - 1;
      } else {
-       const spreadRate = indexerFactorForPeriod(indexerSpread, du);
+       // Convenção do spread contratual é configurável por contrato
+       // (interestDayCountConvention) — o fator do indexador em si
+       // (indexAccum.factor, acima) nunca muda, continua sempre 252 DU.
+       const spreadRate = remuneratoryRateForPeriod(
+         indexerSpread,
+         { dias, du, dias30360: days30360(prevDate, evt.date) },
+         interestDayCountConvention
+       );
        // REGRA 1 (Imutável): CAPITALIZAÇÃO COMPOSTA
        // Indexador e spread SEMPRE multiplicam (não somam)
        // Fórmula: (índice × (1 + spread)) - 1
