@@ -1,5 +1,4 @@
 import {
-  Calculator,
   FolderOpen,
   Database,
   Building,
@@ -16,7 +15,6 @@ import { SETTINGS_SECTIONS } from "./settingsNavigation";
 
 /** Navegação do layout Classic — links diretos (sem submenu). */
 export const NAV_ITEMS = [
-  { name: "Calculadora", page: "Simulator", icon: Calculator },
   { name: "Contratos", page: "Contracts", icon: FolderOpen },
   { name: "Contas Garantidas", page: "GuaranteedAccounts", icon: RefreshCw },
   { name: "Governança", page: "Governance", icon: Building },
@@ -31,12 +29,16 @@ export const NAV_ITEMS = [
     ],
   },
   { name: "Indexadores e Feriados", page: "CDIManager", icon: Database },
-  { name: "Manual", page: "UserManual", icon: BookOpen },
+  { name: "Manual e FAQ", page: "UserManual", icon: BookOpen },
   { name: "Configurações", page: "Settings", icon: Settings },
 ];
 
 export const PAGE_LABELS = {
   Onboarding: "Configuração inicial",
+  // Calculadora saiu da sidebar — acessada via "+ Novo Contrato" dentro de
+  // Contratos — mas a rota /Simulator continua existindo (editar contrato,
+  // reabrir, duplicar), então o breadcrumb ainda precisa de um rótulo.
+  Simulator: "Calculadora",
 };
 
 function buildModernNavItems() {

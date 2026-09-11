@@ -1,8 +1,91 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, FileText, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Download, FileText, Loader2, Search, HelpCircle, ChevronDown } from "lucide-react";
 import { jsPDF } from "jspdf";
+import { FAQ_ITEMS, FAQ_CATEGORIES } from "@/data/faqContent";
+
+function FaqPanel() {
+  const [query, setQuery] = useState("");
+  const [openId, setOpenId] = useState(null);
+
+  const normalized = query.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!normalized) return null;
+    return FAQ_ITEMS.filter((item) =>
+      [item.question, item.answer, item.category].some((field) =>
+        field.toLowerCase().includes(normalized)
+      )
+    );
+  }, [normalized]);
+
+  const popular = useMemo(() => FAQ_ITEMS.filter((item) => item.popular), []);
+  const listToShow = filtered ?? popular;
+  const showingSearch = filtered !== null;
+
+  return (
+    <div className="space-y-5">
+      <div className="relative">
+        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar por assunto — ex: aprovação, CDI, PRICE, IOF..."
+          className="pl-9 h-10"
+        />
+      </div>
+
+      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+        {showingSearch
+          ? `${listToShow.length} resultado${listToShow.length === 1 ? "" : "s"} para "${query}"`
+          : "Perguntas mais frequentes"}
+      </p>
+
+      {listToShow.length === 0 ? (
+        <p className="text-sm text-slate-500 text-center py-8">
+          Nenhuma pergunta encontrada. Tente outro termo.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {listToShow.map((item) => {
+            const isOpen = openId === item.id;
+            return (
+              <div key={item.id} className="border border-slate-200 rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setOpenId(isOpen ? null : item.id)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <Badge variant="outline" className="text-[10px] shrink-0">{item.category}</Badge>
+                    <span className="text-sm font-medium text-slate-800 truncate">{item.question}</span>
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {isOpen && (
+                  <div className="px-4 pb-4 pt-1">
+                    <p className="text-sm text-slate-600 leading-relaxed">{item.answer}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!showingSearch && (
+        <p className="text-xs text-slate-400 text-center pt-2">
+          {FAQ_ITEMS.length} perguntas cadastradas em {FAQ_CATEGORIES.length} assuntos — use a busca acima pra ver todas.
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function UserManual() {
   const [generating, setGenerating] = useState(false);
@@ -153,17 +236,27 @@ export default function UserManual() {
     );
 
     addSubtitle("Como calcular uma operação");
+    addBullet("Na tela de Contratos, clique em \"+ Novo Contrato\" — a Calculadora não fica mais na barra lateral, é acessada por esse botão");
     addBullet("Preencha o formulário com os dados da operação: grupo econômico, entidade, banco, número do contrato");
     addBullet("Selecione a categoria (Empréstimos, Financiamentos, Mútuos com Partes Relacionadas ou Mútuos com Terceiros) e o tipo de operação");
-    addBullet("Informe o valor da operação, taxa de juros e data de operação");
+    addBullet("Informe o valor da operação, taxa de juros e a Data de Liberação (data em que o recurso efetivamente caiu na conta — é ela que conta pro cálculo)");
     addBullet("Configure o sistema de cálculo (SAC, PRICE, AMERICANO, BULLET ou PERCENTAGE_RESIDUAL)");
     addBullet("Defina prazos, carências e frequências de pagamento");
     addBullet("Clique em \"Calcular\" para gerar a tabela de amortização");
 
+    addSubtitle("Conferência lado a lado com o PDF do contrato");
+    addBullet("Enquanto não há cálculo feito, o espaço à direita vira uma área de importação: arraste o PDF do contrato pra qualquer lugar dali, ou clique pra escolher o arquivo");
+    addBullet("O PDF fica visível ali mesmo, lado a lado com o formulário, facilitando conferir os dados enquanto preenche");
+    addBullet("Ao clicar em \"Calcular\", essa visualização é substituída pela tabela de amortização — o PDF continua anexado ao contrato, só a visualização muda");
+
     addSubtitle("Parâmetros disponíveis");
     addBullet("Valor da operação e valor em moeda estrangeira (quando aplicável)");
+    addBullet("Data de Liberação (usada no cálculo) e Data da Operação (emissão/assinatura, apenas informativa)");
     addBullet("Taxa de juros fixa (% a.a.) e spread sobre indexador");
     addBullet("Indexador: CDI, SELIC, IPCA ou NA (sem indexador)");
+    addBullet("Convenção de Cálculo dos Juros Remuneratórios: dias corridos/360, dias corridos/365, dias úteis/252 ou 30/360 — não afeta o fator do próprio indexador, que é sempre 252 dias úteis");
+    addBullet("Em contratos com indexador: se a correção do CDI/SELIC entra na parcela paga junto com o spread, ou se capitaliza no saldo devedor (só o spread é cobrado no boleto)");
+    addBullet("Conta bancária de liberação, vinculada à conta contábil usada no fechamento");
     addBullet("Carência de principal e de juros com comportamento (capitalizar, pagar ou balloon)");
     addBullet("Quantidade de parcelas e frequências de principal e juros");
     addBullet("Seguros: MIP, DFI e outros (embutidos na parcela ou separados)");
@@ -185,17 +278,23 @@ export default function UserManual() {
     );
 
     addSubtitle("Fluxo de status");
-    addBullet("Rascunho — Contrato em edição, salvo automaticamente no navegador (autosave)");
-    addBullet("Pendente — Contrato salvo e aguardando aprovação (o botão Salvar já envia para aprovação)");
-    addBullet("Aprovado — Contrato aprovado e pronto para contabilização");
-    addBullet("Devolvido para Correção — Recusado pelo aprovador com um comentário; volta para edição e, ao ser salvo novamente, retorna para Pendente");
+    addBullet("Rascunho — Contrato em edição, salvo automaticamente no navegador (autosave). É um estado só temporário: depois do primeiro envio para aprovação, o contrato nunca mais volta a ser Rascunho");
+    addBullet("Pendente — Enviado para aprovação, aguardando decisão");
+    addBullet("Aprovado — Aceito, pronto para contabilização e geração de títulos");
+    addBullet("Devolvido para Correção — Recusado por um aprovador com um comentário; volta para edição e, ao ser reenviado, retorna para Pendente (nunca para Rascunho)");
+
+    addSubtitle("Aprovação em 2 níveis");
+    addBullet("Todo contrato passa por Nível 1 e depois Nível 2, nessa ordem, antes de virar Aprovado");
+    addBullet("O nível de cada usuário é definido em Configurações → Usuários, independente do perfil de acesso (administrador/usuário/visualizador)");
+    addBullet("Quem tem nível 2 também pode registrar o nível 1 (nível 2 inclui o nível 1); quem cadastrou o contrato pode aprová-lo, desde que tenha o nível necessário");
 
     addSubtitle("Funcionalidades");
     addBullet("Listagem de contratos com filtros por status e banco");
     addBullet("Visualização detalhada com tabela de amortização e gráficos");
     addBullet("Edição de datas de vencimento das parcelas");
-    addBullet("Workflow de aprovação com registro de auditoria");
-    addBullet("Anexar PDF do contrato assinado");
+    addBullet("Workflow de aprovação em 2 níveis, com registro de auditoria");
+    addBullet("Anexar PDF do contrato assinado, com conferência lado a lado na revisão");
+    addBullet("Reabertura de contrato aprovado para edição (proprietário reabre direto; administrador comum precisa de confirmação de outro administrador)");
 
     // ========== 4. GOVERNANÇA ==========
     doc.addPage();
@@ -400,64 +499,100 @@ export default function UserManual() {
 
   return (
     <div className="w-full px-4 sm:px-6 py-12">
-      <Card className="border-slate-200 shadow-lg">
-        <CardHeader className="text-center pb-4">
-          <div className="flex justify-center mb-3">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-md">
-              <FileText className="w-7 h-7 text-white" />
-            </div>
+      <div className="max-w-3xl mx-auto mb-6 text-center">
+        <div className="flex justify-center mb-3">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-md">
+            <FileText className="w-7 h-7 text-white" />
           </div>
-          <CardTitle className="text-xl font-bold text-slate-900">
-            Manual de Uso — AllDebt
-          </CardTitle>
-          <p className="text-sm text-slate-600 mt-1">
-            Gere e baixe o manual completo em PDF para enviar aos usuários
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-            <h3 className="text-sm font-semibold text-slate-700 mb-2">Conteúdo do manual:</h3>
-            <ul className="text-xs text-slate-600 space-y-1.5">
-              <li>• Visão geral da plataforma e módulos</li>
-              <li>• Calculadora de operações (passo a passo)</li>
-              <li>• Gestão de contratos e workflow de aprovação</li>
-              <li>• Governança (grupos, entidades e bancos)</li>
-              <li>• Contabilidade — visão CPC 26</li>
-              <li>• Consolidação de dívidas por grupo econômico</li>
-              <li>• Indexadores (CDI, SELIC, PTAX) e feriados</li>
-              <li>• Sistemas de amortização (SAC, PRICE, BULLET...)</li>
-              <li>• Operações em moeda estrangeira (USD)</li>
-              <li>• Exportação de relatórios CSV</li>
-              <li>• Glossário de termos</li>
-            </ul>
-          </div>
+        </div>
+        <h1 className="text-xl font-bold text-slate-900">Manual e FAQ — AllDebt</h1>
+        <p className="text-sm text-slate-600 mt-1">
+          Baixe o manual completo em PDF ou busque uma dúvida rápida no FAQ
+        </p>
+      </div>
 
-          <div className="flex justify-center">
-            <Button
-              onClick={generatePDF}
-              disabled={generating}
-              size="lg"
-              className="gap-2 bg-blue-600 hover:bg-blue-700"
-            >
-              {generating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Gerando PDF...
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  Baixar Manual (PDF)
-                </>
-              )}
-            </Button>
-          </div>
+      <Tabs defaultValue="manual" className="max-w-3xl mx-auto">
+        <TabsList className="grid grid-cols-2 w-full max-w-xs mx-auto mb-6">
+          <TabsTrigger value="manual" className="gap-1.5">
+            <FileText className="w-3.5 h-3.5" /> Manual
+          </TabsTrigger>
+          <TabsTrigger value="faq" className="gap-1.5">
+            <HelpCircle className="w-3.5 h-3.5" /> FAQ
+          </TabsTrigger>
+        </TabsList>
 
-          <p className="text-center text-xs text-slate-500">
-            O PDF será gerado localmente no seu navegador e baixado automaticamente.
-          </p>
-        </CardContent>
-      </Card>
+        <TabsContent value="manual">
+          <Card className="border-slate-200 shadow-lg">
+            <CardHeader className="text-center pb-4">
+              <CardTitle className="text-xl font-bold text-slate-900">
+                Manual de Uso — AllDebt
+              </CardTitle>
+              <p className="text-sm text-slate-600 mt-1">
+                Gere e baixe o manual completo em PDF para enviar aos usuários
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                <h3 className="text-sm font-semibold text-slate-700 mb-2">Conteúdo do manual:</h3>
+                <ul className="text-xs text-slate-600 space-y-1.5">
+                  <li>• Visão geral da plataforma e módulos</li>
+                  <li>• Calculadora de operações (passo a passo)</li>
+                  <li>• Gestão de contratos e workflow de aprovação</li>
+                  <li>• Governança (grupos, entidades e bancos)</li>
+                  <li>• Contabilidade — visão CPC 26</li>
+                  <li>• Consolidação de dívidas por grupo econômico</li>
+                  <li>• Indexadores (CDI, SELIC, PTAX) e feriados</li>
+                  <li>• Sistemas de amortização (SAC, PRICE, BULLET...)</li>
+                  <li>• Operações em moeda estrangeira (USD)</li>
+                  <li>• Exportação de relatórios CSV</li>
+                  <li>• Glossário de termos</li>
+                </ul>
+              </div>
+
+              <div className="flex justify-center">
+                <Button
+                  onClick={generatePDF}
+                  disabled={generating}
+                  size="lg"
+                  className="gap-2 bg-blue-600 hover:bg-blue-700"
+                >
+                  {generating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Gerando PDF...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      Baixar Manual (PDF)
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <p className="text-center text-xs text-slate-500">
+                O PDF será gerado localmente no seu navegador e baixado automaticamente.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="faq">
+          <Card className="border-slate-200 shadow-lg">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold text-slate-800">
+                Perguntas frequentes
+              </CardTitle>
+              <p className="text-xs text-slate-500">
+                Uso do sistema e matemática financeira — busque por assunto ou navegue pelas mais comuns.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <FaqPanel />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -57,6 +57,7 @@ const defaultForm = {
   interest_day_count_convention: "dias_corridos_360",
   indexer_capitalization_mode: "paga_junto",
   operation_date: new Date().toISOString().split("T")[0],
+  emission_date: "",
   calculation_system: "SAC",
   total_term_months: "",
   final_maturity_date: "",
@@ -134,6 +135,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       interest_day_count_convention: data.interest_day_count_convention || "dias_corridos_360",
       indexer_capitalization_mode: data.indexer_capitalization_mode || "paga_junto",
       operation_date: data.operation_date || new Date().toISOString().split("T")[0],
+      emission_date: data.emission_date || "",
       calculation_system: data.calculation_system || "SAC",
       total_term_months: data.total_term_months !== undefined && data.total_term_months !== null ? data.total_term_months.toString() : "",
       final_maturity_date: data.final_maturity_date || "",
@@ -1018,7 +1020,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <div className={gridCols3}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Data da Operação *
+                Data de Liberação *
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
@@ -1026,14 +1028,34 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-xs">
                       <p className="text-xs">
-                        Data de assinatura/desembolso do contrato. Se o "Primeiro Vencimento" abaixo ficar
-                        vazio, esta data também vira o ponto de partida para contar as parcelas.
+                        Data em que o recurso efetivamente caiu na conta (desembolso). É esta data que
+                        conta pro cálculo — se o "Primeiro Vencimento" abaixo ficar vazio, ela também
+                        vira o ponto de partida para contar as parcelas.
                       </p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </Label>
               <Input type="date" value={form.operation_date} onChange={(e) => update("operation_date", e.target.value)} className="h-9" required />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Data da Operação
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        Data de emissão/assinatura do contrato, quando diferente da liberação do
+                        recurso. Apenas informativa — não entra no cálculo.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input type="date" value={form.emission_date || ""} onChange={(e) => update("emission_date", e.target.value)} className="h-9" />
             </div>
           </div>
           <Separator />

@@ -5,9 +5,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RotateCcw, X, FileText, Trash2, AlertTriangle, ArrowLeft } from "lucide-react";
+import { RotateCcw, X, FileText, Trash2, AlertTriangle, ArrowLeft, UploadCloud, ExternalLink } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "../utils";
+import { withAuthToken } from "../lib/documentActions";
 import ContractForm from "../components/loan/ContractForm";
 import AmortizationTable from "../components/loan/AmortizationTable";
 import ScheduleChart from "../components/loan/ScheduleChart";
@@ -95,6 +96,10 @@ export default function Simulator() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [uploadedPdfUrl, setUploadedPdfUrl] = useState(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  // Arrastar o PDF em qualquer lugar do painel de resultado (enquanto não há
+  // cálculo) já anexa e mostra o contrato ali mesmo — mesmo upload de sempre
+  // (handlePdfUpload), só que também aceita "solto" na tela, não só o botão.
+  const [isDraggingPdf, setIsDraggingPdf] = useState(false);
   // URL ?edit= / sessão: não monta formulário vazio antes dos dados.
   // A sessão sobrevive a remount do LayoutProvider (que limpava a URL).
   const [editBootstrap, setEditBootstrap] = useState(() => resolveEditBootstrap());
@@ -188,6 +193,7 @@ export default function Simulator() {
         interest_day_count_convention: contract.interest_day_count_convention || "dias_corridos_360",
         indexer_capitalization_mode: contract.indexer_capitalization_mode || "paga_junto",
         operation_date: contract.operation_date || new Date().toISOString().split("T")[0],
+        emission_date: contract.emission_date || "",
         first_payment_date: contract.first_payment_date || "",
         principal_grace_months: contract.principal_grace_months || 0,
         interest_grace_months: contract.interest_grace_months || 0,
@@ -592,6 +598,7 @@ export default function Simulator() {
       interest_day_count_convention: formParams.interest_day_count_convention,
       indexer_capitalization_mode: formParams.indexer_capitalization_mode,
       operation_date: formParams.operation_date,
+      emission_date: formParams.emission_date || null,
       first_payment_date: formParams.first_payment_date || null,
       principal_grace_months: formParams.principal_grace_months,
       interest_grace_months: formParams.interest_grace_months,
@@ -701,6 +708,23 @@ export default function Simulator() {
     }
   };
 
+  const handlePdfDragOver = (e) => {
+    e.preventDefault();
+    if (!isDraggingPdf) setIsDraggingPdf(true);
+  };
+
+  const handlePdfDragLeave = (e) => {
+    e.preventDefault();
+    setIsDraggingPdf(false);
+  };
+
+  const handlePdfDrop = (e) => {
+    e.preventDefault();
+    setIsDraggingPdf(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) handlePdfUpload(file);
+  };
+
   const clearDraft = (key) => {
     try {
       localStorage.removeItem(`endividamento_draft_${key}`);
@@ -799,6 +823,7 @@ export default function Simulator() {
         interest_day_count_convention: dataToSave.interest_day_count_convention,
         indexer_capitalization_mode: dataToSave.indexer_capitalization_mode,
         operation_date: dataToSave.operation_date,
+        emission_date: dataToSave.emission_date || null,
         first_payment_date: dataToSave.first_payment_date || null,
         principal_grace_months: dataToSave.principal_grace_months,
         interest_grace_months: dataToSave.interest_grace_months,
@@ -1036,29 +1061,72 @@ export default function Simulator() {
                 </TabsContent>
                 </Tabs>
             </div>
-          ) : isModernLayout ? (
-            <div className="flex flex-1 items-center justify-center min-h-[320px] lg:min-h-full rounded-xl border border-dashed border-[#E5E7EB] bg-white">
-              <div className="text-center px-6 py-12">
-                <div className="w-20 h-20 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-10 h-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold text-slate-700">Nenhum cálculo realizado</h3>
-                <p className="text-sm text-slate-500 mt-1">Preencha os parâmetros e clique em &quot;Calcular&quot;</p>
-              </div>
-            </div>
           ) : (
-            <div className="flex items-center justify-center h-full min-h-[400px]">
-              <div className="text-center">
-                <div className="w-20 h-20 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-10 h-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
+            <div
+              onDragOver={handlePdfDragOver}
+              onDragLeave={handlePdfDragLeave}
+              onDrop={handlePdfDrop}
+              className={`flex flex-1 flex-col min-h-[320px] ${isModernLayout ? "lg:min-h-full" : "h-full min-h-[400px]"} rounded-xl border-2 border-dashed transition-colors overflow-hidden ${
+                isDraggingPdf ? "border-blue-400 bg-blue-50/60" : "border-[#E5E7EB] bg-white"
+              }`}
+            >
+              {uploadedPdfUrl ? (
+                <div className="flex flex-col flex-1 min-h-0">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 shrink-0">
+                    <span className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5" /> PDF anexado
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <a
+                        href={withAuthToken(uploadedPdfUrl)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" /> Abrir em nova aba
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm("Deseja remover o PDF anexado?")) handlePdfUpload(null);
+                        }}
+                        className="text-xs text-red-600 hover:underline flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" /> Remover
+                      </button>
+                    </div>
+                  </div>
+                  <iframe
+                    src={withAuthToken(uploadedPdfUrl)}
+                    title="PDF do Contrato"
+                    className="w-full flex-1 border-0"
+                    style={{ minHeight: 360 }}
+                  />
                 </div>
-                <h3 className="text-lg font-semibold text-slate-700">Nenhum cálculo realizado</h3>
-                <p className="text-sm text-slate-500 mt-1">Preencha os parâmetros e clique em &quot;Calcular&quot;</p>
-              </div>
+              ) : (
+                <label className="flex flex-col flex-1 items-center justify-center cursor-pointer px-6 py-12 text-center">
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    disabled={isUploadingPdf}
+                    onChange={(e) => handlePdfUpload(e.target.files?.[0])}
+                  />
+                  <div className="w-20 h-20 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                    {isUploadingPdf ? (
+                      <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-500 rounded-full animate-spin" />
+                    ) : (
+                      <UploadCloud className="w-10 h-10 text-slate-300" />
+                    )}
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-700">Nenhum cálculo realizado</h3>
+                  <p className="text-sm text-slate-500 mt-1 max-w-sm">
+                    {isUploadingPdf
+                      ? "Enviando PDF..."
+                      : 'Preencha os parâmetros e clique em "Calcular", ou arraste o PDF do contrato aqui pra conferir lado a lado enquanto preenche.'}
+                  </p>
+                </label>
+              )}
             </div>
           )}
         </div>

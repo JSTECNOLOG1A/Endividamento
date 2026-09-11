@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, FileText, Edit, Clock, CheckCircle, RotateCcw } from "lucide-react";
+import { ArrowLeft, FileText, Edit, Clock, CheckCircle, RotateCcw, Plus } from "lucide-react";
 import ContractsList from "../components/loan/ContractsList";
 import AmortizationTable from "../components/loan/AmortizationTable";
 import ScheduleChart from "../components/loan/ScheduleChart";
@@ -321,9 +322,17 @@ export default function Contracts() {
   return (
     // Largura máxima da tela, como o padrão em todas as telas do sistema.
     <div className="w-full px-4 sm:px-6 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contratos</h1>
-        <p className="text-sm text-slate-600 mt-0.5">Visualize e gerencie os contratos cadastrados</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contratos</h1>
+          <p className="text-sm text-slate-600 mt-0.5">Visualize e gerencie os contratos cadastrados</p>
+        </div>
+        <Button asChild className="gap-1.5 shrink-0">
+          <Link to={createPageUrl("Simulator")}>
+            <Plus className="w-4 h-4" />
+            Novo Contrato
+          </Link>
+        </Button>
       </div>
 
       {/* Dashboard Cards */}
