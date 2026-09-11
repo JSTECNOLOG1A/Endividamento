@@ -498,21 +498,16 @@ export default function UserManual() {
   };
 
   return (
-    <div className="w-full px-4 sm:px-6 py-12">
-      <div className="max-w-3xl mx-auto mb-6 text-center">
-        <div className="flex justify-center mb-3">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-md">
-            <FileText className="w-7 h-7 text-white" />
-          </div>
-        </div>
-        <h1 className="text-xl font-bold text-slate-900">Manual e FAQ — AllDebt</h1>
-        <p className="text-sm text-slate-600 mt-1">
+    <div className="w-full px-4 sm:px-6 py-8">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Manual e FAQ</h1>
+        <p className="text-sm text-slate-600 mt-0.5">
           Baixe o manual completo em PDF ou busque uma dúvida rápida no FAQ
         </p>
       </div>
 
-      <Tabs defaultValue="manual" className="max-w-3xl mx-auto">
-        <TabsList className="grid grid-cols-2 w-full max-w-xs mx-auto mb-6">
+      <Tabs defaultValue="manual">
+        <TabsList className="mb-6">
           <TabsTrigger value="manual" className="gap-1.5">
             <FileText className="w-3.5 h-3.5" /> Manual
           </TabsTrigger>
