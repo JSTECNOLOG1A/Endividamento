@@ -8,6 +8,7 @@ import {
   Wallet,
   Receipt,
   Banknote,
+  FileSignature,
 } from "lucide-react";
 import { GOVERNANCE_SECTIONS } from "./governanceNavigation";
 import { SETTINGS_SECTIONS } from "./settingsNavigation";
@@ -29,6 +30,7 @@ export const NAV_ITEMS = [
   { name: "Indexadores e Feriados", page: "CDIManager", icon: Database },
   { name: "Manual e FAQ", page: "UserManual", icon: BookOpen },
   { name: "Configurações", page: "Settings", icon: Settings },
+  { name: "Proposta Comercial", page: "CommercialProposal", icon: FileSignature, platformAdminOnly: true },
 ];
 
 export const PAGE_LABELS = {
@@ -113,7 +115,9 @@ export function isNavGroupChildPage(pageName, layoutMode = "modern") {
 
 export function filterNavItemsForUser(items, user) {
   const isTenantAdmin = user?.role === "admin" || user?.tenant_role === "OWNER" || user?.platform_admin;
+  const isPlatformAdmin = Boolean(user?.platform_admin);
   return items
+    .filter((item) => !item.platformAdminOnly || isPlatformAdmin)
     .map((item) => {
       if (!item.children) return item;
       const children = item.children.filter((child) => !child.adminOnly || isTenantAdmin);

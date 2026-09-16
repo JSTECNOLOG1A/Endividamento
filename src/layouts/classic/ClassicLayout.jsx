@@ -25,7 +25,7 @@ import {
 import { useAuth } from "@/lib/AuthContext";
 import { usePlatform } from "@/lib/PlatformContext";
 import AllDebtLogo from "@/components/shared/AllDebtLogo";
-import { NAV_ITEMS, getNavGroupForPage } from "@/config/navigation";
+import { NAV_ITEMS, getNavGroupForPage, filterNavItemsForUser } from "@/config/navigation";
 
 function navClass(active) {
   return `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
@@ -38,6 +38,7 @@ function navClass(active) {
 export default function ClassicLayout({ children, currentPageName }) {
   const { user, logout } = useAuth();
   const { isMaster, tenants, tenantId, selectTenant, viewingAll } = usePlatform();
+  const visibleNavItems = React.useMemo(() => filterNavItemsForUser(NAV_ITEMS, user), [user]);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [mobileOpenGroups, setMobileOpenGroups] = React.useState(() => {
     const activeGroup = getNavGroupForPage(currentPageName, "classic");
@@ -82,7 +83,7 @@ export default function ClassicLayout({ children, currentPageName }) {
             </Link>
 
             <nav className="hidden md:flex items-center gap-1">
-              {NAV_ITEMS.map((item) => {
+              {visibleNavItems.map((item) => {
                 if (item.children) {
                   const childActive = item.children.some((child) => child.page === currentPageName);
                   return (
@@ -168,7 +169,7 @@ export default function ClassicLayout({ children, currentPageName }) {
 
         {mobileOpen && (
           <div className="md:hidden border-t border-slate-100 bg-white px-4 py-2">
-            {NAV_ITEMS.map((item) => {
+            {visibleNavItems.map((item) => {
               if (item.children) {
                 const childActive = item.children.some((child) => child.page === currentPageName);
                 const groupOpen = mobileOpenGroups[item.name] ?? childActive;
