@@ -171,7 +171,17 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
   // contrário do gridCols2 acima, NÃO colapsa pra 1 coluna em narrowColumn —
   // esses campos cabem lado a lado mesmo na largura estreita da coluna do
   // layout Moderno, e empilhados só desperdiçam altura de tela à toa.
-  const gridCols2Tight = "grid grid-cols-2 gap-3";
+  //
+  // gap-x-3/gap-y-3 em vez do atalho gap-3: existe uma regra global em
+  // modern-content.css (`main .grid.gap-3:has(label.uppercase)`) pensada
+  // pra uma barra de filtros em outra tela, que aplica `align-items: end`
+  // — como nossos rótulos também são uppercase, ela batia sem querer
+  // nessa grade também, fazendo o campo com rótulo mais curto "cair" pro
+  // fundo da linha em vez de ficar alinhado no topo com o outro (só
+  // visível no layout Moderno, por isso não aparecia nos testes no
+  // Clássico). gap-x-3/gap-y-3 dá o mesmo espaçamento sem casar com o
+  // seletor `.gap-3`.
+  const gridCols2Tight = "grid grid-cols-2 gap-x-3 gap-y-3";
   const [initialForm, setInitialForm] = useState(() => buildFormFromInitial(initialData));
   const [isLoaded, setIsLoaded] = useState(() => Boolean(initialData) || !isEditing);
   const [draftBanner, setDraftBanner] = useState(null);
