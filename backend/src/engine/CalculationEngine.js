@@ -584,6 +584,7 @@ export async function calculateAmortizationSchedule(params) {
     exchangeLag = 1, // NOVO: Defasagem PTAX (0=D, 1=D-1, 2=D-2)
     exchangeRates = [], // NOVO: Array de {rate_date, ptax_rate, source, created_at}
     amount_foreign = null, // NOVO: Valor em moeda estrangeira
+    disbursementSchedule = null, // NOVO: [{date, amount}] — liberação em parcelas (tranches)
   } = params;
   
   // 🔐 VALIDAÇÃO 1: Inputs críticos
@@ -715,10 +716,57 @@ export async function calculateAmortizationSchedule(params) {
   }
 
   // 4️⃣ QUARTO: Definir o saldo inicial para o loop das estratégias
-  let sdInicialUSD = principal;
+  //
+  // Liberação parcelada (tranches): em vez de todo o principal entrar de
+  // uma vez na linha 0, cada tranche é injetada no saldo somente quando sua
+  // própria data chega (ver loop principal abaixo) — juros só incidem
+  // sobre capital já liberado. `principal` (líquido de sinal/IOF/ECG/
+  // taxas, calculado acima) continua sendo o TOTAL a ser liberado; aqui só
+  // decidimos COMO ele entra no saldo ao longo do tempo.
+  const hasStagedDisbursement = Array.isArray(disbursementSchedule) && disbursementSchedule.length > 0;
+  let pendingTranches = [];
+  let sdInicialUSD;
+
+  if (hasStagedDisbursement) {
+    pendingTranches = disbursementSchedule
+      .map((t) => ({ date: parseLocalDate(t.date), amount: Number(t.amount) || 0 }))
+      .sort((a, b) => a.date - b.date);
+    const grossSum = pendingTranches.reduce((s, t) => s + t.amount, 0);
+    if (Math.abs(grossSum - operationValue) > 0.01) {
+      throw new Error(
+        `Liberação em parcelas: a soma das tranches (${grossSum.toFixed(2)}) não bate com o Valor da Operação (${operationValue.toFixed(2)}).`
+      );
+    }
+    // Rateio proporcional de sinal/IOF/ECG/taxas entre as tranches — cada
+    // liberação parcelada é seu próprio fato gerador de IOF (Decreto
+    // 6.306/2007), então o líquido não é descontado inteiro da 1ª tranche.
+    const netFactor = grossSum > 0 ? principal / grossSum : 1;
+    pendingTranches.forEach((t) => { t.amount = roundTo(t.amount * netFactor, 2); });
+    sdInicialUSD = 0; // nada liberado ainda — injetado linha a linha no loop abaixo
+  } else {
+    sdInicialUSD = principal; // comportamento atual, sem mudança
+  }
 
   const principalFreqMonths = frequencyToMonths(principalFrequency);
   const interestFreqMonths = frequencyToMonths(interestFrequency);
+
+  // 🔐 BLOQUEIO: periodicidade "No Vencimento" (bullet) vira frequência 0
+  // meses — as fórmulas de offset abaixo (principalGraceMonths + i*freq)
+  // dependem de uma frequência positiva; com 0, o único evento cai no "mês
+  // 0" (antes da primeira linha gerada pelo loop) e nunca é processado,
+  // zerando a amortização/juros silenciosamente (só aparece depois como
+  // FINANCIAL_INTEGRITY_ERROR, sem pista do motivo real). Os sistemas
+  // BULLET e AMERICANO já tratam "pagamento único" com lógica própria
+  // (branch dedicado logo abaixo) — nos demais, bloquear com mensagem clara
+  // em vez de deixar cair nesse caso quebrado.
+  if (calculationSystem !== "BULLET" && calculationSystem !== "AMERICANO") {
+    if (principalFreqMonths === 0 || interestFreqMonths === 0) {
+      throw new Error(
+        `Periodicidade "No Vencimento" só está disponível para os sistemas Bullet e Americano. ` +
+        `Sistema selecionado: ${calculationSystem}.`
+      );
+    }
+  }
 
   // 2. Gerar cronograma MENSAL (sempre mês a mês para conciliação contábil)
   const startDate = parseLocalDate(operationDate);
@@ -930,6 +978,21 @@ export async function calculateAmortizationSchedule(params) {
     }
   }
 
+  // 🔐 BLOQUEIO: liberação parcelada só suportada inteiramente durante a
+  // carência, antes da 1ª parcela de amortização/juros — evita ter que
+  // recalcular uma fatia SAC/PRICE já fixada por causa de uma liberação
+  // tardia. Cobre tanto o caminho normal quanto customDates (recálculo).
+  if (hasStagedDisbursement) {
+    const firstEvent = mergedEvents.find((e) => e.hasPrincipal || e.hasInterest);
+    const lateTranche = firstEvent && pendingTranches.find((t) => t.date >= firstEvent.date);
+    if (lateTranche) {
+      throw new Error(
+        `Liberação em parcelas: a tranche de ${toISODateLocal(lateTranche.date)} cai no mesmo mês ou depois do início da amortização/pagamento de juros (${toISODateLocal(firstEvent.date)}). ` +
+        `Só é suportada liberação inteiramente durante a carência (antes da 1ª parcela).`
+      );
+    }
+  }
+
   // 3. Calcular tabela
   const schedule = [];
   
@@ -970,21 +1033,29 @@ export async function calculateAmortizationSchedule(params) {
   let strategy = null;
   const isBulletSystem = calculationSystem === "BULLET";
   
+  // 🔐 Sempre `principal` (total líquido a ser liberado), NUNCA
+  // `sdInicialUSD`, aqui: com liberação parcelada, `sdInicialUSD` começa
+  // zerado (nada foi liberado ainda no instante da construção) e só cresce
+  // dentro do loop — passar `sdInicialUSD` corromperia PRICEStrategy
+  // especificamente, que usa esse valor construtor
+  // (`balanceAtLastPayment`) pra derivar a taxa composta da 1ª parcela
+  // amortizante. Sem liberação parcelada, `sdInicialUSD === principal`
+  // neste ponto de qualquer forma — comportamento 100% inalterado.
   if (calculationSystem === "SAC") {
-    strategy = new SACStrategy(sdInicialUSD, principalInstallments);
+    strategy = new SACStrategy(principal, principalInstallments);
   } else if (calculationSystem === "SACRE") {
-    strategy = new SACREStrategy(sdInicialUSD, principalInstallments);
+    strategy = new SACREStrategy(principal, principalInstallments);
   } else if (calculationSystem === "PRICE") {
     // PRICE valida BALLOON no construtor (vai lançar erro se incompatível).
     // A taxa de período é derivada dinamicamente pela própria strategy a partir do
     // juros realmente calculado a cada linha (ver PRICEStrategy.js) — isso garante
     // que a prestação se ajuste corretamente quando há indexador variável (CDI/SELIC)
     // e continua idêntica ao Price clássico quando a taxa é prefixada.
-    strategy = new PRICEStrategy(sdInicialUSD, principalInstallments, interestGraceMonths, effectiveGraceInterestBehavior);
+    strategy = new PRICEStrategy(principal, principalInstallments, interestGraceMonths, effectiveGraceInterestBehavior);
   } else if (calculationSystem === "AMERICANO") {
-    strategy = new AMERICANOStrategy(sdInicialUSD);
+    strategy = new AMERICANOStrategy(principal);
   } else if (calculationSystem === "BULLET") {
-    strategy = new BULLETStrategy(sdInicialUSD);
+    strategy = new BULLETStrategy(principal);
   } else if (calculationSystem === "PERCENTAGE_RESIDUAL") {
     // Parsear percentuais: "24.18,28.09,32.72" → {1: 0.2418, 2: 0.2809, 3: 0.3272}
     const parsedSchedule = {};
@@ -1037,7 +1108,21 @@ export async function calculateAmortizationSchedule(params) {
   for (let i = 0; i < mergedEvents.length; i++) {
     const evt = mergedEvents[i];
     parcela++;
-    
+
+    // 🏗️ LIBERAÇÃO PARCELADA: injeta no saldo qualquer tranche cujo
+    // vencimento caia dentro do período desta linha — ANTES de calcular os
+    // juros da linha, pra que juros só incidam sobre capital já liberado.
+    let liberacaoInjetadaUSD = 0;
+    while (
+      pendingTranches.length > 0 &&
+      pendingTranches[0].date <= evt.date &&
+      (i === 0 || pendingTranches[0].date > prevDate)
+    ) {
+      const tranche = pendingTranches.shift();
+      sdInicialUSD += tranche.amount;
+      liberacaoInjetadaUSD += tranche.amount;
+    }
+
     // 💱 Buscar PTAX do período com validação
     let currentPtaxRate = 1; // Fallback seguro
     if (isUSD) {
@@ -1364,6 +1449,7 @@ export async function calculateAmortizationSchedule(params) {
       
       // USD (campos originais - mantidos)
       sdInicial_USD: isUSD ? roundTo(sdInicialUSD, 2) : null,
+      liberacaoInjetada_USD: isUSD ? roundTo(liberacaoInjetadaUSD, 2) : null,
       sdAtualizado_USD: isUSD ? roundTo(sdAtualizadoUSD, 2) : null,
       sdFinal_USD: isUSD ? roundTo(sdFinalUSD, 2) : null,
       amortizacao_USD: isUSD ? roundTo(amortizacaoUSD, 2) : null,
@@ -1379,6 +1465,11 @@ export async function calculateAmortizationSchedule(params) {
       
       // BRL (campos originais - mantidos sem alteração)
       sdInicial: roundTo(sdInicialBRL, 2),
+      // Liberação parcelada: quanto de principal foi injetado NESTA linha
+      // (0 na maioria; > 0 na linha 0 ou em qualquer linha com uma tranche
+      // agendada). accountingClosing.js usa isso pra gerar um evento
+      // LIBERACAO por tranche, sem recalcular o rateio numa segunda vez.
+      liberacaoInjetada: roundTo(isUSD ? liberacaoInjetadaUSD * currentPtaxRate : liberacaoInjetadaUSD, 2),
       varCambial: roundTo(varCambialPrincipal, 2),
       indexadorPercent: roundTo(indexerPeriodRate * 100, 6),
       jurosFixosMes: roundTo(jurosFixosBRL, 2),
@@ -1437,8 +1528,14 @@ export async function calculateAmortizationSchedule(params) {
       totalCapitalizadoUSD += (row.jurosCapitalizados || 0) + (row.indexerCorrectionCapitalized || 0) - (row.capitalizedPaidOut || 0);
     }
     if (row.sdFinal < 0) maxNegativeValue = Math.min(maxNegativeValue, row.sdFinal);
-    if (i < schedule.length - 1 && isUSD && Math.abs(row.sdFinal_USD - schedule[i + 1].sdInicial_USD) > 0.01) {
-      throw new Error(`[FINANCIAL_INTEGRITY_ERROR] Quebra continuidade USD: Parcela ${row.parcela} → ${schedule[i + 1].parcela}`);
+    if (i < schedule.length - 1 && isUSD) {
+      // Liberação parcelada injeta capital diretamente na linha seguinte —
+      // o saldo final desta linha + a tranche injetada na próxima deve
+      // bater com o saldo inicial dela (em vez de exigir igualdade direta).
+      const injectedNext = schedule[i + 1].liberacaoInjetada_USD || 0;
+      if (Math.abs((row.sdFinal_USD + injectedNext) - schedule[i + 1].sdInicial_USD) > 0.01) {
+        throw new Error(`[FINANCIAL_INTEGRITY_ERROR] Quebra continuidade USD: Parcela ${row.parcela} → ${schedule[i + 1].parcela}`);
+      }
     }
   }
 

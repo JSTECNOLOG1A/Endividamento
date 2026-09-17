@@ -296,7 +296,13 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     const isWithinMonth = rowDate >= monthStart && rowDate <= monthEnd;
     const settlement = settlementsByParcela.get(String(row.parcela));
 
-    const newPrincipalRow = idx === 0 ? (row.sdInicial || 0) : 0;
+    // Liberação parcelada: o motor (CalculationEngine.js) já expõe, em cada
+    // linha, quanto de principal foi injetado ali (`liberacaoInjetada`) —
+    // 0 em toda linha, exceto quando uma tranche caiu naquele mês. Pra
+    // contratos sem liberação parcelada isso também é 0 em toda linha
+    // menos a 0, então a fórmula abaixo reproduz o comportamento anterior
+    // sem precisar de nenhum branch/fallback separado.
+    const newPrincipalRow = idx === 0 ? (row.sdInicial || 0) : (row.liberacaoInjetada || 0);
     const interestAccruedRow = (row.jurosFixosMes || 0) + (row.jurosVariaveisMes || 0);
     const fxAccruedRow = row.varCambial || 0;
 

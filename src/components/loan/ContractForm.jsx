@@ -16,9 +16,10 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Combobox } from "@/components/ui/combobox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calculator, FileText, Percent, AlertCircle, Info, Paperclip, Trash2, Save, Send, Banknote, Receipt, LayoutList } from "lucide-react";
+import { Calculator, FileText, Percent, AlertCircle, Info, Paperclip, Trash2, Save, Send, Banknote, Receipt, LayoutList, Plus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { toBRDecimalString } from "@/lib/brNumber";
 
 
 import {
@@ -72,6 +73,8 @@ const defaultForm = {
   first_payment_date: "",
   amortization_percentages: "", // Ex: "24.18,28.09,32.72,38.18"
   percentage_base: "saldo_devedor", // "saldo_devedor" ou "principal"
+  disbursement_mode: "unica", // "unica" ou "parcelada" (liberação em tranches)
+  disbursement_schedule: [], // [{key, date, amount}] — só usado quando disbursement_mode === "parcelada"
 };
 
 // Helper: Converter string BR (2.000.000,00) para número
@@ -154,6 +157,10 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       first_payment_date: data.first_payment_date || "",
       amortization_percentages: data.amortization_percentages || "",
       percentage_base: data.percentage_base || "saldo_devedor",
+      disbursement_mode: Array.isArray(data.disbursement_schedule) && data.disbursement_schedule.length > 0 ? "parcelada" : "unica",
+      disbursement_schedule: Array.isArray(data.disbursement_schedule)
+        ? data.disbursement_schedule.map((t) => ({ key: crypto.randomUUID(), date: t.date || "", amount: t.amount != null ? toBRDecimalString(t.amount) : "0" }))
+        : [],
     };
   };
 
@@ -457,6 +464,32 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
 
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
+  // Liberação parcelada: Data de Liberação (âncora da carência pro motor)
+  // segue automaticamente a data da 1ª tranche — evita duplicar essa
+  // decisão numa segunda lógica só no submit.
+  React.useEffect(() => {
+    if (form.disbursement_mode !== "parcelada") return;
+    const sorted = [...form.disbursement_schedule].filter((t) => t.date).sort((a, b) => a.date.localeCompare(b.date));
+    const firstDate = sorted[0]?.date;
+    if (firstDate && firstDate !== form.operation_date) update("operation_date", firstDate);
+  }, [form.disbursement_mode, form.disbursement_schedule]);
+
+  // Liberação parcelada (tranches) — mesmo padrão de lista repetível já
+  // usado em IntegrationForm.jsx (key/update/add/remove).
+  const updateTranche = (key, field, value) => setForm((prev) => ({
+    ...prev,
+    disbursement_schedule: prev.disbursement_schedule.map((t) => (t.key === key ? { ...t, [field]: value } : t)),
+  }));
+  const addTranche = () => setForm((prev) => ({
+    ...prev,
+    disbursement_schedule: [...prev.disbursement_schedule, { key: crypto.randomUUID(), date: "", amount: "0" }],
+  }));
+  const removeTranche = (key) => setForm((prev) => ({
+    ...prev,
+    disbursement_schedule: prev.disbursement_schedule.filter((t) => t.key !== key),
+  }));
+  const trancheTotal = form.disbursement_schedule.reduce((s, t) => s + parseBRNumber(t.amount), 0);
+
   const selectedGroup = groups?.find((g) => g.id === form.group_id);
   const filteredEntities = form.group_id ? entities?.filter((e) => e.group_id === form.group_id) : [];
   const selectedEntity = form.entity_id ? entities?.find((e) => e.id === form.entity_id) : null;
@@ -550,9 +583,32 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       }
     }
 
+    // Validação da liberação parcelada, antes de calcular.
+    if (form.disbursement_mode === "parcelada") {
+      const tranches = form.disbursement_schedule;
+      if (tranches.length === 0) {
+        alert("⚠️ Adicione pelo menos uma tranche no cronograma de liberação, ou desative a liberação parcelada.");
+        return;
+      }
+      if (tranches.some((t) => !t.date || parseBRNumber(t.amount) <= 0)) {
+        alert("⚠️ Preencha data e valor (maior que zero) em todas as tranches do cronograma de liberação.");
+        return;
+      }
+      const sortedDates = [...tranches].map((t) => t.date).sort();
+      for (let i = 1; i < sortedDates.length; i++) {
+        if (sortedDates[i] <= sortedDates[i - 1]) {
+          alert("⚠️ As datas das tranches de liberação devem ser estritamente crescentes (sem datas repetidas).");
+          return;
+        }
+      }
+    }
+
     onCalculate({
       ...form,
-      operation_value: parseFloat(form.operation_value || '0') || 0,
+      operation_value: form.disbursement_mode === "parcelada" ? trancheTotal : (parseFloat(form.operation_value || '0') || 0),
+      disbursement_schedule: form.disbursement_mode === "parcelada"
+        ? form.disbursement_schedule.map((t) => ({ date: t.date, amount: parseBRNumber(t.amount) }))
+        : null,
       amount_foreign: parseBR(form.amount_foreign),
       exchange_rate_closing: parseBR(form.exchange_rate_closing),
       signal_value: parseFloat(form.signal_value.replace(/\./g, '').replace(',', '.')) || 0,
@@ -960,28 +1016,59 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <Separator />
 
           <SubsectionHeading icon={Receipt}>Custos da Operação</SubsectionHeading>
+
+          {/* Liberação única (padrão) vs parcelada (tranches): linhas de
+              crédito com carência longa (FCO/FNO, projetos de investimento)
+              costumam liberar o capital aos poucos, não tudo de uma vez. */}
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+            <Switch
+              checked={form.disbursement_mode === "parcelada"}
+              onCheckedChange={(checked) => update("disbursement_mode", checked ? "parcelada" : "unica")}
+            />
+            <Label className="text-xs font-medium text-slate-700">
+              Liberação parcelada (várias datas)
+              <TooltipProvider>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-xs">
+                    <p className="text-xs">
+                      Pra contratos como FCO/FNO ou projetos de investimento onde o banco libera o capital aos
+                      poucos, em datas específicas, em vez de tudo de uma vez. Só suportado quando todas as
+                      liberações acontecem durante a carência (antes da 1ª parcela de amortização/juros).
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+          </div>
+
           {/* Valor da Operação e Sinal */}
           <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Valor da Operação (R$) *
-                {form.currency_id && (
+                {(form.currency_id || form.disbursement_mode === "parcelada") && (
                   <span className="ml-1 text-xs text-cyan-600 font-normal">(Calculado automaticamente)</span>
                 )}
               </Label>
-              <CurrencyInput 
-                type="currency" 
-                value={form.operation_value} 
-                onChange={(e) => update("operation_value", e.target.value)} 
-                placeholder="0,00" 
-                className="h-9" 
-                disabled={!!form.currency_id}
-                required 
+              <CurrencyInput
+                type="currency"
+                value={form.disbursement_mode === "parcelada" ? trancheTotal.toFixed(2).replace(".", ",") : form.operation_value}
+                onChange={(e) => update("operation_value", e.target.value)}
+                placeholder="0,00"
+                className="h-9"
+                disabled={!!form.currency_id || form.disbursement_mode === "parcelada"}
+                required
               />
               {form.currency_id && (
                 <p className="text-xs text-slate-600">
                   Este campo é somente leitura quando operação em moeda estrangeira
                 </p>
+              )}
+              {form.disbursement_mode === "parcelada" && (
+                <p className="text-xs text-slate-600">Soma das tranches de liberação abaixo</p>
               )}
             </div>
             <div className="space-y-1.5">
@@ -989,6 +1076,41 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               <CurrencyInput type="currency" value={form.signal_value} onChange={(e) => update("signal_value", e.target.value)} className="h-9" />
             </div>
           </div>
+
+          {form.disbursement_mode === "parcelada" && (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Cronograma de Liberação</Label>
+              {form.disbursement_schedule.map((tranche) => (
+                <div key={tranche.key} className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-[10px] text-slate-500 uppercase">Data</Label>
+                    <Input
+                      type="date"
+                      value={tranche.date}
+                      onChange={(e) => updateTranche(tranche.key, "date", e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-[10px] text-slate-500 uppercase">Valor (R$)</Label>
+                    <CurrencyInput
+                      type="currency"
+                      value={tranche.amount}
+                      onChange={(e) => updateTranche(tranche.key, "amount", e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => removeTranche(tranche.key)} aria-label="Remover tranche">
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </Button>
+                </div>
+              ))}
+              <Button type="button" variant="secondary" size="sm" onClick={addTranche} className="gap-1.5">
+                <Plus className="w-3.5 h-3.5" />
+                Adicionar tranche
+              </Button>
+            </div>
+          )}
           <Separator />
           <div className={cn(gridCols3, "rounded-lg border border-slate-100 bg-slate-50/70 p-4")}>
             <div className="space-y-3">
@@ -1087,7 +1209,17 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                   </Tooltip>
                 </TooltipProvider>
               </Label>
-              <Input type="date" value={form.operation_date} onChange={(e) => update("operation_date", e.target.value)} className="h-9" required />
+              <Input
+                type="date"
+                value={form.operation_date}
+                onChange={(e) => update("operation_date", e.target.value)}
+                className="h-9"
+                disabled={form.disbursement_mode === "parcelada"}
+                required
+              />
+              {form.disbursement_mode === "parcelada" && (
+                <p className="text-xs text-slate-600">Definida automaticamente pela 1ª tranche do cronograma de liberação</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
@@ -1538,7 +1670,13 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               >
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {PERIODICITIES.map((p) => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
+                  {/* "No Vencimento" (bullet) só faz sentido pros sistemas
+                      Bullet/Americano, que já têm lógica própria de
+                      pagamento único — nos demais (SAC, PRICE, SACRE,
+                      %Residual), a fórmula de periodicidade não sabe lidar
+                      com frequência 0 e quebra silenciosamente (ver guard
+                      em CalculationEngine.js). */}
+                  {PERIODICITIES.filter((p) => p.value !== "bullet" || ["BULLET", "AMERICANO"].includes(form.calculation_system)).map((p) => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
                 </SelectContent>
               </Select>
               {!fieldsStatus.principalPeriodicity && (
@@ -1558,7 +1696,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               >
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {PERIODICITIES.map((p) => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
+                  {PERIODICITIES.filter((p) => p.value !== "bullet" || ["BULLET", "AMERICANO"].includes(form.calculation_system)).map((p) => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
                 </SelectContent>
               </Select>
               {!fieldsStatus.interestPeriodicity && (

@@ -172,6 +172,7 @@ export default function Simulator() {
         exchangeLag: contract.exchange_lag !== undefined ? contract.exchange_lag : 1,
         exchange_rates: contract.exchange_rates || null,
         exchangeRates: parsedExchangeRates,
+        disbursement_schedule: parseJsonField(contract.disbursement_schedule, null),
         contract_number: contract.contract_number || "",
         operation_category: contract.operation_category || "",
         operation_type: contract.operation_type || "",
@@ -481,6 +482,7 @@ export default function Simulator() {
         exchangeRates: formData.exchangeRates || [],
         amount_foreign: formData.amount_foreign || null,
         exchange_rate_closing: formData.exchange_rate_closing || null,
+        disbursementSchedule: formData.disbursement_schedule && formData.disbursement_schedule.length > 0 ? formData.disbursement_schedule : null,
       });
 
       calcResult.cdiRatesSnapshot = cdiRatesSnapshot;
@@ -577,6 +579,7 @@ export default function Simulator() {
       currency_id: formParams.currency_id || null,
       exchange_lag: formParams.exchangeLag !== undefined ? formParams.exchangeLag : 1,
       exchange_rates: formParams.exchangeRates ? JSON.stringify(formParams.exchangeRates) : null,
+      disbursement_schedule: formParams.disbursement_schedule && formParams.disbursement_schedule.length > 0 ? JSON.stringify(formParams.disbursement_schedule) : null,
       contract_number: formParams.contract_number || `SIM-${Date.now()}`,
       operation_category: formParams.operation_category,
       operation_type: formParams.operation_type,
@@ -804,6 +807,7 @@ export default function Simulator() {
         currency_id: dataToSave.currency_id || null,
         exchange_lag: dataToSave.exchangeLag !== undefined ? dataToSave.exchangeLag : 1,
         exchange_rates: dataToSave.exchangeRates ? JSON.stringify(dataToSave.exchangeRates) : null,
+        disbursement_schedule: dataToSave.disbursement_schedule && dataToSave.disbursement_schedule.length > 0 ? JSON.stringify(dataToSave.disbursement_schedule) : null,
         contract_number: dataToSave.contract_number || `SIM-${Date.now()}`,
         operation_category: dataToSave.operation_category,
         operation_type: dataToSave.operation_type,
@@ -907,6 +911,7 @@ export default function Simulator() {
         principalFrequency: originalParams.principal_frequency,
         interestFrequency: originalParams.interest_frequency,
         calculationSystem: originalParams.calculation_system,
+        disbursementSchedule: originalParams.disbursement_schedule && originalParams.disbursement_schedule.length > 0 ? originalParams.disbursement_schedule : null,
         cdiRates: cdiRatesSnapshot,
         holidays: holidaysSnapshot,
         customDates: customDates,
