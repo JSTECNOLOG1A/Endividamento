@@ -160,6 +160,11 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
   const [form, setForm] = useState(() => buildFormFromInitial(initialData));
   const gridCols2 = cn("grid grid-cols-1 gap-4", !narrowColumn && "md:grid-cols-2");
   const gridCols3 = cn("grid grid-cols-1 gap-4", !narrowColumn && "md:grid-cols-3");
+  // Pares de campos curtos (datas, moeda, números, selects compactos): ao
+  // contrário do gridCols2 acima, NÃO colapsa pra 1 coluna em narrowColumn —
+  // esses campos cabem lado a lado mesmo na largura estreita da coluna do
+  // layout Moderno, e empilhados só desperdiçam altura de tela à toa.
+  const gridCols2Tight = "grid grid-cols-2 gap-3";
   const [initialForm, setInitialForm] = useState(() => buildFormFromInitial(initialData));
   const [isLoaded, setIsLoaded] = useState(() => Boolean(initialData) || !isEditing);
   const [draftBanner, setDraftBanner] = useState(null);
@@ -953,7 +958,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
 
           <SubsectionHeading icon={Receipt}>Custos da Operação</SubsectionHeading>
           {/* Valor da Operação e Sinal */}
-          <div className={gridCols2}>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Valor da Operação (R$) *
@@ -1060,7 +1065,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
           </div>
           <Separator />
-          <div className={gridCols3}>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Data de Liberação *
@@ -1238,61 +1243,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </TabsContent>
 
           <TabsContent value="prazos" className="p-5 space-y-5 mt-0">
-          <div className={gridCols3}>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Prazo Total (meses) *
-                <TooltipProvider>
-                  <Tooltip delayDuration={200}>
-                    <TooltipTrigger asChild>
-                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right" className="max-w-xs">
-                      <p className="text-xs">
-                        Total de meses/linhas gerados no cronograma — determina onde cai a Data Vencimento
-                        Final. Quando o Primeiro Vencimento está preenchido, a 1ª linha da tabela já nasce
-                        na própria data do Primeiro Vencimento (não um mês depois), então esse total fica 1
-                        a mais que os meses entre o Primeiro Vencimento e a Data Vencimento Final (ex.: um
-                        contrato de 5 anos = 60 meses de duração gera Prazo Total = 61). Não confundir com
-                        "Quantidade de Parcelas" (na tela de revisão): esse outro campo conta só as linhas
-                        com pagamento efetivo, que pode ser 1 a menos quando há carência sem pagamento no
-                        início.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-              <Input
-                type="number"
-                min="1"
-                value={form.total_term_months}
-                onChange={(e) => update("total_term_months", e.target.value)}
-                className="h-9"
-                disabled={!fieldsStatus.totalTerm}
-                required
-              />
-              {(form.calculation_system === "BULLET" || form.calculation_system === "AMERICANO") && (
-                <p className="text-xs text-slate-600 mt-1">
-                  {form.calculation_system === "BULLET" ? "Define quando ocorre o pagamento único" : "Define quando cai a amortização completa"}
-                </p>
-              )}
-              {totalTermDurationHint && (
-                <p className="text-xs text-slate-600 mt-1">{totalTermDurationHint}</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Data Vencimento Final {(form.calculation_system === "AMERICANO" || form.calculation_system === "BULLET") && "(Pagamento Final)"}
-              </Label>
-              <Input 
-                type="date" 
-                value={form.final_maturity_date} 
-                onChange={(e) => handleFinalDateChange(e.target.value)} 
-                className="h-9" 
-                disabled={!fieldsStatus.totalTerm}
-              />
-              <p className="text-xs text-slate-600">Calculado automaticamente, editável</p>
-            </div>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Primeiro Vencimento
@@ -1320,9 +1271,63 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 placeholder="Se vazio, usa a Data da Operação"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Data Vencimento Final {(form.calculation_system === "AMERICANO" || form.calculation_system === "BULLET") && "(Pagamento Final)"}
+              </Label>
+              <Input
+                type="date"
+                value={form.final_maturity_date}
+                onChange={(e) => handleFinalDateChange(e.target.value)}
+                className="h-9"
+                disabled={!fieldsStatus.totalTerm}
+              />
+              <p className="text-xs text-slate-600">Calculado automaticamente, editável</p>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+              Prazo Total (meses) *
+              <TooltipProvider>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-xs">
+                    <p className="text-xs">
+                      Total de meses/linhas gerados no cronograma — determina onde cai a Data Vencimento
+                      Final. Quando o Primeiro Vencimento está preenchido, a 1ª linha da tabela já nasce
+                      na própria data do Primeiro Vencimento (não um mês depois), então esse total fica 1
+                      a mais que os meses entre o Primeiro Vencimento e a Data Vencimento Final (ex.: um
+                      contrato de 5 anos = 60 meses de duração gera Prazo Total = 61). Não confundir com
+                      "Quantidade de Parcelas" (na tela de revisão): esse outro campo conta só as linhas
+                      com pagamento efetivo, que pode ser 1 a menos quando há carência sem pagamento no
+                      início.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              type="number"
+              min="1"
+              value={form.total_term_months}
+              onChange={(e) => update("total_term_months", e.target.value)}
+              className="h-9"
+              disabled={!fieldsStatus.totalTerm}
+              required
+            />
+            {(form.calculation_system === "BULLET" || form.calculation_system === "AMERICANO") && (
+              <p className="text-xs text-slate-600 mt-1">
+                {form.calculation_system === "BULLET" ? "Define quando ocorre o pagamento único" : "Define quando cai a amortização completa"}
+              </p>
+            )}
+            {totalTermDurationHint && (
+              <p className="text-xs text-slate-600 mt-1">{totalTermDurationHint}</p>
+            )}
           </div>
           <Separator />
-          <div className={gridCols2}>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Carência Principal (meses)
@@ -1383,7 +1388,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               )}
             </div>
           </div>
-          {(parseInt(form.interest_grace_months) > 0 && fieldsStatus.interestGrace) && (
+          {/* Esse comportamento não é só sobre carência: no SAC/PRICE com
+              periodicidade de juros maior que mensal (bimestral pra cima, ou
+              "No Vencimento"), TAMBÉM existem meses sem pagamento entre uma
+              parcela e outra, mesmo com carência = 0 (ex.: Hervalense —
+              carência 0, juros anuais). Sem essa segunda condição, o campo
+              ficava escondido exatamente nos casos em que mais importa
+              escolher entre capitalizar até o fim ou quitar a cada parcela. */}
+          {(fieldsStatus.interestGrace && (parseInt(form.interest_grace_months) > 0 || (form.interest_periodicity && form.interest_periodicity !== "1"))) && (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
@@ -1506,7 +1518,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
           )}
           <Separator />
-          <div className={gridCols2}>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Periodicidade Amortização</Label>
               <Select 
