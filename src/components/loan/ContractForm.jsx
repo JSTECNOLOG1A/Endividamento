@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Combobox } from "@/components/ui/combobox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCircle, Info, Paperclip, Trash2, Save, Send, Banknote, Receipt, LayoutList } from "lucide-react";
+import { Calculator, FileText, Percent, AlertCircle, Info, Paperclip, Trash2, Save, Send, Banknote, Receipt, LayoutList } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -632,33 +632,31 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             junto com o conteúdo, nunca gruda no topo). O arredondamento do
             canto superior fica no próprio TabsList (rounded-t-xl). */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          {/* flex-wrap em vez de flex-nowrap+overflow-x-auto: a aba do meio
-              ("Composição e Remuneração da Dívida") não cabe ao lado das
-              outras duas na coluna estreita, e isso forçava rolagem
-              horizontal dentro da barra de abas. Com wrap, a aba que não
-              cabe simplesmente cai pra linha de baixo — sem scrollbar. */}
-          <TabsList className="sticky top-0 z-10 w-full h-auto flex-wrap justify-start gap-1 rounded-t-xl border-b border-slate-200 bg-slate-50 p-1.5">
+          {/* grid-cols-3 (em vez do flex-wrap anterior): 3 colunas de largura
+              igual preenchendo a barra inteira, sempre em UMA linha só, sem
+              scrollbar horizontal — igual abas clássicas de diálogo (ex.:
+              "Geral | Compartilhamento | Segurança" do Windows). divide-x
+              desenha a linha vertical entre elas; a aba ativa fica branca e
+              em negrito, "destacando" das outras duas (cinza, recolhidas). */}
+          <TabsList className="sticky top-0 z-10 grid w-full grid-cols-3 h-auto gap-0 divide-x divide-slate-300 rounded-t-xl border-b border-slate-300 bg-slate-100 p-0">
             <TabsTrigger
               value="identificacao"
-              className="shrink-0 whitespace-nowrap gap-1.5 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:shadow-sm"
+              className="w-full rounded-none whitespace-normal text-center leading-tight gap-1 py-2.5 px-2 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:font-semibold data-[state=active]:shadow-none"
             >
-              <Building2 className="w-3.5 h-3.5" />
               Identificação
               <SectionInfo>Grupo, entidade, banco credor e garantias do contrato.</SectionInfo>
             </TabsTrigger>
             <TabsTrigger
               value="composicao"
-              className="shrink-0 whitespace-nowrap gap-1.5 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:shadow-sm"
+              className="w-full rounded-none whitespace-normal text-center leading-tight gap-1 py-2.5 px-2 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:font-semibold data-[state=active]:shadow-none"
             >
-              <CreditCard className="w-3.5 h-3.5" />
               Composição e Remuneração da Dívida
               <SectionInfo>Moeda, valores, custos da operação e como a dívida é remunerada.</SectionInfo>
             </TabsTrigger>
             <TabsTrigger
               value="prazos"
-              className="shrink-0 whitespace-nowrap gap-1.5 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:shadow-sm"
+              className="w-full rounded-none whitespace-normal text-center leading-tight gap-1 py-2.5 px-2 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:font-semibold data-[state=active]:shadow-none"
             >
-              <Calendar className="w-3.5 h-3.5" />
               Prazos e Periodicidades
               <SectionInfo>Prazo total, datas de vencimento, carências e frequência de pagamento.</SectionInfo>
             </TabsTrigger>
