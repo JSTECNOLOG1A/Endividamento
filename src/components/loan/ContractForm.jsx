@@ -416,6 +416,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     
     setPrevSystem(form.calculation_system);
     
+    // CAPITALIZAR_PERIODICO só existe no SAC — trocar pra outro sistema com
+    // isso selecionado voltaria um valor que o backend rejeita.
+    if (form.calculation_system !== "SAC" && form.grace_interest_behavior === "CAPITALIZAR_PERIODICO") {
+      update("grace_interest_behavior", "CAPITALIZAR");
+    }
+
     if (form.calculation_system === "SAC") {
       update("interest_periodicity", form.principal_periodicity);
     } else if (form.calculation_system === "PRICE") {
@@ -1383,20 +1389,27 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                       </TooltipTrigger>
                       <TooltipContent side="right" className="max-w-xs">
                         <p className="text-xs">
-                          O que acontece com os juros apropriados durante a carência: Capitalizar soma ao saldo
-                          devedor (juros sobre juros); Pagar Juros exige desembolso mensal já na carência; Balloon
-                          acumula juros simples à parte para quitar depois.
+                          O que acontece com os juros apropriados durante a carência (e, no SAC, também entre
+                          parcelas de periodicidade maior que mensal): Capitalizar soma ao saldo devedor até o fim do
+                          contrato (juros sobre juros); Acumular/Capitalizar faz o mesmo mas quita o acumulado a cada
+                          parcela agendada, não só no fim; Pagar Juros exige desembolso mensal já na carência;
+                          Balloon acumula juros simples à parte para quitar depois.
                         </p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </Label>
                 <Select
-                  value={form.grace_interest_behavior} 
+                  value={form.grace_interest_behavior}
                   onValueChange={(v) => {
                     // Bloquear PRICE + BALLOON
                     if (form.calculation_system === "PRICE" && v === "BALLOON") {
                       alert("⚠️ Sistema PRICE é incompatível com BALLOON. Use CAPITALIZAR ou INTEREST_ONLY.");
+                      return;
+                    }
+                    // CAPITALIZAR_PERIODICO só está implementado no SAC por enquanto
+                    if (v === "CAPITALIZAR_PERIODICO" && form.calculation_system !== "SAC") {
+                      alert('⚠️ "Acumular, Capitalizar" só está disponível para o sistema SAC por enquanto.');
                       return;
                     }
                     update("grace_interest_behavior", v);
@@ -1407,9 +1420,17 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                     <SelectItem value="CAPITALIZAR">
                       <div className="py-1">
                         <div className="font-semibold">Capitalizar (Anatocismo)</div>
-                        <div className="text-xs text-slate-600">Juros sobre juros - SD cresce</div>
+                        <div className="text-xs text-slate-600">Juros sobre juros - vira saldo até o fim do contrato</div>
                       </div>
                     </SelectItem>
+                    {form.calculation_system === "SAC" && (
+                      <SelectItem value="CAPITALIZAR_PERIODICO">
+                        <div className="py-1">
+                          <div className="font-semibold">Acumular, Capitalizar</div>
+                          <div className="text-xs text-slate-600">Juros sobre juros - quita o acumulado a cada parcela</div>
+                        </div>
+                      </SelectItem>
+                    )}
                     <SelectItem value="INTEREST_ONLY">
                       <div className="py-1">
                         <div className="font-semibold">Pagar Juros (Interest Only)</div>
@@ -1424,10 +1445,11 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                {form.grace_interest_behavior === "CAPITALIZAR" && (
+                {(form.grace_interest_behavior === "CAPITALIZAR" || form.grace_interest_behavior === "CAPITALIZAR_PERIODICO") && (
                   <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs">
                     <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                     Anatocismo: Juros capitalizados geram juros sobre juros
+                    {form.grace_interest_behavior === "CAPITALIZAR_PERIODICO" && " (quitados a cada parcela)"}
                   </div>
                 )}
               </div>

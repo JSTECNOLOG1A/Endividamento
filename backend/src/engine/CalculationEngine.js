@@ -1000,14 +1000,28 @@ export async function calculateAmortizationSchedule(params) {
   } else {
     strategy = new SACStrategy(principal, principalInstallments);
   }
-  
+
+  // 🔐 BLOQUEIO: CAPITALIZAR_PERIODICO (juros compostos entre parcelas,
+  // liquidados a cada parcela agendada — não só no fim do contrato) só está
+  // implementado no SAC por enquanto. Nas demais estratégias, esse valor
+  // não é tratado especificamente e cairia num ramo genérico, produzindo
+  // resultado silenciosamente errado — melhor bloquear explicitamente.
+  if (effectiveGraceInterestBehavior === "CAPITALIZAR_PERIODICO" && calculationSystem !== "SAC") {
+    throw new Error(
+      `Comportamento "Acumular, Capitalizar" (liquidação periódica) só está disponível para o sistema SAC por enquanto. ` +
+      `Sistema selecionado: ${calculationSystem}.`
+    );
+  }
+
   const strategyWarnings = [];
   
-  // Adicionar warning de anatocismo se CAPITALIZAR
-  if (effectiveGraceInterestBehavior === "CAPITALIZAR" && interestGraceMonths > 0) {
+  // Adicionar warning de anatocismo se CAPITALIZAR (na carência) ou
+  // CAPITALIZAR_PERIODICO (na carência e/ou entre parcelas, quando a
+  // periodicidade é maior que mensal)
+  if (effectiveGraceInterestBehavior === "CAPITALIZAR_PERIODICO" || (effectiveGraceInterestBehavior === "CAPITALIZAR" && interestGraceMonths > 0)) {
     strategyWarnings.push({
       type: "ANATOCISM",
-      message: "⚠️ Anatocismo: Juros capitalizados durante a carência geram juros sobre juros. Esta prática está sujeita a regulamentação específica no Brasil.",
+      message: "⚠️ Anatocismo: Juros capitalizados na carência e/ou entre parcelas geram juros sobre juros. Esta prática está sujeita a regulamentação específica no Brasil.",
     });
   }
   
@@ -1194,7 +1208,8 @@ export async function calculateAmortizationSchedule(params) {
       acumulatedUnpaidInterest: updatedAccumulated = 0,
       jurosCapitalizados = 0,
       jurosPagos = 0,
-      jurosAcruados = 0
+      jurosAcruados = 0,
+      capitalizedPaidOut = 0
     } = strategyResult;
 
     acumulatedUnpaidInterest = updatedAccumulated;
@@ -1223,6 +1238,11 @@ export async function calculateAmortizationSchedule(params) {
     // quando coincidirem, cada uma calculada separadamente. Fica 0 e não
     // muda nada quando o modo é o padrão ("paga_junto").
     sdAtualizadoUSD += indexerCorrectionCapitalized;
+
+    // CAPITALIZAR_PERIODICO: o que acabou de ser liquidado nesta parcela
+    // (juros compostos desde a última) sai do saldo — senão continuaria
+    // "contando" como saldo devedor além de já ter sido pago na prestação.
+    sdAtualizadoUSD -= capitalizedPaidOut;
 
     // 🔐 ETAPA 2: Shadow Calculation para Saldo Atualizado
     if (precisionAudit && jurosCapitalizados > 0) {
@@ -1299,9 +1319,12 @@ export async function calculateAmortizationSchedule(params) {
     const ajusteCambialMes = isUSD 
       ? roundTo(varCambialPrincipal, 2) 
       : 0;
-    const jurosCapitalizadosBRL = isUSD 
+    const jurosCapitalizadosBRL = isUSD
       ? roundTo((jurosCapitalizados || 0) * currentPtaxRate, 2)
       : roundTo(jurosCapitalizados, 2);
+    const capitalizedPaidOutBRL = isUSD
+      ? roundTo((capitalizedPaidOut || 0) * currentPtaxRate, 2)
+      : roundTo(capitalizedPaidOut || 0, 2);
 
     // 📊 BLOCO CONTÁBIL (Rastreabilidade Total para Homologação)
     // 🔐 CRÍTICO: Todos os campos devem ser calculados com valores válidos (não NaN/undefined)
@@ -1362,6 +1385,8 @@ export async function calculateAmortizationSchedule(params) {
       jurosVariaveisMes: roundTo(jurosVariaveisBRL, 2),
       jurosAcruados: roundTo(jurosAcruados || 0, 2),
       jurosCapitalizados: roundTo(jurosCapitalizados, 2),
+      capitalizedPaidOut: roundTo(capitalizedPaidOut || 0, 2),
+      capitalizedPaidOutBRL: capitalizedPaidOutBRL,
       indexerCorrectionCapitalized: roundTo(indexerCorrectionCapitalized, 2),
       indexerCorrectionCapitalizedBRL: roundTo(isUSD ? indexerCorrectionCapitalized * currentPtaxRate : indexerCorrectionCapitalized, 2),
       jurosPagos: roundTo(jurosPagos, 2),
@@ -1400,10 +1425,16 @@ export async function calculateAmortizationSchedule(params) {
       if (!Number.isFinite(f)) throw new Error(`[FINANCIAL_INTEGRITY_ERROR] Parcela ${i + 1}: Campo inválido`);
     });
     totalAmortization += (row.amortizacao || 0);
-    totalCapitalizado += (row.jurosCapitalizadosBRL || 0) + (row.indexerCorrectionCapitalizedBRL || 0);
+    // CAPITALIZAR_PERIODICO: o que capitalizou (jurosCapitalizadosBRL) e já
+    // foi liquidado numa parcela seguinte (capitalizedPaidOutBRL) não conta
+    // pra validação — foi pago como juro, não precisa virar amortização.
+    // Sem isso, a soma abaixo (principalValidacao) continuaria exigindo
+    // amortizar um valor que já saiu como juro pago, e o fechamento do
+    // contrato nunca bateria.
+    totalCapitalizado += (row.jurosCapitalizadosBRL || 0) + (row.indexerCorrectionCapitalizedBRL || 0) - (row.capitalizedPaidOutBRL || 0);
     if (isUSD && row.amortizacao_USD !== null) {
       totalAmortizationUSD += (row.amortizacao_USD || 0);
-      totalCapitalizadoUSD += (row.jurosCapitalizados || 0) + (row.indexerCorrectionCapitalized || 0);
+      totalCapitalizadoUSD += (row.jurosCapitalizados || 0) + (row.indexerCorrectionCapitalized || 0) - (row.capitalizedPaidOut || 0);
     }
     if (row.sdFinal < 0) maxNegativeValue = Math.min(maxNegativeValue, row.sdFinal);
     if (i < schedule.length - 1 && isUSD && Math.abs(row.sdFinal_USD - schedule[i + 1].sdInicial_USD) > 0.01) {
@@ -1799,12 +1830,12 @@ export async function calculateAmortizationSchedule(params) {
   // 3C. Risk Flags (determinístico, somente leitura)
   const riskFlags = [];
   
-  // ANATOCISM: carência com juros capitalizados
-  if (effectiveGraceInterestBehavior === "CAPITALIZAR" && interestGraceMonths > 0) {
+  // ANATOCISM: carência ou parcelas com juros capitalizados
+  if (effectiveGraceInterestBehavior === "CAPITALIZAR_PERIODICO" || (effectiveGraceInterestBehavior === "CAPITALIZAR" && interestGraceMonths > 0)) {
     riskFlags.push({
       flag: "ANATOCISM",
       severity: "MEDIUM",
-      message: "Operação com juros capitalizados na carência. Verificar conformidade regulatória."
+      message: "Operação com juros capitalizados na carência e/ou entre parcelas. Verificar conformidade regulatória."
     });
   }
   
