@@ -83,6 +83,7 @@ export const ENTITIES = {
       "reopen_requested_by", "reopen_requested_at",
       "current_snapshot_id", "approved_snapshot_id",
       "last_recalculated_at", "guarantee_real_type", "guarantee_personal_type",
+      "payoff_date", "renegotiated_from_id", "settlement_discount_amount", "settlement_discount_mode",
     ],
     booleans: [
       "iof_financed", "encargo_garantia_financed", "other_fees_financed", "mip_embedded", "dfi_embedded",
@@ -93,7 +94,7 @@ export const ENTITIES = {
       "encargo_garantia_value", "other_fees", "mip_value", "dfi_value", "other_insurance_value",
       "fixed_rate", "indexer_spread",
       "exchange_lag", "total_term_months", "principal_grace_months", "interest_grace_months",
-      "principal_installments", "interest_installments",
+      "principal_installments", "interest_installments", "settlement_discount_amount",
     ],
   },
   CalculationSnapshot: {

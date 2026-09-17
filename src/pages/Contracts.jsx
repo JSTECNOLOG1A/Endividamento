@@ -14,6 +14,7 @@ import ScheduleChart from "../components/loan/ScheduleChart";
 import ContractWorkflow from "../components/loan/ContractWorkflow";
 import ContractSummary from "../components/loan/ContractSummary";
 import GuaranteedAccountFormDialog from "../components/loan/GuaranteedAccountFormDialog";
+import { RenegotiateDialog, SettleEarlyDialog } from "../components/loan/ContractLifecycleDialogs";
 import { createPageUrl } from "../utils";
 import { statusLabel } from "../lib/contractStatus";
 import { toBRDecimalString } from "../lib/brNumber";
@@ -32,6 +33,8 @@ export default function Contracts() {
   // contrato com PDF anexado é selecionado.
   const [showPdf, setShowPdf] = useState(false);
   const [newGuaranteedAccountOpen, setNewGuaranteedAccountOpen] = useState(false);
+  const [renegotiateTarget, setRenegotiateTarget] = useState(null);
+  const [settleEarlyTarget, setSettleEarlyTarget] = useState(null);
   const queryClient = useQueryClient();
 
   React.useEffect(() => {
@@ -280,6 +283,7 @@ export default function Contracts() {
                   entities={entities}
                   banks={banks}
                   currencies={currencies}
+                  allContracts={contracts}
                 />
               </TabsContent>
               <TabsContent value="tabela" className="mt-4">
@@ -443,7 +447,19 @@ export default function Contracts() {
         onEdit={handleEdit}
         onDelete={(id) => deleteMutation.mutate(id)}
         onDuplicate={handleDuplicate}
+        onRenegotiate={setRenegotiateTarget}
+        onSettleEarly={setSettleEarlyTarget}
         isLoading={isLoading}
+      />
+      <RenegotiateDialog
+        open={!!renegotiateTarget}
+        onOpenChange={(open) => !open && setRenegotiateTarget(null)}
+        contract={renegotiateTarget}
+      />
+      <SettleEarlyDialog
+        open={!!settleEarlyTarget}
+        onOpenChange={(open) => !open && setSettleEarlyTarget(null)}
+        contract={settleEarlyTarget}
       />
     </div>
   );

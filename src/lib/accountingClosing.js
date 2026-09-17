@@ -264,6 +264,16 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     pendingRecalculation: [],
   };
 
+  // Contrato renegociado/quitado antecipadamente antes desta competência —
+  // nada mais a conciliar pra ele a partir daí (ver payoff_date, gravado em
+  // renegotiateContract()/settleContractEarly(), backend/src/modules/
+  // functions/contractLifecycle.js). Na própria competência do corte, o
+  // schedule_data só tem uma linha por mês mesmo, então o loop abaixo já
+  // processa naturalmente só até ali.
+  if (contract.payoff_date && new Date(contract.payoff_date + "T12:00:00") < monthStart) {
+    return result;
+  }
+
   if (!contract.schedule_data) return result;
 
   let schedule;
@@ -424,6 +434,9 @@ function addMonths(dateStr, delta) {
  */
 export function splitCirculanteNaoCirculante(contract, cutoffDate) {
   const result = { principalShort: 0, principalLong: 0, jurosShort: 0, jurosLong: 0 };
+  // Contrato já renegociado/quitado antecipadamente na data de corte (ou
+  // antes) — não tem mais saldo a classificar em circulante/não circulante.
+  if (contract.payoff_date && contract.payoff_date <= cutoffDate) return result;
   if (!contract.schedule_data) return result;
 
   let schedule;

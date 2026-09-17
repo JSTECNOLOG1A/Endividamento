@@ -107,7 +107,7 @@ function mapDbError(error) {
 const DATE_FIELDS = new Set([
   "operation_date", "first_payment_date", "final_maturity_date", "rate_date",
   "holiday_date", "trial_ends_at", "emissao", "vencimento", "approved_date",
-  "integrado_erp_em", "erp_consultado_em",
+  "integrado_erp_em", "erp_consultado_em", "payoff_date",
 ]);
 
 function toDbValue(entity, key, value) {
@@ -518,6 +518,14 @@ async function applyLoanContractRules(previous, data) {
       });
       data.approved_by = actorEmail();
       data.approved_date = new Date().toISOString().slice(0, 10);
+      // Quitação antecipada: settleContractEarly() já deixou o contrato
+      // 'pendente_aprovacao' com o desconto de liquidação registrado
+      // (settlement_discount_mode/amount + payoff_date) — aprovar essa
+      // pendência específica (mesma alçada de nível 2 de sempre) encerra o
+      // contrato como 'quitado', não como 'aprovado' comum.
+      if (previous.settlement_discount_mode) {
+        data.status = "quitado";
+      }
     }
     if (nextStatus === "devolvido") {
       assertCanRejectContract(previous);

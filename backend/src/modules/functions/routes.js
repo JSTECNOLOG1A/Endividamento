@@ -18,6 +18,7 @@ import { sendDocumentByEmail } from "../documents/sendByEmail.js";
 import { getPTAXFromBACEN, getPTAXRangeFromBACEN, getRatesFromBACEN, getIPCAFromBACEN, getTJLPFromBACEN, getTRFromBACEN, getINPCFromBACEN, getIGPMFromBACEN, clearCDIRatesByType, clearCurrencyRates } from "./bacen.js";
 import { getHolidaysFromBrasilAPI } from "./holidays.js";
 import { calculateGuaranteedAccountStatement, renewGuaranteedAccount } from "./guaranteedAccount.js";
+import { calculateContractBalanceAsOf, renegotiateContract, settleContractEarly } from "./contractLifecycle.js";
 import { assertCanWrite, assertOwner, assertPlatformAdminWithTenant, assertTenantAdmin } from "../tenants/policy.js";
 
 async function validateAllApprovedContracts(payload = {}) {
@@ -102,6 +103,8 @@ const FUNCTION_AUDIT = {
   integrateReceivableTitles: { action: "INTEGRATE", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Integrar títulos a receber" },
   reverseReceivableTitles: { action: "REVERSE", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Estornar títulos a receber" },
   refreshReceivableTitlesFromErp: { action: "CONSULT", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Consultar títulos a receber no ERP" },
+  renegotiateContract: { action: "UPDATE", rotina: "Contratos", resourceType: "LoanContract", registro: "Renegociar contrato" },
+  settleContractEarly: { action: "UPDATE", rotina: "Contratos", resourceType: "LoanContract", registro: "Quitar contrato antecipadamente" },
 };
 
 const handlers = {
@@ -118,6 +121,9 @@ const handlers = {
   getHolidaysFromBrasilAPI,
   calculateGuaranteedAccountStatement,
   renewGuaranteedAccount: (payload, req) => renewGuaranteedAccount(payload, req.user?.email || "system"),
+  calculateContractBalanceAsOf,
+  renegotiateContract: (payload, req) => renegotiateContract(payload, req.user?.email || "system"),
+  settleContractEarly: (payload, req) => settleContractEarly(payload, req.user?.email || "system"),
   validateAllApprovedContracts,
   calculateAmortizationSchedule,
   previewNatures: () => previewNatures(),

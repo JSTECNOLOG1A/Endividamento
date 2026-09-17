@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FileText, Trash2, Copy, MoreHorizontal, Download, Mail } from "lucide-react";
+import { FileText, Trash2, Copy, MoreHorizontal, Download, Mail, RefreshCw, Banknote } from "lucide-react";
 import { useSortableRows, SortIcon } from "@/components/ui/sortable-table";
 import { statusLabel, statusBadgeClass, EDITABLE_STATUSES } from "@/lib/contractStatus";
 import { combineGuaranteeLabel, operationCategoryLabel } from "@/lib/contractOptions";
@@ -128,7 +128,7 @@ function CompactHead({ sortField, sortKey, sortDir, onSort, right, className = "
   );
 }
 
-export default function ContractsList({ contracts, banks, groups, entities, onView, onEdit, onDelete, onDuplicate, isLoading }) {
+export default function ContractsList({ contracts, banks, groups, entities, onView, onEdit, onDelete, onDuplicate, onRenegotiate, onSettleEarly, isLoading }) {
   const today = React.useMemo(() => new Date().toISOString().split("T")[0], []);
   const [emailTarget, setEmailTarget] = React.useState(null);
 
@@ -278,6 +278,18 @@ export default function ContractsList({ contracts, banks, groups, entities, onVi
                             <Copy className="w-3.5 h-3.5 mr-2" />
                             Duplicar
                           </DropdownMenuItem>
+                          {c.status === "aprovado" && !isGuaranteedAccount && onRenegotiate && (
+                            <DropdownMenuItem onClick={() => onRenegotiate(c)}>
+                              <RefreshCw className="w-3.5 h-3.5 mr-2" />
+                              Renegociar Contrato
+                            </DropdownMenuItem>
+                          )}
+                          {c.status === "aprovado" && !isGuaranteedAccount && onSettleEarly && (
+                            <DropdownMenuItem onClick={() => onSettleEarly(c)}>
+                              <Banknote className="w-3.5 h-3.5 mr-2" />
+                              Quitar Antecipadamente
+                            </DropdownMenuItem>
+                          )}
                           {isEditable && onDelete && (
                             <DropdownMenuItem
                               className="text-red-600 focus:text-red-600"
