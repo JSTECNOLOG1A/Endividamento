@@ -632,7 +632,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             junto com o conteúdo, nunca gruda no topo). O arredondamento do
             canto superior fica no próprio TabsList (rounded-t-xl). */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <TabsList className="sticky top-0 z-10 w-full h-auto flex-nowrap justify-start gap-1 overflow-x-auto rounded-t-xl border-b border-slate-200 bg-slate-50 p-1.5">
+          {/* flex-wrap em vez de flex-nowrap+overflow-x-auto: a aba do meio
+              ("Composição e Remuneração da Dívida") não cabe ao lado das
+              outras duas na coluna estreita, e isso forçava rolagem
+              horizontal dentro da barra de abas. Com wrap, a aba que não
+              cabe simplesmente cai pra linha de baixo — sem scrollbar. */}
+          <TabsList className="sticky top-0 z-10 w-full h-auto flex-wrap justify-start gap-1 rounded-t-xl border-b border-slate-200 bg-slate-50 p-1.5">
             <TabsTrigger
               value="identificacao"
               className="shrink-0 whitespace-nowrap gap-1.5 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:shadow-sm"
@@ -1245,7 +1250,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <TabsContent value="prazos" className="p-5 space-y-5 mt-0">
           <div className={gridCols2Tight}>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+              {/* block + min-h: os <label> são inline por padrão, então
+                  min-height só funciona com display:block. A altura fixa
+                  reserva espaço pra 2 linhas mesmo quando o texto cabe em 1
+                  (ex.: "Primeiro Vencimento" sozinho) — sem isso, o campo
+                  cujo rótulo quebra em 2 linhas (ex.: "Data Vencimento
+                  Final" numa coluna estreita) empurra sua própria caixa de
+                  data pra baixo, desalinhando as duas caixas lado a lado. */}
+              <Label className="block min-h-[2.25rem] text-xs font-medium text-slate-600 uppercase tracking-wider leading-snug">
                 Primeiro Vencimento
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
@@ -1272,7 +1284,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+              <Label className="block min-h-[2.25rem] text-xs font-medium text-slate-600 uppercase tracking-wider leading-snug">
                 Data Vencimento Final {(form.calculation_system === "AMERICANO" || form.calculation_system === "BULLET") && "(Pagamento Final)"}
               </Label>
               <Input
