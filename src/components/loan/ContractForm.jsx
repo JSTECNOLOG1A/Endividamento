@@ -1243,7 +1243,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </div>
           <Separator />
           <SubsectionHeading icon={Percent}>Taxa e Indexação</SubsectionHeading>
-          <div className={gridCols2}>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Taxa Fixa (% a.a.) *</Label>
               <CurrencyInput type="percent" value={form.fixed_rate} onChange={(e) => update("fixed_rate", e.target.value)} placeholder="0,0000" className="h-9" required />
