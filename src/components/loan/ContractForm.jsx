@@ -620,8 +620,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
         seguro ignorar esses valores vazios aqui.
       */}
       <Tabs defaultValue="identificacao" className="w-full">
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <TabsList className="w-full h-auto flex-nowrap justify-start gap-1 overflow-x-auto rounded-none border-b border-slate-200 bg-slate-50 p-1.5">
+        {/* Sem overflow-hidden aqui: um ancestral com overflow diferente de
+            visible vira o "contêiner de scroll" usado pelo cálculo de
+            position:sticky do TabsList logo abaixo, mesmo sem barra de
+            rolagem própria — isso trava o sticky (ele simplesmente rola
+            junto com o conteúdo, nunca gruda no topo). O arredondamento do
+            canto superior fica no próprio TabsList (rounded-t-xl). */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <TabsList className="sticky top-0 z-10 w-full h-auto flex-nowrap justify-start gap-1 overflow-x-auto rounded-t-xl border-b border-slate-200 bg-slate-50 p-1.5">
             <TabsTrigger
               value="identificacao"
               className="shrink-0 whitespace-nowrap gap-1.5 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:shadow-sm"

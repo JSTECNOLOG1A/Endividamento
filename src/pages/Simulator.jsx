@@ -932,7 +932,7 @@ export default function Simulator() {
       className={
         isModernLayout
           ? "w-full h-full min-h-0 flex flex-col"
-          : "w-full px-4 sm:px-6 py-8"
+          : "w-full px-4 sm:px-6 py-4 lg:py-5"
       }
     >
       {editingContractId && (
@@ -968,7 +968,12 @@ export default function Simulator() {
             className={
               isModernLayout
                 ? "lg:sticky lg:top-0 lg:max-h-[calc(100dvh-10.5rem)] overflow-y-auto pr-1"
-                : "sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto"
+                // top-[4.5rem]: o header do layout clássico é fixo (sticky
+                // top-0) com 57px de altura (h-14 + borda) — um offset menor
+                // deixava o topo do painel (título/abas) renderizar por
+                // baixo do header ao rolar a página. max-h correspondente
+                // reserva esse mesmo offset no topo + ~24px de respiro embaixo.
+                : "sticky top-[4.5rem] max-h-[calc(100vh-6rem)] overflow-y-auto"
             }
           >
             <div className="flex items-center justify-between mb-3">
