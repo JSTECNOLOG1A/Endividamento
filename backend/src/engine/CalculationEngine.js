@@ -733,6 +733,31 @@ export async function calculateAmortizationSchedule(params) {
     usingOperationDateFallback: !hasFirstPaymentDate
   });
 
+  // Quando o Primeiro Vencimento é preenchido explicitamente, a linha 1 da
+  // tabela JÁ É essa data (dueAnchorDate = firstPaymentDate) — a carência já
+  // foi "consumida" posicionando esse vencimento. As fórmulas de offset
+  // abaixo somam principalGraceMonths/interestGraceMonths presumindo que a
+  // linha 1 é 1 mês após a Data de Liberação (caso sem Primeiro Vencimento
+  // explícito) — nesse outro caso, somar a carência de novo conta ela em
+  // dobro, empurrando parcelas pra fora do Prazo Total e fazendo a última
+  // (ou últimas) sumir da tabela sem nada absorver o saldo residual
+  // (FINANCIAL_INTEGRITY_ERROR). Corrigido deslocando a sequência inteira
+  // pra que o 1º evento (i=1) caia exatamente na linha 1, preservando o
+  // espaçamento relativo dos eventos seguintes conforme o gatilho.
+  function rawPrincipalOffset(i) {
+    if (amortizationTrigger === "END_OF_GRACE") return principalGraceMonths + (i * principalFreqMonths);
+    if (amortizationTrigger === "NEXT_MONTH") return principalGraceMonths + 1 + ((i - 1) * principalFreqMonths);
+    return principalGraceMonths + principalFreqMonths + ((i - 1) * principalFreqMonths); // GRACE_PLUS_FREQ
+  }
+  const principalOffsetShift = hasFirstPaymentDate ? (1 - rawPrincipalOffset(1)) : 0;
+  const principalMonthOffset = (i) => rawPrincipalOffset(i) + principalOffsetShift;
+
+  function rawInterestOffset(i) {
+    return interestGraceMonths + (i * interestFreqMonths);
+  }
+  const interestOffsetShift = hasFirstPaymentDate ? (1 - rawInterestOffset(1)) : 0;
+  const interestMonthOffset = (i) => rawInterestOffset(i) + interestOffsetShift;
+
   // Mapear quando há pagamentos de principal e juros
   const principalPaymentMonths = new Set();
   const interestPaymentMonths = new Set();
@@ -779,71 +804,45 @@ export async function calculateAmortizationSchedule(params) {
       interestPaymentMonths.add(bulletMonth);
     } else {
       for (let i = 1; i <= interestInstallments; i++) {
-        const monthOffset = interestGraceMonths + (i * interestFreqMonths);
-        interestPaymentMonths.add(monthOffset);
+        interestPaymentMonths.add(interestMonthOffset(i));
       }
     }
-    
+
     if (!finalMaturityDate) {
       // Só calcular totalMonths aqui se não foi calculado acima (sem finalMaturityDate)
-      totalMonths = calculationSystem === "BULLET" ? bulletMonth : Math.max(bulletMonth, interestGraceMonths + (interestInstallments * interestFreqMonths));
+      totalMonths = calculationSystem === "BULLET" ? bulletMonth : Math.max(bulletMonth, interestMonthOffset(interestInstallments));
     }
   } else if (calculationSystem === "PERCENTAGE_RESIDUAL") {
     // PERCENTAGE_RESIDUAL: primeira PMT imediatamente após carência
     for (let i = 1; i <= principalInstallments; i++) {
-      let monthOffset;
-      
-      if (amortizationTrigger === "END_OF_GRACE") {
-        monthOffset = principalGraceMonths + (i * principalFreqMonths);
-      } else if (amortizationTrigger === "NEXT_MONTH") {
-        monthOffset = principalGraceMonths + 1 + ((i - 1) * principalFreqMonths);
-      } else { // GRACE_PLUS_FREQ
-        monthOffset = principalGraceMonths + principalFreqMonths + ((i - 1) * principalFreqMonths);
-      }
-      
-      principalPaymentMonths.add(Math.max(1, monthOffset));
+      principalPaymentMonths.add(Math.max(1, principalMonthOffset(i)));
     }
-    
+
     // Juros seguem sua própria carência e periodicidade
     for (let i = 1; i <= interestInstallments; i++) {
-      const monthOffset = interestGraceMonths + (i * interestFreqMonths);
-      interestPaymentMonths.add(monthOffset);
+      interestPaymentMonths.add(interestMonthOffset(i));
     }
-    
+
     // Total de meses: usar totalTermMonths se fornecido, senão calcular
     if (!totalMonths || totalMonths === 0) {
-      const maxPrincipalMonth = principalGraceMonths + (principalInstallments * principalFreqMonths);
-      const maxInterestMonth = interestGraceMonths + (interestInstallments * interestFreqMonths);
+      const maxPrincipalMonth = principalMonthOffset(principalInstallments);
+      const maxInterestMonth = interestMonthOffset(interestInstallments);
       totalMonths = Math.max(maxPrincipalMonth, maxInterestMonth);
     }
   } else {
     // Outros sistemas: respeitar amortizationTrigger
     for (let i = 1; i <= principalInstallments; i++) {
-      let monthOffset;
-      
-      if (amortizationTrigger === "END_OF_GRACE") {
-        // Primeira parcela no último mês da carência, demais seguem frequência
-        monthOffset = principalGraceMonths + (i * principalFreqMonths);
-      } else if (amortizationTrigger === "NEXT_MONTH") {
-        // Primeira parcela um mês após carência, demais seguem frequência
-        monthOffset = principalGraceMonths + 1 + ((i - 1) * principalFreqMonths);
-      } else { // GRACE_PLUS_FREQ
-        // Primeira parcela carência + 1 frequência, demais seguem frequência
-        monthOffset = principalGraceMonths + principalFreqMonths + ((i - 1) * principalFreqMonths);
-      }
-      
-      principalPaymentMonths.add(Math.max(1, monthOffset));
+      principalPaymentMonths.add(Math.max(1, principalMonthOffset(i)));
     }
-    
+
     for (let i = 1; i <= interestInstallments; i++) {
-      const monthOffset = interestGraceMonths + (i * interestFreqMonths);
-      interestPaymentMonths.add(monthOffset);
+      interestPaymentMonths.add(interestMonthOffset(i));
     }
-    
+
     // Total de meses: usar totalTermMonths se fornecido, senão calcular
     if (!totalMonths || totalMonths === 0) {
-      const maxPrincipalMonth = principalGraceMonths + (principalInstallments * principalFreqMonths);
-      const maxInterestMonth = interestGraceMonths + (interestInstallments * interestFreqMonths);
+      const maxPrincipalMonth = principalMonthOffset(principalInstallments);
+      const maxInterestMonth = interestMonthOffset(interestInstallments);
       totalMonths = Math.max(maxPrincipalMonth, maxInterestMonth);
     }
     

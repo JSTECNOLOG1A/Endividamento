@@ -971,10 +971,9 @@ export default function Simulator() {
                 : "sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto"
             }
           >
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-3">
               <div>
                 <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Calculadora</h1>
-                <p className="text-sm text-slate-600 mt-0.5">Configure os parâmetros do empréstimo</p>
               </div>
               {result && (
                 <Button variant="ghost" size="sm" onClick={handleReset} className="text-xs gap-1.5">
@@ -1067,7 +1066,7 @@ export default function Simulator() {
               onDragLeave={handlePdfDragLeave}
               onDrop={handlePdfDrop}
               className={`flex flex-1 flex-col min-h-[320px] ${isModernLayout ? "lg:min-h-full" : "h-full min-h-[400px]"} rounded-xl border-2 border-dashed transition-colors overflow-hidden ${
-                isDraggingPdf ? "border-blue-400 bg-blue-50/60" : "border-[#E5E7EB] bg-white"
+                isDraggingPdf ? "border-cyan-400 bg-cyan-50/60" : "border-[#E5E7EB] bg-white"
               }`}
             >
               {uploadedPdfUrl ? (
@@ -1081,7 +1080,7 @@ export default function Simulator() {
                         href={withAuthToken(uploadedPdfUrl)}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                        className="text-xs text-cyan-600 hover:underline flex items-center gap-1"
                       >
                         <ExternalLink className="w-3 h-3" /> Abrir em nova aba
                       </a>
@@ -1119,11 +1118,11 @@ export default function Simulator() {
                       <UploadCloud className="w-10 h-10 text-slate-300" />
                     )}
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-700">Nenhum cálculo realizado</h3>
+                  <h3 className="text-lg font-semibold text-slate-700">Arraste seu contrato aqui</h3>
                   <p className="text-sm text-slate-500 mt-1 max-w-sm">
                     {isUploadingPdf
                       ? "Enviando PDF..."
-                      : 'Preencha os parâmetros e clique em "Calcular", ou arraste o PDF do contrato aqui pra conferir lado a lado enquanto preenche.'}
+                      : 'Solte o PDF para visualizar lado a lado, ou preencha os parâmetros ao lado e clique em "Calcular".'}
                   </p>
                 </label>
               )}

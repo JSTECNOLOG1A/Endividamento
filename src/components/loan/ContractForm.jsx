@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Combobox } from "@/components/ui/combobox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCircle, Info, Paperclip, Trash2, Save, Send, Banknote, Receipt, LayoutList } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -80,27 +81,31 @@ const parseBRNumber = (str) => {
   return parseFloat(cleaned) || 0;
 };
 
-// Numeral discreto antes do ícone de cada seção principal (Identificação /
-// Composição / Prazos) — reforça a leitura de "passo 1, 2, 3" do formulário
-// sem precisar de um wizard de verdade (o usuário continua vendo tudo numa
-// tela só, mas a numeração ajuda a orientar por onde começar).
-function SectionBadge({ n }) {
-  return (
-    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] font-bold shrink-0">
-      {n}
-    </span>
-  );
-}
-
 // Sub-título interno usado para dividir a seção "Composição e Remuneração da
 // Dívida" (a mais longa das três) em blocos menores e escaneáveis — sem criar
 // Cards separados, que quebrariam o agrupamento de 3 seções pedido.
 function SubsectionHeading({ icon: Icon, children }) {
   return (
     <h4 className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide">
-      <Icon className="w-3.5 h-3.5 text-blue-600" />
+      <Icon className="w-3.5 h-3.5 text-cyan-600" />
       {children}
     </h4>
+  );
+}
+
+// Ícone "i" com tooltip — substitui o parágrafo de descrição que ficava
+// sempre visível abaixo do título de cada aba, agora só sob hover, pra
+// ganhar espaço vertical sem perder a explicação de cada seção.
+function SectionInfo({ children }) {
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={150}>
+        <TooltipTrigger asChild>
+          <Info className="w-3.5 h-3.5 text-slate-400 hover:text-cyan-600 cursor-help shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[260px] text-xs">{children}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -424,6 +429,21 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     }
   }, [form.calculation_system, isLoaded]);
 
+  // Pro SAC, "Periodicidade Juros" fica travada em tela e deve sempre
+  // espelhar "Periodicidade Amortização" (ver hint "Segue periodicidade da
+  // amortização" no campo desabilitado) — o efeito acima só sincroniza no
+  // instante em que o sistema muda PARA SAC; se o usuário trocar a
+  // periodicidade de amortização depois disso, sem trocar de sistema de
+  // novo, o valor antigo ficava parado (ex.: Mensal) e ia pro cálculo
+  // divergente da amortização (ex.: Anual), fazendo juros e principal
+  // seguirem calendários diferentes — a causa do FINANCIAL_INTEGRITY_ERROR
+  // reportado num contrato SAC com carência + Primeiro Vencimento.
+  React.useEffect(() => {
+    if (!isLoaded || form.calculation_system !== "SAC") return;
+    if (form.interest_periodicity === form.principal_periodicity) return;
+    update("interest_periodicity", form.principal_periodicity);
+  }, [form.calculation_system, form.principal_periodicity, form.interest_periodicity, isLoaded]);
+
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
   const selectedGroup = groups?.find((g) => g.id === form.group_id);
@@ -473,10 +493,16 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     const principalGrace = parseInt(form.principal_grace_months) || 0;
     const principalPeriod = parseInt(form.principal_periodicity) || 1;
     const interestPeriod = parseInt(form.interest_periodicity) || 1;
-    
-    const principalInstallments = form.calculation_system === "BULLET" 
-      ? 1 
-      : Math.ceil((totalMonths - principalGrace) / principalPeriod);
+    // Com Primeiro Vencimento preenchido, o Prazo Total já conta a partir
+    // dele (carência não incluída — ver hint do campo) — subtrair a
+    // carência de novo aqui contaria ela em dobro e subestimaria o número
+    // de parcelas (ex.: prazo 49 + carência 20 + periodicidade anual vira
+    // 3 parcelas em vez das 5 que cabem de fato no prazo informado).
+    const hasExplicitFirstPaymentDate = Boolean(form.first_payment_date);
+
+    const principalInstallments = form.calculation_system === "BULLET"
+      ? 1
+      : Math.ceil((hasExplicitFirstPaymentDate ? totalMonths : (totalMonths - principalGrace)) / principalPeriod);
     const interestInstallments = form.calculation_system === "BULLET" 
       ? 1 
       : Math.ceil(totalMonths / interestPeriod);
@@ -587,18 +613,36 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
         banco estando certo. Como nenhum SelectItem real usa value="", é
         seguro ignorar esses valores vazios aqui.
       */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
-            <SectionBadge n={1} />
-            <Building2 className="w-4 h-4 text-blue-600" />
-            Identificação
-          </CardTitle>
-          <CardDescription className="text-xs text-slate-600 pl-7">
-            Grupo, entidade, banco credor e garantias do contrato.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+      <Tabs defaultValue="identificacao" className="w-full">
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <TabsList className="w-full h-auto flex-nowrap justify-start gap-1 overflow-x-auto rounded-none border-b border-slate-200 bg-slate-50 p-1.5">
+            <TabsTrigger
+              value="identificacao"
+              className="shrink-0 whitespace-nowrap gap-1.5 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:shadow-sm"
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              Identificação
+              <SectionInfo>Grupo, entidade, banco credor e garantias do contrato.</SectionInfo>
+            </TabsTrigger>
+            <TabsTrigger
+              value="composicao"
+              className="shrink-0 whitespace-nowrap gap-1.5 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:shadow-sm"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              Composição e Remuneração da Dívida
+              <SectionInfo>Moeda, valores, custos da operação e como a dívida é remunerada.</SectionInfo>
+            </TabsTrigger>
+            <TabsTrigger
+              value="prazos"
+              className="shrink-0 whitespace-nowrap gap-1.5 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:shadow-sm"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              Prazos e Periodicidades
+              <SectionInfo>Prazo total, datas de vencimento, carências e frequência de pagamento.</SectionInfo>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="identificacao" className="p-5 space-y-5 mt-0">
           <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Grupo Econômico *</Label>
@@ -743,22 +787,9 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               Preencha grupo, entidade, banco e a conta bancária de liberação antes de calcular.
             </div>
           )}
-        </CardContent>
-      </Card>
+          </TabsContent>
 
-      {/* Seção B: Composição e Remuneração da Dívida */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
-            <SectionBadge n={2} />
-            <CreditCard className="w-4 h-4 text-blue-600" />
-            Composição e Remuneração da Dívida
-          </CardTitle>
-          <CardDescription className="text-xs text-slate-600 pl-7">
-            Moeda, valores, custos da operação e como a dívida é remunerada.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+          <TabsContent value="composicao" className="p-5 space-y-5 mt-0">
           {/* Moeda e Defasagem PTAX - Primeiro Bloco */}
           <SubsectionHeading icon={Banknote}>Moeda e Câmbio</SubsectionHeading>
           <div className={gridCols2}>
@@ -915,7 +946,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Valor da Operação (R$) *
                 {form.currency_id && (
-                  <span className="ml-1 text-xs text-blue-600 font-normal">(Calculado automaticamente)</span>
+                  <span className="ml-1 text-xs text-cyan-600 font-normal">(Calculado automaticamente)</span>
                 )}
               </Label>
               <CurrencyInput 
@@ -1126,7 +1157,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                   <label
                     className={`flex gap-2.5 items-start rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
                       form.indexer_capitalization_mode === "paga_junto"
-                        ? "border-blue-400 bg-blue-50/60"
+                        ? "border-cyan-400 bg-cyan-50/60"
                         : "border-slate-200 hover:bg-slate-50"
                     }`}
                   >
@@ -1148,7 +1179,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                   <label
                     className={`flex gap-2.5 items-start rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
                       form.indexer_capitalization_mode === "capitaliza_saldo"
-                        ? "border-blue-400 bg-blue-50/60"
+                        ? "border-cyan-400 bg-cyan-50/60"
                         : "border-slate-200 hover:bg-slate-50"
                     }`}
                   >
@@ -1192,22 +1223,9 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </p>
             )}
           </div>
-        </CardContent>
-      </Card>
+          </TabsContent>
 
-      {/* Seção C: Prazos e Periodicidades */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
-            <SectionBadge n={3} />
-            <Calendar className="w-4 h-4 text-blue-600" />
-            Prazos e Periodicidades
-          </CardTitle>
-          <CardDescription className="text-xs text-slate-600 pl-7">
-            Prazo total, datas de vencimento, carências e frequência de pagamento.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+          <TabsContent value="prazos" className="p-5 space-y-5 mt-0">
           <div className={gridCols3}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
@@ -1502,8 +1520,9 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               )}
             </div>
           </div>
-        </CardContent>
-      </Card>
+          </TabsContent>
+        </div>
+      </Tabs>
 
       {/* Seção D: Percentuais de Amortização (PERCENTAGE_RESIDUAL) */}
       {form.calculation_system === "PERCENTAGE_RESIDUAL" && (
@@ -1562,7 +1581,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                   href={uploadedPdfUrl} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="text-xs text-blue-600 hover:underline"
+                  className="text-xs text-cyan-600 hover:underline"
                 >
                   Visualizar PDF
                 </a>
@@ -1597,7 +1616,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               size="lg"
               variant="outline"
               disabled={isUploadingPdf}
-              className="w-full h-12 text-base font-semibold border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50 disabled:opacity-70"
+              className="w-full h-12 text-base font-semibold border-2 border-dashed border-cyan-300 hover:border-cyan-500 hover:bg-cyan-50 disabled:opacity-70"
               onClick={() => document.getElementById('pdf-upload').click()}
             >
               <Paperclip className="w-5 h-5 mr-2" />
@@ -1610,14 +1629,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           type="submit" 
           size="lg" 
           disabled={isCalculating}
-          className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base font-semibold shadow-lg shadow-blue-600/20 disabled:opacity-70 disabled:cursor-not-allowed"
+          className="w-full bg-cyan-600 hover:bg-cyan-700 h-12 text-base font-semibold shadow-lg shadow-cyan-600/20 disabled:opacity-70 disabled:cursor-not-allowed"
         >
           <Calculator className="w-5 h-5 mr-2" />
           {isCalculating ? "Calculando..." : (isEditing ? "Recalcular contrato" : "Calcular contrato")}
         </Button>
         {isCalculating && (
           <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-600 animate-pulse" style={{ width: "100%" }} />
+            <div className="h-full bg-cyan-600 animate-pulse" style={{ width: "100%" }} />
           </div>
         )}
 
@@ -1645,7 +1664,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 type="button"
                 disabled={!hasResult || isSaving}
                 onClick={onSubmitForReview}
-                className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="gap-1.5 text-xs bg-cyan-600 hover:bg-cyan-700 disabled:opacity-60 disabled:cursor-not-allowed"
                 title={!hasResult ? "Calcule o contrato antes de enviar" : undefined}
               >
                 <Send className="w-3.5 h-3.5" />
