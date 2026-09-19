@@ -21,7 +21,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Eye, MoreHorizontal, Receipt, RefreshCw, Tags, Undo2, Upload } from "lucide-react";
+import { Eye, HandCoins, MoreHorizontal, Receipt, RefreshCw, Tags, Undo2, Upload } from "lucide-react";
+import ManualSettlementDialog from "../components/payables/ManualSettlementDialog";
 import ClassifyTitleDialog from "../components/payables/ClassifyTitleDialog";
 import TitleViewDialog from "../components/payables/TitleViewDialog";
 import { erpStatusOf, ErpStatusBadge, ErpStatusLegend } from "@/lib/erpStatus";
@@ -124,6 +125,8 @@ export default function AccountsPayable() {
   const [extornoItems, setExtornoItems] = useState([]);
   const [viewTitle, setViewTitle] = useState(null);
   const [viewRefreshing, setViewRefreshing] = useState(false);
+  const [manualTitle, setManualTitle] = useState(null);
+  const [manualBusy, setManualBusy] = useState(false);
 
   const { data: entities } = useQuery({
     queryKey: ["entities"],
@@ -213,6 +216,32 @@ export default function AccountsPayable() {
   const { sortKey, sortDir, toggleSort, sortedRows } = useSortableRows(rows, PAYABLE_SORT_COLUMNS);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["payable-titles"] });
+
+  const handleManualSettle = async ({ id, paymentDate, amountPaid }) => {
+    setManualBusy(true);
+    try {
+      const result = await base44.functions.invoke("settlePayableTitleManually", { id, paymentDate, amountPaid });
+      const data = result?.data || result;
+      toast.success(data?.status === "baixado" ? "Título baixado." : "Baixa parcial registrada.");
+      setManualTitle(null);
+      refresh();
+    } catch (err) {
+      toast.error(err?.message || "Não foi possível registrar a baixa");
+    } finally {
+      setManualBusy(false);
+    }
+  };
+
+  const handleUndoManual = async (item) => {
+    if (!window.confirm("Desfazer a baixa manual deste título?")) return;
+    try {
+      await base44.functions.invoke("undoManualPayableSettlement", { id: item.id });
+      toast.success("Baixa manual desfeita.");
+      refresh();
+    } catch (err) {
+      toast.error(err?.message || "Não foi possível desfazer a baixa");
+    }
+  };
 
   const handleConsultNow = async () => {
     await withProcessing("Consultando títulos no ERP…", async () => {
@@ -668,6 +697,18 @@ export default function AccountsPayable() {
                                   ) : null}
                                 </>
                               )}
+                              {item.status === "aberto" && item.erp_status !== "baixado" && Number(item.saldo) > 0 && (
+                                <DropdownMenuItem onClick={() => setManualTitle(item)}>
+                                  <HandCoins className="w-3.5 h-3.5 mr-2" />
+                                  Registrar baixa manual
+                                </DropdownMenuItem>
+                              )}
+                              {item.baixa_origem === "manual" && (
+                                <DropdownMenuItem onClick={() => handleUndoManual(item)}>
+                                  <Undo2 className="w-3.5 h-3.5 mr-2" />
+                                  Desfazer baixa manual
+                                </DropdownMenuItem>
+                              )}
                               {canManageErp && canReverse(item) && (
                                 <DropdownMenuItem className="text-rose-700" onClick={() => askReverse([item])}>
                                   <Undo2 className="w-3.5 h-3.5 mr-2" />
@@ -719,6 +760,14 @@ export default function AccountsPayable() {
         entities={entities || []}
         submitting={busy}
         onSubmit={handleClassify}
+      />
+
+      <ManualSettlementDialog
+        title={manualTitle}
+        open={Boolean(manualTitle)}
+        onOpenChange={(open) => { if (!open && !manualBusy) setManualTitle(null); }}
+        submitting={manualBusy}
+        onSubmit={handleManualSettle}
       />
 
       <AlertDialog open={extornoItems.length > 0} onOpenChange={(open) => { if (!open && !busy) setExtornoItems([]); }}>

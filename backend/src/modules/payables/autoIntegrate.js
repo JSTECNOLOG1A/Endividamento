@@ -14,6 +14,7 @@ export async function listReadyPayableTitles({ limit = 200 } = {}) {
      WHERE group_id = $1
        AND status = 'aberto'
        AND COALESCE(integrado_erp, false) = false
+       AND COALESCE(retido_implantacao, false) = false
        AND COALESCE(erp_status, '') NOT IN ('integrado', 'baixado')
        AND btrim(COALESCE(natureza, '')) <> ''
        AND btrim(COALESCE(fornecedor, '')) <> ''

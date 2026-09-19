@@ -275,6 +275,11 @@ export async function integratePayableTitles(payload = {}) {
   let skipped = 0;
 
   for (const title of titlesResult.rows) {
+    if (title.retido_implantacao) {
+      skipped += 1;
+      results.push({ id: title.id, ok: false, skipped: true, message: "Título retido para implantação de saldos — libere na janela de troca" });
+      continue;
+    }
     if (title.erp_status === "baixado") {
       skipped += 1;
       results.push({ id: title.id, ok: false, skipped: true, message: "Já baixado no ERP" });

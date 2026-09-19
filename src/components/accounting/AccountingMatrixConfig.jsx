@@ -19,7 +19,11 @@ import { SETTLEMENT_EVENT_TYPES, EVENT_TYPE_LABELS } from "@/lib/accountingClosi
 import { OPERATION_CATEGORIES } from "@/lib/contractOptions";
 import { SORT_HEAD_CLASS } from "@/components/ui/sortable-table";
 
-const EVENT_TYPES_ORDERED = Object.values(SETTLEMENT_EVENT_TYPES);
+// A apropriação linear do custo de transação foi descontinuada (política única: custo no ato);
+// o tipo continua existindo só para fechamentos antigos e não aparece mais na matriz.
+const EVENT_TYPES_ORDERED = Object.values(SETTLEMENT_EVENT_TYPES).filter(
+  (type) => type !== SETTLEMENT_EVENT_TYPES.CUSTO_TRANSACAO_APROPRIACAO
+);
 
 const RECLASSIFICATION_TYPES = new Set([
   SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_PRINCIPAL,
@@ -56,7 +60,7 @@ const NAO_CIRCULANTE_HINT = "Conta de PASSIVO — parcela da dívida desta categ
 
 const EVENT_TYPE_HINTS = {
   liberacao: "Contas movimentadas quando o empréstimo é liberado — reconhece o passivo já líquido (valor captado menos fee de estruturação, se houver). Se o contrato tiver uma \"Conta Bancária de Liberação\" com conta contábil vinculada (Governança > Contas Bancárias), a conta de débito aqui é só o respaldo — o lançamento usa a conta bancária.",
-  juros_apropriados: "Débito = despesa financeira; Crédito = passivo de juros a pagar. Lançado todo mês, mesmo antes de pago (regime de competência).",
+  juros_apropriados: "Débito = despesa financeira; Crédito = passivo de juros a pagar. Lançado todo mês pelo juro acumulado até o último dia do mês (rateado por dias corridos dentro do período de cada parcela), mesmo antes de pago — regime de competência.",
   pagamento_principal: "Contas usadas quando o principal é baixado (pago) na conciliação do fechamento. Se a baixa tiver uma conta bancária com conta contábil vinculada, a conta de crédito aqui é só o respaldo.",
   pagamento_juros: "Contas usadas quando os juros são baixados (pagos) na conciliação do fechamento. Se a baixa tiver uma conta bancária com conta contábil vinculada, a conta de crédito aqui é só o respaldo.",
   variacao_cambial_ativa: "Só contratos em USD. Débito = despesa/redução; calculada mês a mês pela curva de PTAX do cronograma (projeção, não o pagamento real).",
@@ -64,9 +68,9 @@ const EVENT_TYPE_HINTS = {
   variacao_cambial_ativa_realizada: "Só contratos em USD, e só quando a PTAX do dia do pagamento é informada na baixa — recalcula a variação sobre o valor efetivamente liquidado, separada da provisão.",
   variacao_cambial_passiva_realizada: "Só contratos em USD, e só quando a PTAX do dia do pagamento é informada na baixa — recalcula a variação sobre o valor efetivamente liquidado, separada da provisão.",
   tarifa_bancaria: "Conta de despesa pra tarifas cobradas pelo banco, informadas manualmente na baixa da parcela.",
-  iof: "Conta de despesa pro IOF da operação — lançado integral no mês da liberação (não é amortizado, diferente do fee de estruturação abaixo).",
-  custo_transacao_inicial: "Não gera lançamento hoje — o custo de captação já entra líquido no passivo na liberação (ver nota acima). Deixe sem configurar.",
-  custo_transacao_apropriacao: "Conta de despesa pro fee de estruturação — só é lançada mês a mês quando o valor foi financiado (somado ao principal do contrato).",
+  iof: "Conta de despesa pro IOF da operação — lançado integral na data da operação (não é amortizado).",
+  custo_transacao_inicial: "Taxas e custos de contratação (\"Outras taxas\" do contrato) — reconhecidos na data da operação, cada verba na sua conta (o IOF tem a conta própria abaixo). Política única da ferramenta: sem apropriação mensal.",
+  capitalizacao_juros: "Juros que o contrato incorpora ao principal (carência com capitalização). Débito = juros a pagar; Crédito = principal (passivo). Sem esse lançamento, juros a pagar e principal deixam de fechar em zero no fim do contrato.",
   reclassificacao_circulante_principal: "Contas de passivo (as mesmas de Circulante/Não circulante acima) movimentadas quando o prazo restante do principal migra entre um balde e outro.",
   reclassificacao_circulante_juros: "Contas de passivo movimentadas quando o prazo restante dos juros a pagar migra entre circulante e não circulante.",
   multa_mora: "Conta de despesa pra multa e mora, informadas manualmente na baixa da parcela.",

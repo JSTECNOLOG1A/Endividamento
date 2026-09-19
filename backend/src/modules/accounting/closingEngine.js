@@ -30,6 +30,7 @@ export const SETTLEMENT_EVENT_TYPES = {
   IOF: "iof",
   CUSTO_TRANSACAO_INICIAL: "custo_transacao_inicial",
   CUSTO_TRANSACAO_APROPRIACAO: "custo_transacao_apropriacao",
+  CAPITALIZACAO_JUROS: "capitalizacao_juros",
   RECLASSIFICACAO_CIRCULANTE_PRINCIPAL: "reclassificacao_circulante_principal",
   RECLASSIFICACAO_CIRCULANTE_JUROS: "reclassificacao_circulante_juros",
   MULTA_MORA: "multa_mora",
@@ -51,6 +52,7 @@ export const EVENT_TYPE_LABELS = {
   iof: "IOF",
   custo_transacao_inicial: "Custo de transação inicial",
   custo_transacao_apropriacao: "Apropriação de custo de transação (fee de estruturação)",
+  capitalizacao_juros: "Capitalização de juros (juros a pagar → principal)",
   reclassificacao_circulante_principal: "Reclassificação de principal para circulante",
   reclassificacao_circulante_juros: "Reclassificação de juros para circulante",
   multa_mora: "Multa e mora",
@@ -74,12 +76,38 @@ function isoDateOnly(value) {
   return String(value).slice(0, 10);
 }
 
-export function reconcileContractForCompetencia(contract, year, month, settlements = []) {
+// Chave de idempotência de cada evento (contrato + tipo + data + origem). Reprocessar o
+// mesmo período gera as MESMAS chaves — quem grava lançamento deve substituir, nunca somar.
+function eventKey(contractId, type, date, origin) {
+  return [contractId, type, date, origin || ""].join("|");
+}
+
+function isoOf(dateObj) {
+  return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Concilia um contrato numa competência.
+ *
+ * Regras (validadas com o responsável — ver plano de virada de saldos):
+ *  - Juros apropriados POR COMPETÊNCIA: o evento do mês é o juro acumulado até o último dia
+ *    do mês menos o acumulado até o último dia do mês anterior. O juro de cada período do
+ *    cronograma (data da parcela anterior até a data da parcela) é rateado por dias corridos.
+ *    Não altera o cronograma e não gera títulos: o financeiro segue com o valor cheio.
+ *  - Liberação, IOF e custo de transação são reconhecidos NA DATA DA OPERAÇÃO (política única
+ *    da ferramenta: custo de transação no ato, cada verba na sua conta; sem apropriação linear).
+ *  - Baixa efetiva: a partir de options.requireSettlementFrom (data por cliente, vazia = regra
+ *    antiga) a parcela só é paga se houver baixa registrada; sem baixa fica em aberto e entra em
+ *    result.pendingUnsettled.
+ */
+export function reconcileContractForCompetencia(contract, year, month, settlements = [], options = {}) {
   const yearNum = parseInt(year, 10);
   const monthNum = parseInt(month, 10);
   const monthStart = new Date(yearNum, monthNum - 1, 1, 0, 0, 0, 0);
   const monthEnd = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
   const prevMonthEnd = new Date(yearNum, monthNum - 1, 0, 23, 59, 59, 999);
+  const monthEndIso = isoOf(monthEnd);
+  const requireFrom = isoDateOnly(options.requireSettlementFrom || "");
 
   const result = {
     contractId: contract.id,
@@ -90,16 +118,21 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     closing: { principal: 0, interest: 0, fx: 0 },
     settlementsUsed: [],
     pendingRecalculation: [],
+    pendingUnsettled: [],
   };
 
   // Contrato renegociado/quitado antecipadamente antes desta competência —
   // nada mais a conciliar a partir daí (payoff_date, gravado em
-  // renegotiateContract()/settleContractEarly()). Mesma regra do fechamento
-  // manual (src/lib/accountingClosing.js).
+  // renegotiateContract()/settleContractEarly()).
   const payoffIso = isoDateOnly(contract.payoff_date);
   if (payoffIso && new Date(payoffIso + "T12:00:00") < monthStart) {
     return result;
   }
+
+  // Contrato em implantação de saldos: as competências até a data de corte são do saldo de abertura
+  // (lançamento de abertura), não do fechamento — nada a conciliar aqui.
+  const cutoffIso = contract.deployment_mode ? isoDateOnly(contract.deployment_cutoff) : "";
+  if (cutoffIso && monthEndIso <= cutoffIso) return result;
 
   if (!contract.schedule_data) return result;
 
@@ -118,53 +151,139 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     settlementsByParcela.set(String(s.parcela), s);
   });
 
-  let principalLedger = 0;
-  let jurosLedger = 0;
-  let fxLedger = 0;
-  let openingSnapshot = null;
-  let closingSnapshot = null;
+  // Linhas com pagamento efetivo já resolvido (baixa x cronograma x regra de baixa efetiva).
+  const rows = schedule.map((row, idx) => {
+    const settlement = settlementsByParcela.get(String(row.parcela));
+    const unpaidByRule = Boolean(requireFrom) && row.dataVencimento >= requireFrom && !settlement;
 
-  schedule.forEach((row, idx) => {
-    const rowDate = new Date(row.dataVencimento + "T12:00:00");
-    if (!openingSnapshot && rowDate > prevMonthEnd) {
-      openingSnapshot = { principal: principalLedger, interest: jurosLedger, fx: fxLedger };
+    // Juros capitalizados que a parcela paga depois: o motor os inclui em `jurosPagos`, mas eles já
+    // viraram principal (evento de capitalização) — então a parte deles amortiza o PRINCIPAL. Aparece
+    // como queda do saldo além da amortização: sdInicial + capitalizado − sdFinal − amortização.
+    // (Contratos em moeda estrangeira e liberação parcelada ficam fora: o saldo tem outros componentes.)
+    const scheduledExtra = !row.liberacaoInjetada && !contract.currency_id
+      ? (() => {
+          const gap = r2((row.sdInicial || 0) + (row.jurosCapitalizados || 0) - (row.sdFinal || 0) - (row.amortizacao || 0));
+          return gap > 0.05 ? gap : 0; // ignora ruído de arredondamento
+        })()
+      : 0;
+    let extra = 0;
+    if (settlement) {
+      const scheduledInterest = row.jurosPagos || 0;
+      extra = scheduledInterest > 0 ? r2(Math.min(scheduledExtra, scheduledExtra * ((settlement.interest_paid || 0) / scheduledInterest))) : 0;
+    } else if (!unpaidByRule) {
+      extra = scheduledExtra;
+    }
+    const rawInterestPaid = settlement ? r2(settlement.interest_paid || 0) : (unpaidByRule ? 0 : (row.jurosPagos || 0));
+    extra = Math.min(extra, rawInterestPaid);
+    return {
+      row,
+      idx,
+      settlement,
+      unpaidByRule,
+      date: new Date(row.dataVencimento + "T12:00:00"),
+      interest: (row.jurosFixosMes || 0) + (row.jurosVariaveisMes || 0),
+      fx: row.varCambial || 0,
+      capitalizado: row.jurosCapitalizados || 0,
+      liberacao: idx === 0 ? 0 : (row.liberacaoInjetada || 0),
+      principalPaid: r2((settlement ? r2(settlement.principal_paid || 0) : (unpaidByRule ? 0 : (row.amortizacao || 0))) + extra),
+      interestPaid: r2(rawInterestPaid - extra),
+    };
+  });
+
+  // Data da liberação: a da operação (não a da primeira parcela).
+  const opIso = isoDateOnly(contract.operation_date);
+  const opDate = opIso ? new Date(opIso + "T12:00:00") : null;
+  const liberationDate = opDate && opDate <= rows[0].date ? opDate : rows[0].date;
+  const liberationIso = isoOf(liberationDate);
+  const initialPrincipal = rows[0].row.sdInicial || 0;
+
+  // Juros acumulados até "limit": períodos fechados por inteiro + rateio por dias do período em curso.
+  const periodStart = (i) => (i === 0 ? liberationDate : rows[i - 1].date);
+  const accruedThrough = (limit) => {
+    let total = 0;
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i].date <= limit) {
+        total += rows[i].interest;
+      } else {
+        const start = periodStart(i);
+        const span = rows[i].date - start;
+        if (limit > start && span > 0) total += rows[i].interest * ((limit - start) / span);
+        break;
+      }
+    }
+    return total;
+  };
+  const snapshotAt = (limit) => {
+    let principal = liberationDate <= limit ? initialPrincipal : 0;
+    let paidInterest = 0;
+    let fx = 0;
+    rows.forEach((r) => {
+      if (r.date <= limit) {
+        principal += r.liberacao - r.principalPaid + r.capitalizado;
+        paidInterest += r.interestPaid + r.capitalizado;
+        fx += r.fx;
+      }
+    });
+    return {
+      principal: r2(principal),
+      interest: r2(accruedThrough(limit) - paidInterest),
+      fx: r2(fx),
+    };
+  };
+
+  result.opening = snapshotAt(prevMonthEnd);
+  result.closing = snapshotAt(monthEnd);
+
+  const push = (type, amount, date, origin, extra = {}) => {
+    result.events.push({ type, amount, date, key: eventKey(contract.id, type, date, origin), ...extra });
+  };
+
+  // Liberação, IOF e custo de transação: na data da operação.
+  if (liberationDate >= monthStart && liberationDate <= monthEnd) {
+    if (initialPrincipal) push(SETTLEMENT_EVENT_TYPES.LIBERACAO, r2(initialPrincipal), liberationIso, "abertura", { bankAccountId: contract.disbursement_bank_account_id || null });
+    if ((contract.iof_value || 0) > 0) push(SETTLEMENT_EVENT_TYPES.IOF, r2(contract.iof_value), liberationIso, "abertura");
+    if ((contract.other_fees || 0) > 0) push(SETTLEMENT_EVENT_TYPES.CUSTO_TRANSACAO_INICIAL, r2(contract.other_fees), liberationIso, "abertura");
+  }
+
+  // Juros apropriados por competência (acumulado até o fim do mês − acumulado até o fim do mês anterior).
+  const interestMonth = r2(accruedThrough(monthEnd) - accruedThrough(prevMonthEnd));
+  if (interestMonth) push(SETTLEMENT_EVENT_TYPES.JUROS_APROPRIADOS, interestMonth, monthEndIso, "competencia");
+
+  rows.forEach((r) => {
+    const { row, idx, settlement } = r;
+    const rowDate = r.date;
+    const isWithinMonth = rowDate >= monthStart && rowDate <= monthEnd;
+
+    // Parcela vencida até o fim do mês, sem baixa, sob a regra de baixa efetiva: pendência.
+    if (r.unpaidByRule && rowDate <= monthEnd && ((row.amortizacao || 0) > 0 || (row.jurosPagos || 0) > 0)) {
+      result.pendingUnsettled.push({
+        contractId: contract.id,
+        contractNumber: contract.contract_number,
+        parcela: row.parcela,
+        dataVencimento: row.dataVencimento,
+        principal: r2(row.amortizacao || 0),
+        juros: r2(row.jurosPagos || 0),
+      });
     }
 
-    const isWithinMonth = rowDate >= monthStart && rowDate <= monthEnd;
-    const settlement = settlementsByParcela.get(String(row.parcela));
+    if (!isWithinMonth) return;
 
-    // Liberação parcelada: o motor expõe em cada linha quanto foi injetado ali
-    // (`liberacaoInjetada`) — 0 exceto quando uma tranche caiu naquele mês.
-    const newPrincipalRow = idx === 0 ? (row.sdInicial || 0) : (row.liberacaoInjetada || 0);
-    const interestAccruedRow = (row.jurosFixosMes || 0) + (row.jurosVariaveisMes || 0);
-    const fxAccruedRow = row.varCambial || 0;
+    // Liberação parcelada: tranche que caiu nesta linha (o motor expõe `liberacaoInjetada`).
+    if (idx > 0 && r.liberacao) push(SETTLEMENT_EVENT_TYPES.LIBERACAO, r2(r.liberacao), row.dataVencimento, `tranche-${row.parcela}`, { bankAccountId: contract.disbursement_bank_account_id || null });
 
-    const principalPaidRow = settlement ? r2(settlement.principal_paid || 0) : (row.amortizacao || 0);
-    const interestPaidRow = settlement ? r2(settlement.interest_paid || 0) : (row.jurosPagos || 0);
+    // Juros capitalizados na linha: saem de juros a pagar e passam a compor o principal.
+    if (r.capitalizado) push(SETTLEMENT_EVENT_TYPES.CAPITALIZACAO_JUROS, r2(r.capitalizado), row.dataVencimento, `parcela-${row.parcela}`);
 
-    if (isWithinMonth) {
-      if (newPrincipalRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.LIBERACAO, amount: r2(newPrincipalRow), date: row.dataVencimento, bankAccountId: contract.disbursement_bank_account_id || null });
-      if (interestAccruedRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.JUROS_APROPRIADOS, amount: r2(interestAccruedRow), date: row.dataVencimento });
-      if (fxAccruedRow) {
-        result.events.push({
-          type: fxAccruedRow >= 0 ? SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA : SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA,
-          amount: r2(Math.abs(fxAccruedRow)),
-          date: row.dataVencimento,
-        });
-      }
-      if (principalPaidRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.PAGAMENTO_PRINCIPAL, amount: r2(principalPaidRow), date: row.dataVencimento, extraordinary: settlement?.extraordinary_amortization, bankAccountId: settlement?.bank_account_id || null });
-      if (interestPaidRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.PAGAMENTO_JUROS, amount: r2(interestPaidRow), date: row.dataVencimento, bankAccountId: settlement?.bank_account_id || null });
-
-      if (idx === 0 && (contract.iof_value || 0) > 0) {
-        result.events.push({ type: SETTLEMENT_EVENT_TYPES.IOF, amount: r2(contract.iof_value), date: row.dataVencimento });
-      }
-
-      if (contract.other_fees_financed && (contract.other_fees || 0) > 0 && (contract.total_term_months || 0) > 0) {
-        const monthlyFee = r2(contract.other_fees / contract.total_term_months);
-        if (monthlyFee) {
-          result.events.push({ type: SETTLEMENT_EVENT_TYPES.CUSTO_TRANSACAO_APROPRIACAO, amount: monthlyFee, date: row.dataVencimento });
-        }
-      }
+    if (r.fx) {
+      push(
+        r.fx >= 0 ? SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA : SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA,
+        r2(Math.abs(r.fx)),
+        row.dataVencimento,
+        `parcela-${row.parcela}`
+      );
+    }
+    if (r.principalPaid) push(SETTLEMENT_EVENT_TYPES.PAGAMENTO_PRINCIPAL, r2(r.principalPaid), row.dataVencimento, settlement ? `baixa-${settlement.id}` : `parcela-${row.parcela}`, { extraordinary: settlement?.extraordinary_amortization, bankAccountId: settlement?.bank_account_id || null });
+    if (r.interestPaid) push(SETTLEMENT_EVENT_TYPES.PAGAMENTO_JUROS, r2(r.interestPaid), row.dataVencimento, settlement ? `baixa-${settlement.id}` : `parcela-${row.parcela}`, { bankAccountId: settlement?.bank_account_id || null });
 
       if (settlement) {
         result.settlementsUsed.push(settlement.id);
@@ -191,22 +310,8 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
           }
         }
       }
-    }
-
-    principalLedger += newPrincipalRow - principalPaidRow;
-    jurosLedger += interestAccruedRow - interestPaidRow;
-    fxLedger += fxAccruedRow;
-
-    if (rowDate <= monthEnd) {
-      closingSnapshot = { principal: principalLedger, interest: jurosLedger, fx: fxLedger };
-    }
   });
 
-  if (!openingSnapshot) openingSnapshot = closingSnapshot || { principal: 0, interest: 0, fx: 0 };
-  if (!closingSnapshot) closingSnapshot = openingSnapshot;
-
-  result.opening = { principal: r2(openingSnapshot.principal), interest: r2(openingSnapshot.interest), fx: r2(openingSnapshot.fx) };
-  result.closing = { principal: r2(closingSnapshot.principal), interest: r2(closingSnapshot.interest), fx: r2(closingSnapshot.fx) };
   return result;
 }
 
@@ -271,9 +376,9 @@ export function splitCirculanteNaoCirculante(contract, cutoffDate) {
   return result;
 }
 
-export function calculateClosingReconciliation(contracts, settlementsByContract, year, month, dataBase) {
+export function calculateClosingReconciliation(contracts, settlementsByContract, year, month, dataBase, options = {}) {
   const perContract = contracts.map((c) =>
-    reconcileContractForCompetencia(c, year, month, settlementsByContract.get(c.id) || [])
+    reconcileContractForCompetencia(c, year, month, settlementsByContract.get(c.id) || [], options)
   );
 
   const aggregatedEvents = [];
@@ -340,6 +445,7 @@ export function calculateClosingReconciliation(contracts, settlementsByContract,
     { principal: 0, interest: 0, fx: 0 }
   );
 
+  const pendingUnsettled = perContract.flatMap((c) => c.pendingUnsettled || []);
   const pendingRecalculation = perContract.flatMap((c) => c.pendingRecalculation.map((sid) => ({ contractId: c.contractId, contractNumber: c.contractNumber, settlementId: sid })));
 
   return {
@@ -349,6 +455,7 @@ export function calculateClosingReconciliation(contracts, settlementsByContract,
     opening: { ...opening, principal: r2(opening.principal), interest: r2(opening.interest), fx: r2(opening.fx) },
     closing: { ...closing, principal: r2(closing.principal), interest: r2(closing.interest), fx: r2(closing.fx) },
     pendingRecalculation,
+    pendingUnsettled,
     hasBlockingDivergence: pendingRecalculation.length > 0,
   };
 }
@@ -419,6 +526,7 @@ export function buildJournalEntries(reconciliation, eventMappings, entryDate, ba
       side: "debito",
       amount: evt.amount,
       historico,
+      event_key: evt.key || null,
     });
     entries.push({
       contract_id: evt.contractId,
@@ -428,6 +536,7 @@ export function buildJournalEntries(reconciliation, eventMappings, entryDate, ba
       side: "credito",
       amount: evt.amount,
       historico,
+      event_key: evt.key || null,
     });
   });
 

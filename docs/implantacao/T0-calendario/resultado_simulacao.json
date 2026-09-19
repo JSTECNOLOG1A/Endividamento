@@ -1,0 +1,320 @@
+[
+ {
+  "contrato": "2128911",
+  "status": "rascunho",
+  "sistema": "SAC",
+  "parcelasArmazenadas": 73,
+  "reproducao": {
+   "linhasSalvas": 73,
+   "linhasMotor": 73,
+   "datasDiferentes": 0,
+   "maiorDiferencaValor": 0
+  },
+  "impacto": {
+   "parcelasAlteradas": 1,
+   "deltaJurosTotal": 0,
+   "deltaSaldoFinal": 0,
+   "alteradasAteDataBase": 1,
+   "alteradasDepoisDataBase": 0,
+   "detalhe": [
+    {
+     "parcela": 58,
+     "de": "2026-02-17",
+     "para": "2026-02-18",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "até a data-base"
+    }
+   ]
+  }
+ },
+ {
+  "contrato": "2168813",
+  "status": "rascunho",
+  "sistema": "SAC",
+  "parcelasArmazenadas": 61,
+  "reproducao": {
+   "linhasSalvas": 61,
+   "linhasMotor": 61,
+   "datasDiferentes": 0,
+   "maiorDiferencaValor": 0
+  },
+  "impacto": {
+   "parcelasAlteradas": 3,
+   "deltaJurosTotal": 0,
+   "deltaSaldoFinal": 0,
+   "alteradasAteDataBase": 2,
+   "alteradasDepoisDataBase": 1,
+   "detalhe": [
+    {
+     "parcela": 2,
+     "de": "2022-06-16",
+     "para": "2022-06-17",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "até a data-base"
+    },
+    {
+     "parcela": 46,
+     "de": "2026-02-16",
+     "para": "2026-02-18",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "até a data-base"
+    },
+    {
+     "parcela": 61,
+     "de": "2027-05-17",
+     "para": "2027-05-17",
+     "deltaJuros": 0,
+     "deltaAmortizacao": -0.01,
+     "periodo": "depois da data-base"
+    }
+   ]
+  }
+ },
+ {
+  "contrato": "2243903",
+  "status": "rascunho",
+  "sistema": "SAC",
+  "parcelasArmazenadas": 85,
+  "reproducao": {
+   "linhasSalvas": 85,
+   "linhasMotor": 85,
+   "datasDiferentes": 0,
+   "maiorDiferencaValor": 0
+  },
+  "impacto": {
+   "parcelasAlteradas": 2,
+   "deltaJurosTotal": 0,
+   "deltaSaldoFinal": 0,
+   "alteradasAteDataBase": 1,
+   "alteradasDepoisDataBase": 1,
+   "detalhe": [
+    {
+     "parcela": 17,
+     "de": "2026-02-16",
+     "para": "2026-02-18",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "até a data-base"
+    },
+    {
+     "parcela": 85,
+     "de": "2031-10-16",
+     "para": "2031-10-16",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0.05,
+     "periodo": "depois da data-base"
+    }
+   ]
+  }
+ },
+ {
+  "contrato": "2915274241",
+  "status": "aprovado",
+  "sistema": "PRICE",
+  "parcelasArmazenadas": 36,
+  "reproducao": {
+   "linhasSalvas": 36,
+   "linhasMotor": 36,
+   "datasDiferentes": 0,
+   "maiorDiferencaValor": 0
+  },
+  "impacto": {
+   "parcelasAlteradas": 1,
+   "deltaJurosTotal": 0,
+   "deltaSaldoFinal": 0,
+   "alteradasAteDataBase": 0,
+   "alteradasDepoisDataBase": 1,
+   "detalhe": [
+    {
+     "parcela": 30,
+     "de": "2026-09-07",
+     "para": "2026-09-08",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "depois da data-base"
+    }
+   ]
+  }
+ },
+ {
+  "contrato": "40/03026-5",
+  "status": "rascunho",
+  "sistema": "SAC",
+  "parcelasArmazenadas": 25,
+  "reproducao": {
+   "linhasSalvas": 25,
+   "linhasMotor": 25,
+   "datasDiferentes": 0,
+   "maiorDiferencaValor": 0
+  },
+  "impacto": {
+   "parcelasAlteradas": 2,
+   "deltaJurosTotal": 0,
+   "deltaSaldoFinal": 0,
+   "alteradasAteDataBase": 0,
+   "alteradasDepoisDataBase": 2,
+   "detalhe": [
+    {
+     "parcela": 22,
+     "de": "2027-02-09",
+     "para": "2027-02-10",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "depois da data-base"
+    },
+    {
+     "parcela": 25,
+     "de": "2027-05-10",
+     "para": "2027-05-10",
+     "deltaJuros": 0,
+     "deltaAmortizacao": -0.01,
+     "periodo": "depois da data-base"
+    }
+   ]
+  }
+ },
+ {
+  "contrato": "40027716",
+  "status": "rascunho",
+  "sistema": "SAC",
+  "parcelasArmazenadas": 97,
+  "reproducao": {
+   "linhasSalvas": 97,
+   "linhasMotor": 97,
+   "datasDiferentes": 0,
+   "maiorDiferencaValor": 0
+  },
+  "impacto": {
+   "parcelasAlteradas": 15,
+   "deltaJurosTotal": 0,
+   "deltaSaldoFinal": 0,
+   "alteradasAteDataBase": 5,
+   "alteradasDepoisDataBase": 10,
+   "detalhe": [
+    {
+     "parcela": 4,
+     "de": "2025-01-01",
+     "para": "2025-01-02",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "até a data-base"
+    },
+    {
+     "parcela": 6,
+     "de": "2025-03-03",
+     "para": "2025-03-05",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "até a data-base"
+    },
+    {
+     "parcela": 8,
+     "de": "2025-05-01",
+     "para": "2025-05-02",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "até a data-base"
+    },
+    {
+     "parcela": 16,
+     "de": "2026-01-01",
+     "para": "2026-01-02",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "até a data-base"
+    },
+    {
+     "parcela": 20,
+     "de": "2026-05-01",
+     "para": "2026-05-04",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "até a data-base"
+    },
+    {
+     "parcela": 26,
+     "de": "2026-11-02",
+     "para": "2026-11-03",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "depois da data-base"
+    },
+    {
+     "parcela": 28,
+     "de": "2027-01-01",
+     "para": "2027-01-04",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "depois da data-base"
+    },
+    {
+     "parcela": 44,
+     "de": "2028-05-01",
+     "para": "2028-05-02",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "depois da data-base"
+    },
+    {
+     "parcela": 52,
+     "de": "2029-01-01",
+     "para": "2029-01-02",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "depois da data-base"
+    },
+    {
+     "parcela": 56,
+     "de": "2029-05-01",
+     "para": "2029-05-02",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "depois da data-base"
+    },
+    {
+     "parcela": 64,
+     "de": "2030-01-01",
+     "para": "2030-01-02",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "depois da data-base"
+    },
+    {
+     "parcela": 68,
+     "de": "2030-05-01",
+     "para": "2030-05-02",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "depois da data-base"
+    },
+    {
+     "parcela": 76,
+     "de": "2031-01-01",
+     "para": "2031-01-02",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "depois da data-base"
+    },
+    {
+     "parcela": 80,
+     "de": "2031-05-01",
+     "para": "2031-05-02",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "depois da data-base"
+    },
+    {
+     "parcela": 88,
+     "de": "2032-01-01",
+     "para": "2032-01-02",
+     "deltaJuros": 0,
+     "deltaAmortizacao": 0,
+     "periodo": "depois da data-base"
+    }
+   ]
+  }
+ }
+]

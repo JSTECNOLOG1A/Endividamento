@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { deploymentKeepsTitle } from "./implantacao.js";
 import { pool } from "../../db/pool.js";
 import { logger } from "../../logger.js";
 import { se2FilialFromSm0 } from "../integrations/protheusScope.js";
@@ -563,7 +564,10 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
   const scheduleContract = await scheduleContractForGeneration(contract);
   const financeParams = await loadFinanceTitleParams(groupId);
   const titles = buildPayableTitles(scheduleContract, bank, entityResult.rows[0] || null, financeParams)
-    .filter((title) => !existingKeys.has(`${title.prefixo}::${title.parcela}`));
+    .filter((title) => !existingKeys.has(`${title.prefixo}::${title.parcela}`))
+    // Contrato em implantação de saldos: só parcelas depois do corte (+ vencidas em aberto informadas).
+    .filter((title) => deploymentKeepsTitle(contract, title));
+  const retido = Boolean(contract.deployment_mode);
   if (!titles.length) {
     if (!existing.rows.length) {
       logger.warn({ contractId: contract.id }, "contrato aprovado sem parcelas para contas a pagar");
@@ -589,8 +593,8 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
            id, entity_id, contract_id, parcela, titulo_numero, tipo, prefixo,
            emissao, vencimento, valor, saldo, natureza, historico, status, origem,
            fornecedor, fornecedor_loja, fornecedor_nome, filial, filial_origem,
-           extra_json, created_by, group_id
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22,$23)
+           extra_json, created_by, group_id, retido_implantacao
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22,$23,$24)
          ON CONFLICT (contract_id, prefixo, parcela) WHERE status = 'aberto' DO NOTHING
          RETURNING id, prefixo, titulo_numero, parcela, tipo, contract_id`,
         [
@@ -617,6 +621,7 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
           extraJson ? JSON.stringify(extraJson) : null,
           createdBy,
           groupId,
+          retido,
         ]
       );
       if (inserted.rows[0]) createdRows.push(inserted.rows[0]);

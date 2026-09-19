@@ -28,6 +28,7 @@ import { CheckCircle2, AlertTriangle, Lock, RotateCcw, Calculator, ClipboardChec
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSortableRows, SortableTh } from "@/components/ui/sortable-table";
 import { Link } from "react-router-dom";
+import { parametersApi } from "@/api/parameters";
 import {
   EVENT_TYPE_LABELS,
   sumSettlementCashBuckets,
@@ -623,7 +624,16 @@ export default function FechamentoContabil({ entityId, entityName }) {
         if (!settlementsByContract.has(s.contract_id)) settlementsByContract.set(s.contract_id, []);
         settlementsByContract.get(s.contract_id).push(s);
       });
-      const reconciliation = calculateClosingReconciliation(contracts, settlementsByContract, year, month, dataBase);
+      // Baixa efetiva: data de início por cliente (vazia = regra antiga).
+      let requireSettlementFrom = "";
+      try {
+        const param = await parametersApi.get("accounting.settlement_required_from");
+        const raw = String(param?.data?.value || "").trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) requireSettlementFrom = raw;
+      } catch {
+        // sem o parâmetro, vale a regra antiga
+      }
+      const reconciliation = calculateClosingReconciliation(contracts, settlementsByContract, year, month, dataBase, { requireSettlementFrom });
       setCalcResult(reconciliation);
       const nextStatus = reconciliation.hasBlockingDivergence ? "divergencia" : "calculado";
       await base44.entities.AccountingClosing.update(activeClosing.id, {

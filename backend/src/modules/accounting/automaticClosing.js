@@ -15,6 +15,7 @@ import { pool } from "../../db/pool.js";
 import { logger } from "../../logger.js";
 import * as store from "../entities/store.js";
 import { groupIdOrThrow } from "../tenants/access.js";
+import { resolveParameter } from "../parameters/service.js";
 import {
   calculateClosingReconciliation,
   buildJournalEntries,
@@ -58,7 +59,7 @@ async function deriveSettlementsFromErp(entityId, groupId, competencia, closingI
     `SELECT * FROM payable_titles
      WHERE contract_id = ANY($1::text[])
        AND group_id = $2
-       AND erp_status = 'baixado'
+       AND (erp_status = 'baixado' OR baixa_origem = 'manual')
        AND vencimento >= $3::date AND vencimento <= $4::date`,
     [contractIds, groupId, competencia.start, competencia.end]
   );
@@ -71,6 +72,7 @@ async function deriveSettlementsFromErp(entityId, groupId, competencia, closingI
         contract_id: title.contract_id,
         parcela: title.parcela,
         vencimento: title.vencimento,
+        baixa_data: title.baixa_data || null,
         principal_paid: 0,
         interest_paid: 0,
         other_amount: 0,
@@ -97,7 +99,7 @@ async function deriveSettlementsFromErp(entityId, groupId, competencia, closingI
     );
     if (existing.rows.length) continue;
 
-    const paymentDate = dateOnly(bucket.vencimento);
+    const paymentDate = dateOnly(bucket.baixa_data || bucket.vencimento);
     await store.create("ContractSettlement", {
       contract_id: bucket.contract_id,
       closing_id: closingId,
@@ -168,8 +170,13 @@ async function closeEntityForCompetencia(entity, competencia) {
     settlementsByContract.get(s.contract_id).push(s);
   }
 
+  // Baixa efetiva: data de início por cliente (vazia = regra antiga).
+  const settlementFromRaw = String((await resolveParameter("accounting.settlement_required_from", { groupId })) || "").trim();
+  const requireSettlementFrom = /^\d{4}-\d{2}-\d{2}$/.test(settlementFromRaw) ? settlementFromRaw : "";
+
   const reconciliation = calculateClosingReconciliation(
-    contracts, settlementsByContract, competencia.year, competencia.month, competencia.end
+    contracts, settlementsByContract, competencia.year, competencia.month, competencia.end,
+    { requireSettlementFrom }
   );
 
   const mappingsResult = await pool.query(
@@ -215,10 +222,17 @@ async function closeEntityForCompetencia(entity, competencia) {
 
   let posted = false;
   if (entity.posting_approval === "automatic" && gate.canApprove) {
-    if (journalResult.entries.length) {
+    // Idempotência: uma chave de evento já lançada neste fechamento não é lançada de novo.
+    const already = await pool.query(
+      `SELECT extra_json->>'event_key' AS k, side FROM accounting_journal_entries WHERE closing_id = $1 AND group_id = $2`,
+      [closing.id, groupId]
+    );
+    const postedKeys = new Set(already.rows.filter((r) => r.k).map((r) => `${r.k}|${r.side}`));
+    const entriesToPost = journalResult.entries.filter((e) => !e.event_key || !postedKeys.has(`${e.event_key}|${e.side}`));
+    if (entriesToPost.length) {
       await store.bulkCreate(
         "AccountingJournalEntry",
-        journalResult.entries.map((e) => ({
+        entriesToPost.map((e) => ({
           closing_id: closing.id,
           contract_id: e.contract_id,
           event_type: e.event_type,
@@ -227,6 +241,8 @@ async function closeEntityForCompetencia(entity, competencia) {
           side: e.side,
           amount: e.amount,
           historico: e.historico,
+          // campo fora do catálogo: a API grava em extra_json.event_key (chave de idempotência)
+          event_key: e.event_key || undefined,
         })),
         "sistema"
       );

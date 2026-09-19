@@ -48,9 +48,9 @@ export const ENTITIES = {
       "emissao", "vencimento", "valor", "saldo", "natureza", "historico", "status", "origem",
       "fornecedor", "fornecedor_loja", "fornecedor_nome", "filial", "filial_origem",
       "integrado_erp", "integrado_erp_em", "erp_mensagem", "erp_status", "erp_consultado_em",
-      "converted_pr_tx_em",
+      "converted_pr_tx_em", "baixa_origem", "baixa_data", "baixa_por", "retido_implantacao",
     ],
-    booleans: ["integrado_erp"],
+    booleans: ["integrado_erp", "retido_implantacao"],
     numbers: ["valor", "saldo"],
   },
   ReceivableTitle: {
@@ -83,6 +83,7 @@ export const ENTITIES = {
       "reopen_requested_by", "reopen_requested_at",
       "current_snapshot_id", "approved_snapshot_id",
       "last_recalculated_at", "guarantee_real_type", "guarantee_personal_type",
+      "deployment_mode", "deployment_cutoff", "deployment_open_parcelas",
       "payoff_date", "renegotiated_from_id", "settlement_discount_amount", "settlement_discount_mode",
     ],
     booleans: [

@@ -25,8 +25,8 @@ const EVENT_REFERENCE = [
     items: [
       {
         label: "Liberação do empréstimo",
-        timing: "Uma vez, no mês da liberação",
-        note: "Reconhece o passivo já líquido (valor captado − fee de estruturação, se houver) — sem conta retificadora no balanço.",
+        timing: "Uma vez, na data da operação",
+        note: "Reconhece o passivo pelo saldo devedor do contrato (valor de face, incluindo IOF e taxas financiados). Sem conta retificadora.",
       },
       {
         label: "Reclassificação de principal/juros para circulante",
@@ -41,18 +41,23 @@ const EVENT_REFERENCE = [
     items: [
       {
         label: "Juros apropriados (competência)",
-        timing: "Mensal",
-        note: "Reconhece o juro do mês mesmo antes de pago — regime de competência, independe da baixa.",
+        timing: "Mensal, até o último dia do mês",
+        note: "Reconhece o juro acumulado até o fim do mês (rateado por dias corridos dentro do período de cada parcela), mesmo antes de pago — regime de competência. Não gera título no financeiro: o título de juros segue com o valor cheio no vencimento.",
+      },
+      {
+        label: "Capitalização de juros",
+        timing: "Na data da parcela que capitaliza",
+        note: "Juros incorporados ao principal (carência com capitalização): sai de juros a pagar e entra no principal.",
       },
       {
         label: "IOF",
-        timing: "Uma vez, no mês da liberação",
-        note: "Despesa integral, não amortizada — é um tributo incidente na operação, diferente do fee de estruturação abaixo. Valor vem direto de contract.iof_value.",
+        timing: "Uma vez, na data da operação",
+        note: "Despesa integral, não amortizada, na conta própria do IOF. Valor vem direto de contract.iof_value.",
       },
       {
-        label: "Apropriação de custo de transação (fee de estruturação)",
-        timing: "Mensal, linear, só se financiado",
-        note: "Só gera lançamento quando \"Taxas financiadas\" está marcado no contrato — dividido em partes iguais pelo prazo total. Se pago à vista, não passa por aqui.",
+        label: "Custo de transação (outras taxas)",
+        timing: "Uma vez, na data da operação",
+        note: "Política única da ferramenta: reconhecido integralmente no ato, cada verba na sua conta (IOF na conta do IOF, demais taxas na conta de custo de transação). Sem apropriação mensal.",
       },
       {
         label: "Multa e mora",

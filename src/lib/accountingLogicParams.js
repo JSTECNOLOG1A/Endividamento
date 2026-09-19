@@ -6,4 +6,5 @@ export const ACCOUNTING_LOGIC_PARAM_KEYS = [
   "finance.interest_title_nature",
   "accounting.main_title_account",
   "accounting.interest_title_account",
+  "accounting.settlement_required_from",
 ];

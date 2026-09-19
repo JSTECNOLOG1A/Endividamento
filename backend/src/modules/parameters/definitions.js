@@ -185,6 +185,17 @@ export const PARAMETER_DEFINITIONS = [
     writableScopes: ["TENANT"],
   },
   {
+    key: "accounting.settlement_required_from",
+    category: "accounting",
+    type: "STRING",
+    label: "Início da regra de baixa efetiva",
+    description: "Data (AAAA-MM-DD) a partir da qual uma parcela só é considerada paga se houver baixa (retorno do ERP ou baixa manual em Contas a Pagar). Vazio = regra antiga (parcela do cronograma conta como paga). Parcelas anteriores a esta data não mudam; fechamentos aprovados nunca mudam.",
+    defaultValue: "",
+    isEditable: true,
+    implemented: true,
+    writableScopes: ["TENANT"],
+  },
+  {
     key: "integrations.external_erp_enabled",
     category: "integrations",
     type: "BOOLEAN",

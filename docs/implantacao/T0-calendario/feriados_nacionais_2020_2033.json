@@ -1,0 +1,892 @@
+[
+ {
+  "holiday_date": "2020-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2020-02-24",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2020-02-25",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2020-04-10",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2020-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2020-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2020-06-11",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2020-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2020-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2020-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2020-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2020-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2021-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2021-02-15",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2021-02-16",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2021-04-02",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2021-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2021-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2021-06-03",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2021-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2021-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2021-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2021-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2021-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2022-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2022-02-28",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2022-03-01",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2022-04-15",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2022-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2022-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2022-06-16",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2022-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2022-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2022-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2022-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2022-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2023-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2023-02-20",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2023-02-21",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2023-04-07",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2023-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2023-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2023-06-08",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2023-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2023-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2023-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2023-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2023-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2024-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2024-02-12",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2024-02-13",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2024-03-29",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2024-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2024-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2024-05-30",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2024-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2024-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2024-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2024-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2024-11-20",
+  "holiday_name": "Consciência Negra (nacional desde a Lei 14.759/2023)",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2024-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2025-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2025-03-03",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2025-03-04",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2025-04-18",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2025-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2025-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2025-06-19",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2025-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2025-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2025-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2025-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2025-11-20",
+  "holiday_name": "Consciência Negra (nacional desde a Lei 14.759/2023)",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2025-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2026-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2026-02-16",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2026-02-17",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2026-04-03",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2026-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2026-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2026-06-04",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2026-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2026-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2026-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2026-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2026-11-20",
+  "holiday_name": "Consciência Negra (nacional desde a Lei 14.759/2023)",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2026-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2027-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2027-02-08",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2027-02-09",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2027-03-26",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2027-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2027-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2027-05-27",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2027-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2027-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2027-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2027-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2027-11-20",
+  "holiday_name": "Consciência Negra (nacional desde a Lei 14.759/2023)",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2027-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2028-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2028-02-28",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2028-02-29",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2028-04-14",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2028-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2028-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2028-06-15",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2028-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2028-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2028-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2028-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2028-11-20",
+  "holiday_name": "Consciência Negra (nacional desde a Lei 14.759/2023)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2028-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2029-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2029-02-12",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2029-02-13",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2029-03-30",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2029-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2029-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2029-05-31",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2029-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2029-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2029-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2029-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2029-11-20",
+  "holiday_name": "Consciência Negra (nacional desde a Lei 14.759/2023)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2029-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2030-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2030-03-04",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2030-03-05",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2030-04-19",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2030-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2030-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2030-06-20",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2030-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2030-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2030-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2030-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2030-11-20",
+  "holiday_name": "Consciência Negra (nacional desde a Lei 14.759/2023)",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2030-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2031-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2031-02-24",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2031-02-25",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2031-04-11",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2031-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2031-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2031-06-12",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2031-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2031-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2031-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2031-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2031-11-20",
+  "holiday_name": "Consciência Negra (nacional desde a Lei 14.759/2023)",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2031-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2032-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2032-02-09",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2032-02-10",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2032-03-26",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2032-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2032-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2032-05-27",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2032-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2032-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2032-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2032-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2032-11-20",
+  "holiday_name": "Consciência Negra (nacional desde a Lei 14.759/2023)",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2032-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2033-01-01",
+  "holiday_name": "Confraternização Universal",
+  "day_of_week": "Sábado"
+ },
+ {
+  "holiday_date": "2033-02-28",
+  "holiday_name": "Carnaval (segunda-feira)",
+  "day_of_week": "Segunda-feira"
+ },
+ {
+  "holiday_date": "2033-03-01",
+  "holiday_name": "Carnaval (terça-feira)",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2033-04-15",
+  "holiday_name": "Sexta-feira Santa",
+  "day_of_week": "Sexta-feira"
+ },
+ {
+  "holiday_date": "2033-04-21",
+  "holiday_name": "Tiradentes",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2033-05-01",
+  "holiday_name": "Dia do Trabalho",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2033-06-16",
+  "holiday_name": "Corpus Christi",
+  "day_of_week": "Quinta-feira"
+ },
+ {
+  "holiday_date": "2033-09-07",
+  "holiday_name": "Independência do Brasil",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2033-10-12",
+  "holiday_name": "Nossa Senhora Aparecida",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2033-11-02",
+  "holiday_name": "Finados",
+  "day_of_week": "Quarta-feira"
+ },
+ {
+  "holiday_date": "2033-11-15",
+  "holiday_name": "Proclamação da República",
+  "day_of_week": "Terça-feira"
+ },
+ {
+  "holiday_date": "2033-11-20",
+  "holiday_name": "Consciência Negra (nacional desde a Lei 14.759/2023)",
+  "day_of_week": "Domingo"
+ },
+ {
+  "holiday_date": "2033-12-25",
+  "holiday_name": "Natal",
+  "day_of_week": "Domingo"
+ }
+]
