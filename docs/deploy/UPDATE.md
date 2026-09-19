@@ -1,86 +1,100 @@
-# Deploy de atualização — AllDebt (VPS Clarity)
+# Atualizar produção — AllDebt
 
-Este projeto já está em produção. Este documento cobre **atualizar** um
-deploy existente — não o primeiro deploy (não há necessidade disso hoje).
-
-## Onde roda
+Guia curto. Deploy atual: **manual** no VPS Clarity (Traefik), via script
+oficial `scripts/deploy-vps.sh`.
 
 | Item | Valor |
 |---|---|
-| Host SSH | `148.230.78.251` |
-| Path no servidor | `/var/www/html/alldebt` |
-| Compose file | `docker-compose.traefik.yml` |
-| Env file | `.env.production` (já existe no servidor — nunca sobrescrever) |
-| Rede Docker | `traefik-net` |
-| URLs | `https://alldebt.clarityib.com.br`, `https://alldebit.clarityib.com.br` |
-| Health check | `https://alldebt.clarityib.com.br/api/health` |
+| Código no servidor | `/var/www/html/alldebt` |
+| Compose | `docker-compose.traefik.yml` |
+| Env | `.env.production` (**só no servidor**, nunca no Git) |
+| URL canônica | https://alldebit.clarityib.com.br |
+| URL legado | https://alldebt.clarityib.com.br |
+| Script | `./scripts/deploy-vps.sh` |
 
-A credencial SSH é fornecida pelo usuário fora do chat quando necessário.
-Nunca inventar senha, nunca colar secret no chat se evitável.
+> **Importante:** o diretório no VPS **não é clone Git**.  
+> `git pull` no servidor **não atualiza** o código. Sempre use o script
+> (rsync do commit + rebuild com `--force-recreate`).
 
-## Pré-requisitos antes de deployar
+---
 
-- [ ] Working tree local limpa, ou as mudanças pendentes claramente não
-      fazem parte desta entrega.
-- [ ] O(s) commit(s) da entrega já existem localmente.
-- [ ] De preferência já foi feito `git push` para `origin/main` — se não
-      foi, avisar o usuário e confirmar antes de seguir (o servidor deve
-      sincronizar a partir do commit certo).
-- [ ] Acesso SSH ao host acima disponível nesta sessão.
+## Fluxo obrigatório (cada entrega)
 
-## Passo a passo
+```
+1. Ajuste local → teste
+2. Commit no Git
+3. Push para origin/main
+4. ./scripts/deploy-vps.sh
+5. Smoke: containers healthy + /api/health 200 + feature
+```
 
-1. **Sincronizar o código** para `/var/www/html/alldebt` no VPS.
-   - Se o diretório no servidor for um clone git: `git pull origin main`
-     (ou `git fetch && git reset --hard origin/main` **somente** se o
-     usuário confirmar explicitamente — nunca por padrão, para não
-     descartar algo feito direto no servidor).
-   - Se não for um clone (deploy via rsync/scp): sincronizar exatamente o
-     commit que acabou de subir, nunca a working tree local suja.
-   - **Nunca** sincronizar/sobrescrever `.env.production` do servidor.
+Nunca faça deploy de código que **não** esteja commitado e no `origin`.  
+Nunca faça push de `.env`, senhas ou chaves.  
+Nunca sobrescreva `.env.production` no VPS.
 
-2. **Subir os containers** a partir do diretório do projeto no VPS:
+---
 
-   ```bash
-   cd /var/www/html/alldebt
-   docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build
-   ```
+## 1. No notebook (dev)
 
-   Se a mudança for claramente restrita a um lado (só frontend ou só
-   backend), pode-se rebuildar apenas esse serviço
-   (`... up -d --build web` ou `... up -d --build api`) para ser mais
-   rápido — na dúvida, sobe os dois.
+```bash
+git status
+# ... alterações + teste local ...
+git add <arquivos>
+git commit -m "mensagem clara do porquê"
+git push origin main
+./scripts/deploy-vps.sh
+```
 
-3. **Esperar ficar healthy**:
+O script falha se:
 
-   ```bash
-   docker ps --filter name=alldebt
-   ```
+- working tree estiver suja
+- `HEAD` ≠ `origin/main` (esqueceu o push)
+- SSH / `.env.production` no VPS indisponível
+- containers não ficarem `healthy`
+- smoke HTTPS ≠ 200
 
-   Confirmar que os containers relevantes (`alldebt-web`, `alldebt-api`)
-   aparecem como `healthy` antes de seguir. Se o Traefik responder 404
-   logo após o rebuild, isso é esperado durante o boot — aguardar o
-   healthcheck passar, não declarar sucesso cedo demais.
+Sucesso grava `/var/www/html/alldebt/DEPLOYED_COMMIT` com o hash.
 
-4. **Smoke test**:
+### Variáveis úteis
 
-   ```bash
-   curl -s -o /dev/null -w "%{http_code}\n" https://alldebt.clarityib.com.br/api/health
-   curl -s -o /dev/null -w "%{http_code}\n" https://alldebt.clarityib.com.br/
-   ```
+```bash
+DEPLOY_SSH_KEY=~/.ssh/fal_hostinger   # default
+DEPLOY_SERVICES="web api"             # default; use "api" só se mudança for só backend
+SKIP_PUSH_CHECK=1                     # emergência (não recomendado)
+```
 
-   Ambos devem responder `200`. Depois, validar manualmente (ou via
-   navegador) a funcionalidade específica que motivou o deploy — não
-   basta o healthcheck genérico passar.
+---
 
-5. **Relatar ao usuário**: hash do commit deployado, status dos
-   containers, resultado do smoke test e da validação manual.
+## 2. O que o script faz no VPS
+
+1. `rsync` do tree do commit (exclui `.env*`, `node_modules`, `.git`, uploads)
+2. Escreve `DEPLOYED_COMMIT`
+3. `docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build --force-recreate web api`
+4. Espera `alldebt-web` e `alldebt-api` healthy
+5. Smoke em `alldebit` (e tenta `alldebt`)
+
+`--force-recreate` é obrigatório: sem ele o `web` pode ficar “Up há dias”
+com imagem antiga mesmo após o build.
+
+---
+
+## 3. Conferência pós-deploy
+
+```bash
+ssh -i ~/.ssh/fal_hostinger root@148.230.78.251 'cat /var/www/html/alldebt/DEPLOYED_COMMIT; docker ps --filter name=alldebt'
+curl -s -o /dev/null -w "%{http_code}\n" https://alldebit.clarityib.com.br/api/health
+```
+
+O hash em `DEPLOYED_COMMIT` deve ser o mesmo de `git rev-parse HEAD` no notebook.
+
+---
 
 ## Proibido
 
-- `git push --force` (ou `--force-with-lease`) em `main`/`master`.
-- Deploy de working tree suja.
-- Apagar volumes Docker de produção.
-- Sobrescrever ou recriar `.env.production` no servidor.
-- Assumir sucesso do deploy sem esperar os containers ficarem healthy e
-  sem rodar o smoke test.
+- `git push --force` em `main`/`master`
+- Deploy de working tree suja
+- Assumir que `git pull` no VPS atualizou o código
+- Rebuild sem `--force-recreate` quando o front precisa trocar
+- Sobrescrever `.env.production` no servidor
+- Apagar volumes Docker de produção sem pedido explícito
+- Declarar sucesso sem healthy + smoke 200
