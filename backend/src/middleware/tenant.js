@@ -4,7 +4,10 @@ import {
   loadUserById,
   runWithTenant,
 } from "../modules/tenants/access.js";
-import { writeAccessLog } from "../modules/platform/service.js";
+import {
+  getActiveSupportSession,
+  writeAccessLog,
+} from "../modules/platform/service.js";
 
 function requestedTenantId(req) {
   const header = req.headers["x-tenant-id"];
@@ -13,6 +16,14 @@ function requestedTenantId(req) {
   if (!raw || raw === "all") return null;
   return raw;
 }
+
+function requestedSupportSessionId(req) {
+  const header = req.headers["x-support-session-id"];
+  const fromHeader = Array.isArray(header) ? header[0] : header;
+  return String(fromHeader || "").trim() || null;
+}
+
+const BLOCKED_LIFECYCLE = new Set(["SUSPENDED", "DISABLED", "CANCELLED"]);
 
 export async function attachTenant(req, res, next) {
   try {
@@ -34,19 +45,51 @@ export async function attachTenant(req, res, next) {
     };
 
     if (platformAdmin) {
-      const tenantId = requestedTenantId(req);
+      // Control plane: /api/platform/* não precisa de data plane.
+      // Data plane só com SupportSession ativa (LGPD / least privilege).
+      const supportId = requestedSupportSessionId(req);
       let tenant = null;
-      if (tenantId) {
-        tenant = await loadTenantById(tenantId);
+      let supportSession = null;
+
+      if (supportId) {
+        supportSession = await getActiveSupportSession(dbUser.id, supportId);
+        if (!supportSession) {
+          res.status(403).json({
+            error: "Sessão de suporte inválida ou expirada",
+            code: "SUPPORT_SESSION_INVALID",
+          });
+          return;
+        }
+        tenant = await loadTenantById(supportSession.tenant_id);
         if (!tenant) {
           res.status(404).json({ error: "Cliente não encontrado", code: "TENANT_NOT_FOUND" });
           return;
         }
+        // Impede X-Tenant-Id divergente da sessão
+        const headerTenant = requestedTenantId(req);
+        if (headerTenant && headerTenant !== tenant.id) {
+          res.status(403).json({
+            error: "Tenant do header diverge da sessão de suporte",
+            code: "SUPPORT_TENANT_MISMATCH",
+          });
+          return;
+        }
       }
+
+      req.supportSession = supportSession
+        ? {
+          id: supportSession.id,
+          reason: supportSession.reason,
+          expires_at: supportSession.expires_at,
+          tenant_id: supportSession.tenant_id,
+        }
+        : null;
       req.tenant = tenant;
       req.user.tenant_id = tenant?.id || null;
       req.user.group_id = tenant?.group_id || null;
       req.user.tenant_role = "PLATFORM";
+      req.user.support_session_id = supportSession?.id || null;
+
       runWithTenant(
         {
           userId: dbUser.id,
@@ -57,15 +100,17 @@ export async function attachTenant(req, res, next) {
           fullName: dbUser.full_name,
           role: dbUser.role,
           tenantRole: "PLATFORM",
+          supportSessionId: supportSession?.id || null,
           approvalLevel: dbUser.approval_level,
         },
         () => {
-          if (tenant && !["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+          if (tenant && supportSession && !["GET", "HEAD", "OPTIONS"].includes(req.method)) {
             writeAccessLog({
               req,
               action: "TENANT_WRITE",
               tenant,
               purpose: "suporte_operacional",
+              supportSessionId: supportSession.id,
             }).catch(() => {});
           }
           next();
@@ -82,13 +127,22 @@ export async function attachTenant(req, res, next) {
       });
       return;
     }
-    if (tenant.billing_status === "suspended") {
+
+    const lifecycle = tenant.lifecycle_status || (
+      tenant.billing_status === "suspended" ? "SUSPENDED"
+        : tenant.billing_status === "trial" ? "TRIAL"
+          : "ACTIVE"
+    );
+
+    if (BLOCKED_LIFECYCLE.has(lifecycle) || tenant.billing_status === "suspended") {
       res.status(403).json({
-        error: "Acesso suspenso. Entre em contato com o suporte.",
+        error: "O acesso da sua organização ao AllDebt está temporariamente suspenso.",
         code: "TENANT_SUSPENDED",
+        lifecycle_status: lifecycle,
       });
       return;
     }
+
     req.tenant = tenant;
     req.user.tenant_id = tenant.id;
     req.user.group_id = tenant.group_id;
@@ -113,7 +167,7 @@ export async function attachTenant(req, res, next) {
 
 export function requirePlatformAdmin(req, res, next) {
   if (!req.user?.platform_admin) {
-    res.status(403).json({ error: "Acesso restrito ao usuário master", code: "PLATFORM_FORBIDDEN" });
+    res.status(403).json({ error: "Acesso restrito ao PLATFORM_MASTER", code: "PLATFORM_FORBIDDEN" });
     return;
   }
   next();

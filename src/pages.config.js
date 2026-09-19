@@ -73,9 +73,14 @@ import {
   SettingsUsers,
   SettingsLog,
   SettingsAccount,
+  SettingsPrivacy,
 } from './pages/settingsPages';
 import Simulator from './pages/Simulator';
 import UserManual from './pages/UserManual';
+import Platform from './pages/Platform';
+import PlatformTenants from './pages/PlatformTenants';
+import PlatformTenantDetail from './pages/PlatformTenantDetail';
+import PlatformAudit from './pages/PlatformAudit';
 import __Layout from './layouts/AppLayout.jsx';
 
 
@@ -95,6 +100,10 @@ export const PAGES = {
     "GovernanceNatures": GovernanceNatures,
     "GovernanceChart": GovernanceChart,
     "GuaranteedAccounts": GuaranteedAccounts,
+    "Platform": Platform,
+    "PlatformTenants": PlatformTenants,
+    "PlatformTenantDetail": PlatformTenantDetail,
+    "PlatformAudit": PlatformAudit,
     "Settings": SettingsPage,
     "SettingsIntegrations": SettingsIntegrations,
     "SettingsSchedules": SettingsSchedules,
@@ -103,6 +112,7 @@ export const PAGES = {
     "SettingsUsers": SettingsUsers,
     "SettingsLog": SettingsLog,
     "SettingsAccount": SettingsAccount,
+    "SettingsPrivacy": SettingsPrivacy,
     "Simulator": Simulator,
     "UserManual": UserManual,
 }

@@ -122,6 +122,7 @@ export default function ModernSidebar({ currentPageName, collapsed, onToggleColl
   return (
     <TooltipProvider delayDuration={200}>
       <aside
+        data-tour="nav-main"
         className={cn(
           "hidden md:flex flex-col shrink-0 h-full min-h-0 sticky top-0 self-start",
           "bg-[#071A2F] text-white transition-[width] duration-200 ease-out",

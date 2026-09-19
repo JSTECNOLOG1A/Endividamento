@@ -1,18 +1,22 @@
-/** Resolução segura do modo de layout (testável). */
+/** Resolução segura do modo de layout (testável).
+ * Padrão da plataforma: modern. Classic permanece disponível por escolha explícita.
+ */
 export const LAYOUT_MODES = ["classic", "modern"];
+export const DEFAULT_LAYOUT_MODE = "modern";
 
 export function resolveLayoutMode(raw) {
+  if (raw === "classic") return "classic";
   if (raw === "modern") return "modern";
-  return "classic";
+  return DEFAULT_LAYOUT_MODE;
 }
 
 export function layoutCacheKey(groupId) {
   return groupId ? `alldebt:layout:${groupId}` : "alldebt:layout:anonymous";
 }
 
-// `fallback` é o que devolver quando não há cache pra esse grupo (default
-// "classic"); a troca de tenant passa o modo atual pra não piscar "classic".
-export function readLayoutCache(groupId, fallback = "classic") {
+// `fallback` é o que devolver quando não há cache pra esse grupo (default do
+// produto); a troca de tenant passa o modo atual pra não piscar outro layout.
+export function readLayoutCache(groupId, fallback = DEFAULT_LAYOUT_MODE) {
   try {
     const value = localStorage.getItem(layoutCacheKey(groupId));
     return value ? resolveLayoutMode(value) : fallback;

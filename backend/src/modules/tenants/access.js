@@ -26,7 +26,11 @@ export function groupIdOrThrow() {
   const groupId = groupIdOrNull();
   if (groupId) return groupId;
   if (isPlatformAdmin()) {
-    throw httpError(400, "Selecione o cliente para esta operação.", "TENANT_CONTEXT_REQUIRED");
+    throw httpError(
+      400,
+      "Inicie uma sessão de suporte para acessar dados operacionais do cliente.",
+      "SUPPORT_SESSION_REQUIRED"
+    );
   }
   throw httpError(403, "Sessão sem tenant. Faça login novamente.", "TENANT_REQUIRED");
 }
@@ -45,6 +49,7 @@ export function runWithTenant(scope, fn) {
     role: scope.role || null,
     tenantRole: scope.tenantRole || null,
     platformAdmin: Boolean(scope.platformAdmin),
+    supportSessionId: scope.supportSessionId || null,
     approvalLevel: Number(scope.approvalLevel || 0),
   }, fn);
 }
@@ -62,7 +67,7 @@ export async function loadUserById(userId, client = pool) {
 export async function loadTenantById(id, client = pool) {
   if (!id) return null;
   const result = await client.query(
-    `SELECT id, group_id, tenant_name, domain, billing_status, owner_email, plan, trial_ends_at,
+    `SELECT id, group_id, tenant_name, domain, billing_status, lifecycle_status, owner_email, plan, trial_ends_at,
             onboarding_completed_at
      FROM tenants WHERE id = $1`,
     [id]
@@ -86,7 +91,7 @@ export function scopedGroupSql(column, startIndex = 1, { allowUnscopedMaster = f
 export async function loadTenantForEmail(email, client = pool) {
   if (!email) return null;
   const result = await client.query(
-    `SELECT t.id, t.group_id, t.tenant_name, t.domain, t.billing_status, t.plan, t.trial_ends_at,
+    `SELECT t.id, t.group_id, t.tenant_name, t.domain, t.billing_status, t.lifecycle_status, t.plan, t.trial_ends_at,
             t.onboarding_completed_at, tu.role AS tenant_role
      FROM tenant_users tu
      JOIN tenants t ON t.id = tu.tenant_id

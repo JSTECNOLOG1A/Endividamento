@@ -36,7 +36,7 @@ export default function Consolidation() {
   });
 
   return (
-    <div className="w-full px-4 sm:px-6 py-8">
+    <div className="w-full px-4 sm:px-6 py-8" data-tour="consolidation-workspace">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Consolidação</h1>
         <p className="text-sm text-slate-600 mt-0.5">Análise consolidada de dívidas por Grupo Econômico</p>

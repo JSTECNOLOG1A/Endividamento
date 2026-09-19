@@ -4,7 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { PlatformProvider, usePlatform } from '@/lib/PlatformContext';
@@ -17,6 +17,9 @@ import CompleteSignup from '@/components/CompleteSignup';
 import ForgotPassword from '@/components/ForgotPassword';
 import SetPassword from '@/components/SetPassword';
 import Onboarding from '@/components/Onboarding';
+import LegalFirstAccessModal from '@/components/firstAccess/LegalFirstAccessModal';
+import ProductTour from '@/components/firstAccess/ProductTour';
+import { FirstAccessBootScreen, FirstAccessProvider, useFirstAccess } from '@/lib/FirstAccessContext';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -25,18 +28,32 @@ const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 // Trocar de tenant remonta a página atual (mesma rota): zera filtros, seleção e
 // diálogos do tenant anterior e refaz as consultas na hora, sem navegar.
 const TenantKeyed = ({ children }) => {
-  const { tenantId } = usePlatform();
-  return <React.Fragment key={tenantId || "all"}>{children}</React.Fragment>;
+  const { tenantId, supportSession } = usePlatform();
+  return <React.Fragment key={`${tenantId || "all"}:${supportSession?.id || ""}`}>{children}</React.Fragment>;
 };
 
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}><TenantKeyed>{children}</TenantKeyed></Layout>
   : <TenantKeyed>{children}</TenantKeyed>;
 
+function isPublicAccountTokenPath(pathname) {
+  return pathname === "/aceitar-convite" || pathname === "/redefinir-senha";
+}
+
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, login } = useAuth();
+  const location = useLocation();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, login, logout } = useAuth();
   const [loginError, setLoginError] = React.useState(null);
   const [loginLoading, setLoginLoading] = React.useState(false);
+
+  // Convite / reset de senha devem funcionar mesmo com sessão master aberta.
+  React.useEffect(() => {
+    if (isAuthenticated && isPublicAccountTokenPath(location.pathname)) {
+      logout();
+    }
+    // logout é estável o suficiente para este fluxo; evita reexecução por identidade.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, location.pathname]);
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -57,6 +74,10 @@ const AuthenticatedApp = () => {
         </div>
       </div>
     );
+  }
+
+  if (isPublicAccountTokenPath(location.pathname)) {
+    return <SetPassword />;
   }
 
   if (!isAuthenticated) {
@@ -95,40 +116,56 @@ const AuthenticatedApp = () => {
     <PlatformProvider>
     <GroupProvider>
     <LayoutProvider>
-    <Routes>
-      <Route path="/" element={
-        <LayoutWrapper currentPageName={mainPageKey}>
-          <MainPage />
-        </LayoutWrapper>
-      } />
-      {Object.entries(Pages).map(([path, Page]) => (
-        <Route
-          key={path}
-          path={`/${path}`}
-          element={
-            <LayoutWrapper currentPageName={path}>
-              <Page />
-            </LayoutWrapper>
-          }
-        />
-      ))}
-      <Route path="/onboarding" element={
-        <LayoutWrapper currentPageName="Onboarding">
-          <Onboarding />
-        </LayoutWrapper>
-      } />
-      <Route path="/criar-conta" element={<Navigate to="/" replace />} />
-      <Route path="/concluir-cadastro" element={<Navigate to="/" replace />} />
-      <Route path="/esqueci-senha" element={<Navigate to="/" replace />} />
-      <Route path="/redefinir-senha" element={<Navigate to="/" replace />} />
-      <Route path="/aceitar-convite" element={<Navigate to="/" replace />} />
-      <Route path="*" element={<PageNotFound />} />
-    </Routes>
+    <FirstAccessProvider>
+      <AuthenticatedShell />
+    </FirstAccessProvider>
     </LayoutProvider>
     </GroupProvider>
     </PlatformProvider>
   );
 };
+
+function AuthenticatedShell() {
+  const { loading, needsLegal, tourMode } = useFirstAccess();
+
+  if (loading) {
+    return <FirstAccessBootScreen />;
+  }
+
+  return (
+    <>
+      <Routes>
+        <Route path="/" element={
+          <LayoutWrapper currentPageName={mainPageKey}>
+            <MainPage />
+          </LayoutWrapper>
+        } />
+        {Object.entries(Pages).map(([path, Page]) => (
+          <Route
+            key={path}
+            path={`/${path}`}
+            element={
+              <LayoutWrapper currentPageName={path}>
+                <Page />
+              </LayoutWrapper>
+            }
+          />
+        ))}
+        <Route path="/onboarding" element={
+          <LayoutWrapper currentPageName="Onboarding">
+            <Onboarding />
+          </LayoutWrapper>
+        } />
+        <Route path="/criar-conta" element={<Navigate to="/" replace />} />
+        <Route path="/concluir-cadastro" element={<Navigate to="/" replace />} />
+        <Route path="/esqueci-senha" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<PageNotFound />} />
+      </Routes>
+      {needsLegal ? <LegalFirstAccessModal /> : null}
+      {!needsLegal && tourMode ? <ProductTour /> : null}
+    </>
+  );
+}
 
 
 function App() {

@@ -1,10 +1,11 @@
 import { pool } from "../../db/pool.js";
 import { getTenantScope, groupIdOrThrow, isPlatformAdmin, tenantIdOrNull } from "./access.js";
+import { planLimits } from "../billing/plans.js";
 
 export const PLAN_LIMITS = {
-  STARTER: { contracts: 10, users: 3 },
-  PRO: { contracts: 50, users: 10 },
-  ENTERPRISE: { contracts: Number.POSITIVE_INFINITY, users: Number.POSITIVE_INFINITY },
+  STARTER: planLimits("STARTER"),
+  PRO: planLimits("PRO"),
+  ENTERPRISE: planLimits("ENTERPRISE"),
 };
 
 function httpError(status, message, code) {

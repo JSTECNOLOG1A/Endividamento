@@ -3,6 +3,7 @@ import {
   CalendarClock,
   Plug,
   ScrollText,
+  Shield,
   SlidersHorizontal,
   UserCircle,
   Users,
@@ -16,6 +17,7 @@ export const SETTINGS_SECTIONS = [
   { section: "logica-contabil", name: "Lógica Contábil", page: "SettingsAccountingLogic", icon: BookOpenCheck, adminOnly: true },
   { section: "usuarios", name: "Usuários", page: "SettingsUsers", icon: Users, adminOnly: true },
   { section: "log", name: "Log", page: "SettingsLog", icon: ScrollText, adminOnly: true },
+  { section: "privacidade", name: "Privacidade e Dados", page: "SettingsPrivacy", icon: Shield },
   { section: "conta", name: "Conta", page: "SettingsAccount", icon: UserCircle },
 ];
 

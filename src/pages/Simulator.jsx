@@ -939,6 +939,7 @@ export default function Simulator() {
           ? "w-full h-full min-h-0 flex flex-col"
           : "w-full px-4 sm:px-6 py-4 lg:py-5"
       }
+      data-tour="simulator-workspace"
     >
       {editingContractId && (
         <div className="mb-4">

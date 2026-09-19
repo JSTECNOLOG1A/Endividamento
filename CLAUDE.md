@@ -79,23 +79,28 @@ Pré-condições obrigatórias — se faltar alguma, PARAR e dizer o que falta:
 
 - [ ] Working tree limpa OU as mudanças restantes claramente não fazem
       parte deste deploy
-- [ ] Commit(s) da entrega existem localmente
-- [ ] Preferível: já deram push para `origin` (se não, avisar e confirmar)
-- [ ] Acesso SSH ao VPS disponível nesta sessão
+- [ ] Commit(s) da entrega existem localmente **e** já estão em `origin/main`
+- [ ] Acesso SSH ao VPS disponível nesta sessão (Terminal do usuário, se o
+      sandbox do agente bloquear rede)
 
-Ver o passo a passo completo em `docs/deploy/UPDATE.md`. Resumo:
+**O VPS não é clone Git.** Nunca use `git pull` em `/var/www/html/alldebt`
+como forma de atualizar produção.
 
-1. Sincronizar o código commitado para `/var/www/html/alldebt` no VPS.
-2. `cd /var/www/html/alldebt && docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build`
-   (rebuild parcial de `web` ou `api` só se a mudança for claramente de um
-   lado só).
-3. Esperar os containers `alldebt-web`/`alldebt-api` ficarem healthy — se
-   o Traefik responder 404 temporário logo após o rebuild, aguardar em vez
-   de concluir sucesso cedo demais.
-4. Smoke test: `curl https://alldebt.clarityib.com.br/api/health` → 200,
-   front HTTPS → 200, validar a funcionalidade alterada.
-5. Relatar ao usuário: commit hash deployado, status dos containers,
-   resultado do smoke test.
+Comando **obrigatório**:
+
+```bash
+./scripts/deploy-vps.sh
+```
+
+O script faz rsync do commit (sem `.env.production`) → grava
+`DEPLOYED_COMMIT` → `docker compose ... up -d --build --force-recreate web api`
+→ espera healthy → smoke HTTPS. Detalhes: `docs/deploy/UPDATE.md`.
+
+Se o agente não conseguir SSH, pedir ao usuário rodar o mesmo script no
+Terminal.app e só declarar sucesso com `DEPLOYED_COMMIT` = hash do push.
+
+Relatar ao usuário: hash em `DEPLOYED_COMMIT`, status dos containers,
+resultado do smoke test.
 
 ## Quando o usuário pedir para subir mudança nos containers LOCAIS (dev)
 

@@ -2,16 +2,21 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { useAuth } from "@/lib/AuthContext";
 import { usePlatform } from "@/lib/PlatformContext";
 import { parametersApi } from "@/api/parameters";
-import { getPlatformTenantId } from "@/api/platformScope";
-import { readLayoutCache, resolveLayoutMode, writeLayoutCache } from "@/lib/layoutMode";
+import { getPlatformTenantId, getSupportSessionId } from "@/api/platformScope";
+import {
+  DEFAULT_LAYOUT_MODE,
+  readLayoutCache,
+  resolveLayoutMode,
+  writeLayoutCache,
+} from "@/lib/layoutMode";
 
 const LayoutContext = createContext(null);
 
 export function LayoutProvider({ children }) {
   const { user, isAuthenticated, isLoadingAuth } = useAuth();
-  const { currentTenant, loading: platformLoading } = usePlatform();
+  const { currentTenant, loading: platformLoading, inSupportMode } = usePlatform();
   const groupId = user?.group_id || currentTenant?.group_id || null;
-  const [layoutMode, setLayoutMode] = useState("classic");
+  const [layoutMode, setLayoutMode] = useState(DEFAULT_LAYOUT_MODE);
   const [loading, setLoading] = useState(true);
   // Só o primeiro resolve bloqueia a UI. Refresh posterior (troca de tenant,
   // parâmetros, etc.) NÃO pode setLoading(true) — o AppLayout desmonta as
@@ -21,23 +26,24 @@ export function LayoutProvider({ children }) {
   const refreshLayout = useCallback(async () => {
     if (!isAuthenticated || isLoadingAuth || platformLoading) {
       if (!isAuthenticated) {
-        setLayoutMode("classic");
+        setLayoutMode(DEFAULT_LAYOUT_MODE);
         setLoading(false);
         bootedRef.current = false;
       }
       return;
     }
 
-    if (user?.platform_admin && !getPlatformTenantId()) {
-      setLayoutMode("classic");
+    // Master no control plane (sem suporte): shell Moderno da plataforma.
+    if (user?.platform_admin && !getSupportSessionId() && !getPlatformTenantId()) {
+      setLayoutMode(DEFAULT_LAYOUT_MODE);
       setLoading(false);
       bootedRef.current = true;
       return;
     }
 
     // Sem cache do grupo, mantém o modo atual até o servidor responder — senão
-    // trocar de tenant vira classic→moderno e remonta a tela duas vezes.
-    setLayoutMode((current) => (groupId ? readLayoutCache(groupId, current) : "classic"));
+    // trocar de tenant remonta a tela duas vezes.
+    setLayoutMode((current) => (groupId ? readLayoutCache(groupId, current) : DEFAULT_LAYOUT_MODE));
     if (!bootedRef.current) setLoading(true);
 
     try {
@@ -46,12 +52,12 @@ export function LayoutProvider({ children }) {
       setLayoutMode(resolved);
       if (groupId) writeLayoutCache(groupId, resolved);
     } catch {
-      setLayoutMode(groupId ? readLayoutCache(groupId) : "classic");
+      setLayoutMode(groupId ? readLayoutCache(groupId) : DEFAULT_LAYOUT_MODE);
     } finally {
       bootedRef.current = true;
       setLoading(false);
     }
-  }, [groupId, isAuthenticated, isLoadingAuth, platformLoading, user?.platform_admin]);
+  }, [groupId, isAuthenticated, isLoadingAuth, platformLoading, user?.platform_admin, inSupportMode]);
 
   useEffect(() => {
     refreshLayout();
@@ -73,7 +79,7 @@ export function LayoutProvider({ children }) {
 export function useLayoutMode() {
   const ctx = useContext(LayoutContext);
   if (!ctx) {
-    return { layoutMode: "classic", loading: false, refreshLayout: async () => {} };
+    return { layoutMode: DEFAULT_LAYOUT_MODE, loading: false, refreshLayout: async () => {} };
   }
   return ctx;
 }

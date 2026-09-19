@@ -12,6 +12,8 @@
     "test:secrets": "node src/config/validateSecrets.test.js",
     "test:p0": "node src/modules/security/p0.test.js",
     "test:parameters": "node src/modules/parameters/parameters.test.js",
+    "test:first-access": "node src/modules/firstAccess/firstAccess.test.js",
+    "test:platform-master": "node src/modules/platform/platformMaster.test.js",
     "test:layout": "node ../src/lib/layoutMode.test.mjs",
     "cleanup:local": "node src/db/cleanupLocal.js"
   },

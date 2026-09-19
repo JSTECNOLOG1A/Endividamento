@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
+import SupportSessionBanner from "@/components/platform/SupportSessionBanner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +26,7 @@ import {
 import { useAuth } from "@/lib/AuthContext";
 import { usePlatform } from "@/lib/PlatformContext";
 import AllDebtLogo from "@/components/shared/AllDebtLogo";
-import { NAV_ITEMS, getNavGroupForPage, filterNavItemsForUser } from "@/config/navigation";
+import { getNavItemsForLayout, getNavGroupForPage } from "@/config/navigation";
 
 function navClass(active) {
   return `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
@@ -37,8 +38,8 @@ function navClass(active) {
 
 export default function ClassicLayout({ children, currentPageName }) {
   const { user, logout } = useAuth();
-  const { isMaster, tenants, tenantId, selectTenant, viewingAll } = usePlatform();
-  const visibleNavItems = React.useMemo(() => filterNavItemsForUser(NAV_ITEMS, user), [user]);
+  const { isMaster, tenants, tenantId, selectTenant } = usePlatform();
+  const navItems = React.useMemo(() => getNavItemsForLayout("classic", user), [user]);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [mobileOpenGroups, setMobileOpenGroups] = React.useState(() => {
     const activeGroup = getNavGroupForPage(currentPageName, "classic");
@@ -82,8 +83,8 @@ export default function ClassicLayout({ children, currentPageName }) {
               <AllDebtLogo className="h-8 w-auto max-w-[200px] object-contain object-left" />
             </Link>
 
-            <nav className="hidden md:flex items-center gap-1">
-              {visibleNavItems.map((item) => {
+            <nav className="hidden md:flex items-center gap-1" data-tour="nav-main">
+              {navItems.map((item) => {
                 if (item.children) {
                   const childActive = item.children.some((child) => child.page === currentPageName);
                   return (
@@ -169,7 +170,7 @@ export default function ClassicLayout({ children, currentPageName }) {
 
         {mobileOpen && (
           <div className="md:hidden border-t border-slate-100 bg-white px-4 py-2">
-            {visibleNavItems.map((item) => {
+            {navItems.map((item) => {
               if (item.children) {
                 const childActive = item.children.some((child) => child.page === currentPageName);
                 const groupOpen = mobileOpenGroups[item.name] ?? childActive;
@@ -251,12 +252,7 @@ export default function ClassicLayout({ children, currentPageName }) {
         )}
       </header>
 
-      {isMaster ? (
-        <div className="bg-amber-50 border-b border-amber-100 text-amber-900 text-xs px-4 py-2 text-center">
-          Acesso master: {viewingAll ? "todos os clientes" : (tenants.find((item) => item.id === tenantId)?.tenant_name || "cliente")}.
-          Consultas e alterações são registradas para fins de LGPD.
-        </div>
-      ) : null}
+      <SupportSessionBanner />
 
       {!isMaster && user && !user.onboarding_completed_at && currentPageName !== "Onboarding" ? (
         <div className="bg-sky-50 border-b border-sky-100 text-sky-900 text-xs px-4 py-2 text-center">

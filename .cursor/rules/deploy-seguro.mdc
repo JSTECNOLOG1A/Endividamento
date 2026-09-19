@@ -1,0 +1,38 @@
+---
+description: Entrega segura AllDebt — commit Git, push e deploy VPS com Traefik
+alwaysApply: false
+---
+
+# Entrega segura (Git + Deploy)
+
+Ao usuário pedir salvar, commit, push ou deploy deste projeto, seguir `docs/deploy/UPDATE.md` e o prompt em `docs/deploy/PROMPT-AGENTE-DEPLOY.md`.
+
+## Ordem obrigatória
+1. Testar/alterar
+2. Commit (se pedido)
+3. Push (se pedido)
+4. **Deploy só com** `./scripts/deploy-vps.sh` (nunca `git pull` no VPS — o path **não é clone Git**)
+5. Smoke: containers healthy + `/api/health` 200 + feature
+
+## Por que o script
+- O VPS (`/var/www/html/alldebt`) sincroniza via **rsync** do commit
+- Grava `DEPLOYED_COMMIT` no servidor
+- Usa `--force-recreate` em `web` e `api` (evita container antigo no ar)
+- Falha se HEAD ≠ origin/main ou smoke ≠ 200
+
+## Se o agente não tiver SSH
+- Pedir para o usuário rodar `./scripts/deploy-vps.sh` no Terminal.app
+- Não declarar deploy concluído sem saída OK / `DEPLOYED_COMMIT` igual ao hash
+
+## Proibido
+- Commitar `.env` / `.env.production` / secrets
+- Force push em main
+- Sobrescrever `.env.production` no VPS
+- Deploy de working tree não commitada
+- Apagar volumes de produção sem pedido explícito
+- `git pull` no VPS como forma de “atualizar produção”
+
+## Deploy
+- Responder em português
+- Confirmar hash do commit em `DEPLOYED_COMMIT`
+- Aguardar `alldebt-web` / `alldebt-api` healthy antes de declarar sucesso

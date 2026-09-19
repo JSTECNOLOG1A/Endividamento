@@ -50,6 +50,36 @@ integrationsRouter.post("/test-connection", testLimiter, requireOwner(), async (
   }
 });
 
+integrationsRouter.get("/export", requireOwner(), async (req, res, next) => {
+  try {
+    const bundle = await service.exportAll();
+    await writeAudit({
+      req,
+      action: "EXPORT",
+      resourceType: "Integration",
+      payload: { count: bundle.count },
+    });
+    res.json(bundle);
+  } catch (error) {
+    next(error);
+  }
+});
+
+integrationsRouter.post("/import", requireOwner(), async (req, res, next) => {
+  try {
+    const result = await service.importMany(req.body, actor(req));
+    await writeAudit({
+      req,
+      action: "IMPORT",
+      resourceType: "Integration",
+      payload: { imported: result.imported, failed: result.failed },
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 integrationsRouter.get("/:code", async (req, res, next) => {
   try {
     res.json(await service.getByCode(req.params.code));

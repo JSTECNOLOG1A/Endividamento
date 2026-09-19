@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Play, Plus, Power, Trash2 } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Download, Pencil, Play, Plus, Power, Trash2, Upload } from "lucide-react";
 import { toast } from "@/lib/notify";
 import { useProcessing } from "@/lib/ProcessingContext";
 import { Button } from "@/components/ui/button";
@@ -93,9 +93,12 @@ export default function SchedulesPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [creatingMissing, setCreatingMissing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [runningId, setRunningId] = useState("");
   const [editor, setEditor] = useState(null);
   const [confirm, setConfirm] = useState(null);
+  const fileInputRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -157,6 +160,59 @@ export default function SchedulesPanel() {
         ativo: item.ativo,
       },
     });
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const bundle = await schedulesApi.exportAll();
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 10);
+      anchor.href = url;
+      anchor.download = `agendamentos-${stamp}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      toast.success(
+        bundle.count
+          ? `${bundle.count} agendamento(s) exportado(s)`
+          : "Arquivo exportado (sem agendamentos)"
+      );
+    } catch (error) {
+      toast.error(error.message || "Falha ao exportar agendamentos");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImportFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error("Arquivo JSON inválido");
+      }
+      const result = await schedulesApi.importBundle(parsed);
+      await load();
+      const parts = [];
+      if (result.created) parts.push(`${result.created} criado(s)`);
+      if (result.updated) parts.push(`${result.updated} atualizado(s)`);
+      if (result.failed) parts.push(`${result.failed} com erro`);
+      toast.success(parts.length ? parts.join(", ") : `${result.imported} importado(s)`);
+    } catch (error) {
+      toast.error(error.message || "Falha ao importar agendamentos");
+    } finally {
+      setImporting(false);
+    }
   };
 
   const save = async () => {
@@ -255,6 +311,37 @@ export default function SchedulesPanel() {
           Escolha a tarefa, crie o agendamento e defina o dia ou o intervalo. A conversão PR→JUR consulta o Protheus, estorna o PR e integra de novo como JUR.
         </p>
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5"
+            disabled={exporting || importing}
+            title="Exportar agendamentos em JSON"
+            onClick={handleExport}
+          >
+            <Download className="w-3.5 h-3.5" />
+            {exporting ? "Exportando..." : "Exportar"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5"
+            disabled={exporting || importing}
+            title="Importar agendamentos de um JSON (cria ou atualiza por tarefa)"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="w-3.5 h-3.5" />
+            {importing ? "Importando..." : "Importar"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={handleImportFile}
+          />
           {missingTasks.length > 0 && (
             <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" disabled={creatingMissing} onClick={createMissing}>
               <Plus className="w-3.5 h-3.5" />

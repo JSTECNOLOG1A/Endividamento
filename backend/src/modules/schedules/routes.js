@@ -37,6 +37,41 @@ schedulesRouter.get("/", async (_req, res, next) => {
   }
 });
 
+schedulesRouter.get("/export", requireCanWrite, async (req, res, next) => {
+  try {
+    const bundle = await service.exportAll();
+    await writeAudit({
+      req,
+      action: "EXPORT",
+      resourceType: "ScheduledJob",
+      payload: { count: bundle.count },
+    });
+    res.json(bundle);
+  } catch (error) {
+    next(error);
+  }
+});
+
+schedulesRouter.post("/import", requireCanWrite, async (req, res, next) => {
+  try {
+    const result = await service.importMany(req.body, actor(req));
+    await writeAudit({
+      req,
+      action: "IMPORT",
+      resourceType: "ScheduledJob",
+      payload: {
+        imported: result.imported,
+        created: result.created,
+        updated: result.updated,
+        failed: result.failed,
+      },
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 schedulesRouter.post("/run-task", requireCanWrite, async (req, res, next) => {
   try {
     const body = parseOrThrow(service.runTaskSchema, req.body);

@@ -1,0 +1,76 @@
+# Stack de produção (release). NÃO usar para desenvolvimento.
+# Uso:
+#   cp .env.production.example .env.production
+#   # edite secrets fortes
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# TLS: coloque um reverse proxy (Caddy/Traefik/nginx) na frente da porta WEB_PORT.
+# Checklist: docs/deploy/FIRST-DEPLOY.md
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: endividamento-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Porta do Postgres NÃO publicada — só rede interna do Compose.
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: endividamento-api-prod
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      UPLOAD_DIR: /app/uploads
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL}
+      APP_BASE_URL: ${APP_BASE_URL:-${APP_PUBLIC_URL}}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: "${SMTP_FROM:-AllDebt <noreply@localhost>}"
+    volumes:
+      - api_uploads_prod:/app/uploads
+    # Sem --watch e sem bind mount de source. API só na rede interna;
+    # o nginx do web faz proxy de /api e /uploads.
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web.prod
+    container_name: endividamento-web-prod
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  pgdata_prod:
+  api_uploads_prod:

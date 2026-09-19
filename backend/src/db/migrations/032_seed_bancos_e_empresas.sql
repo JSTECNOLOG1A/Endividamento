@@ -117,4 +117,4 @@ INSERT INTO banks (id, bank_code, bank_name, bank_type, status) VALUES
   ('bank_752', '752', 'Banco BNP Paribas Brasil S.A.', 'estrangeiro', 'ativo'),
   ('bank_755', '755', 'Bank of America Merrill Lynch Banco Múltiplo S.A.', 'estrangeiro', 'ativo'),
   ('bank_756', '756', 'Sicoob (Sistema de Cooperativas de Crédito do Brasil)', 'privado', 'ativo')
-ON CONFLICT (bank_code) WHERE group_id IS NULL DO NOTHING;
+ON CONFLICT (bank_code) DO NOTHING;

@@ -59,18 +59,13 @@ Pré-condições obrigatórias — se falhar alguma, PARE e diga o que falta:
 - [ ] Preferível: já deram push para `origin` (se não deram, avisar e pedir confirmação)
 - [ ] Credencial/SSH de deploy disponível (não inventar senha; não colar secrets no chat se evitável)
 
-No VPS (`/var/www/html/alldebt`):
-1. Sincronizar código do commit (`git pull` se o server for clone; senão rsync/scp do tree commitado).
-2. Rodar:
-   `docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build`
-   (rebuild parcial `web` ou `api` só se a mudança for claramente só de um lado).
-3. Esperar `alldebt-web` e `alldebt-api` healthy.
-4. Smoke:
-   - `curl` `/api/health` → 200
-   - front HTTPS → 200
-   - validar a feature alterada
-5. Relatar: commit hash deployado, status dos containers, resultado do smoke.
-6. Se Traefik der 404 temporário, aguardar healthy — não concluir sucesso cedo demais.
+Deploy obrigatório (o VPS NÃO é clone Git — `git pull` no servidor NÃO atualiza):
+1. Garantir push em `origin/main` e working tree limpa.
+2. Rodar na raiz do repo: `./scripts/deploy-vps.sh`
+   (rsync + DEPLOYED_COMMIT + compose `--force-recreate` web/api + smoke).
+3. Se o agente não tiver SSH, pedir ao usuário rodar o script no Terminal.
+4. Só declarar sucesso se `DEPLOYED_COMMIT` = hash do commit e health = 200.
+5. Relatar: hash, containers, smoke.
 
 ## Formato da minha mensagem
 No final eu descrevo o que foi feito, por exemplo:

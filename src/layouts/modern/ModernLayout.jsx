@@ -7,6 +7,7 @@ import { readSidebarCollapsed, writeSidebarCollapsed } from "@/lib/layoutMode";
 import ModernSidebar from "./ModernSidebar";
 import ModernHeader from "./ModernHeader";
 import ModernMobileNavigation from "./ModernMobileNavigation";
+import SupportSessionBanner from "@/components/platform/SupportSessionBanner";
 
 export default function ModernLayout({ children, currentPageName }) {
   const { user } = useAuth();
@@ -52,6 +53,8 @@ export default function ModernLayout({ children, currentPageName }) {
           currentPageName={currentPageName}
           onOpenMobileNav={() => setMobileOpen(true)}
         />
+
+        <SupportSessionBanner />
 
         {!isMaster && user && !user.onboarding_completed_at && currentPageName !== "Onboarding" ? (
           <div className="bg-[#06B6D4]/10 border-b border-[#06B6D4]/25 text-[#0B1220] text-xs px-4 py-2 text-center shrink-0">

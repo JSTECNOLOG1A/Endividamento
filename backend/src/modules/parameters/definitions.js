@@ -40,8 +40,9 @@ export const PARAMETER_DEFINITIONS = [
     category: "appearance",
     type: "ENUM",
     label: "Layout padrão",
-    description: "Define qual estrutura visual será utilizada pelo sistema.",
-    defaultValue: "classic",
+    description:
+      "Define qual estrutura visual será utilizada. O padrão da plataforma é Moderno; cada tenant (ou usuário) pode optar pelo Clássico.",
+    defaultValue: "modern",
     allowedValues: ["classic", "modern"],
     isEditable: true,
     implemented: true,

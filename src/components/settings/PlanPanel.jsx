@@ -3,7 +3,7 @@ import { toast } from "@/lib/notify";
 import { useAuth } from "@/lib/AuthContext";
 import { usePlatform } from "@/lib/PlatformContext";
 import { Button } from "@/components/ui/button";
-import { billingApi, billingStatusLabel, planLabel } from "@/api/billing";
+import { billingApi, billingStatusLabel, planLabel, PLAN_OPTIONS, planMeta } from "@/api/billing";
 import { platformApi } from "@/api/platform";
 
 function formatDate(value) {
@@ -70,6 +70,7 @@ export default function PlanPanel() {
   if (!plan) return <p className="text-sm text-slate-500">Plano indisponível.</p>;
 
   const limitLabel = (value) => (value == null ? "Ilimitado" : String(value));
+  const meta = planMeta(plan.plan);
 
   return (
     <div className="space-y-4 text-sm">
@@ -93,17 +94,41 @@ export default function PlanPanel() {
           </span>
         </div>
       </div>
+
+      {meta ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2.5 space-y-1.5">
+          <p className="text-xs font-medium text-slate-700">{meta.tagline}</p>
+          <p className="text-[11px] text-slate-500">Suporte: {meta.support}</p>
+          <ul className="text-[11px] text-slate-600 list-disc pl-4 space-y-0.5">
+            {meta.highlights.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <p className="text-[10px] text-slate-400 pt-1">
+            Definição completa: docs/billing/PLANOS-ALLDEBT.md (e PDF).
+          </p>
+        </div>
+      ) : null}
+
       {isMaster && canChange ? (
         <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="outline" disabled={Boolean(saving)} onClick={() => apply("STARTER", "trial")}>
-            {saving === "STARTER" ? "Salvando..." : "Starter em avaliação"}
-          </Button>
-          <Button type="button" size="sm" disabled={Boolean(saving)} onClick={() => apply("PRO", "active")}>
-            {saving === "PRO" ? "Salvando..." : "Ativar Pro"}
-          </Button>
-          <Button type="button" size="sm" variant="secondary" disabled={Boolean(saving)} onClick={() => apply("ENTERPRISE", "active")}>
-            {saving === "ENTERPRISE" ? "Salvando..." : "Ativar Enterprise"}
-          </Button>
+          {PLAN_OPTIONS.map((opt) => (
+            <Button
+              key={opt.value}
+              type="button"
+              size="sm"
+              variant={opt.value === "STARTER" ? "outline" : opt.value === "ENTERPRISE" ? "secondary" : "default"}
+              disabled={Boolean(saving)}
+              onClick={() => apply(opt.value, opt.value === "STARTER" ? "trial" : "active")}
+              title={opt.tagline}
+            >
+              {saving === opt.value
+                ? "Salvando..."
+                : opt.value === "STARTER"
+                  ? "Starter em avaliação"
+                  : `Ativar ${opt.label}`}
+            </Button>
+          ))}
         </div>
       ) : (
         <p className="text-xs text-slate-500">

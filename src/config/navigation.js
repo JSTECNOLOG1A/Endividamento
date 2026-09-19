@@ -8,6 +8,9 @@ import {
   Wallet,
   Receipt,
   Banknote,
+  Shield,
+  Building2,
+  Activity,
   FileSignature,
 } from "lucide-react";
 import { GOVERNANCE_SECTIONS } from "./governanceNavigation";
@@ -33,8 +36,24 @@ export const NAV_ITEMS = [
   { name: "Proposta Comercial", page: "CommercialProposal", icon: FileSignature, platformAdminOnly: true },
 ];
 
+/** Control plane — visível apenas para PLATFORM MASTER. */
+export const PLATFORM_MASTER_NAV = {
+  name: "Administração da plataforma",
+  icon: Shield,
+  masterOnly: true,
+  children: [
+    { name: "Visão geral", page: "Platform", icon: Shield },
+    { name: "Tenants", page: "PlatformTenants", icon: Building2 },
+    { name: "Auditoria", page: "PlatformAudit", icon: Activity },
+  ],
+};
+
 export const PAGE_LABELS = {
   Onboarding: "Configuração inicial",
+  Platform: "Administração da plataforma",
+  PlatformTenants: "Tenants",
+  PlatformTenantDetail: "Detalhe do tenant",
+  PlatformAudit: "Auditoria da plataforma",
   // Calculadora saiu da sidebar — acessada via "+ Novo Contrato" dentro de
   // Contratos — mas a rota /Simulator continua existindo (editar contrato,
   // reabrir, duplicar), então o breadcrumb ainda precisa de um rótulo.
@@ -71,12 +90,20 @@ function buildModernNavItems() {
 }
 
 export function getNavItemsForLayout(layoutMode, user) {
+  const base = layoutMode === "modern" ? buildModernNavItems() : [...NAV_ITEMS];
+  const withPlatform = user?.platform_admin
+    ? [PLATFORM_MASTER_NAV, ...base]
+    : base;
+  return filterNavItemsForUser(withPlatform, user);
+}
+
+function navItemsForLookup(layoutMode, includePlatform = true) {
   const base = layoutMode === "modern" ? buildModernNavItems() : NAV_ITEMS;
-  return filterNavItemsForUser(base, user);
+  return includePlatform ? [PLATFORM_MASTER_NAV, ...base] : base;
 }
 
 export function getBreadcrumbSegments(currentPageName, layoutMode = "modern") {
-  const items = layoutMode === "modern" ? buildModernNavItems() : NAV_ITEMS;
+  const items = navItemsForLookup(layoutMode);
   for (const item of items) {
     if (item.page === currentPageName) {
       return [{ label: item.name }];
@@ -93,7 +120,7 @@ export function getBreadcrumbSegments(currentPageName, layoutMode = "modern") {
 }
 
 export function findNavItemByPage(pageName, layoutMode = "modern") {
-  const items = layoutMode === "modern" ? buildModernNavItems() : NAV_ITEMS;
+  const items = navItemsForLookup(layoutMode);
   for (const item of items) {
     if (item.page === pageName) return item;
     if (item.children) {
@@ -105,7 +132,7 @@ export function findNavItemByPage(pageName, layoutMode = "modern") {
 }
 
 export function getNavGroupForPage(pageName, layoutMode = "modern") {
-  const items = layoutMode === "modern" ? buildModernNavItems() : NAV_ITEMS;
+  const items = navItemsForLookup(layoutMode);
   return items.find((item) => item.children?.some((child) => child.page === pageName)) || null;
 }
 
@@ -115,12 +142,17 @@ export function isNavGroupChildPage(pageName, layoutMode = "modern") {
 
 export function filterNavItemsForUser(items, user) {
   const isTenantAdmin = user?.role === "admin" || user?.tenant_role === "OWNER" || user?.platform_admin;
-  const isPlatformAdmin = Boolean(user?.platform_admin);
+  const isMaster = Boolean(user?.platform_admin);
   return items
-    .filter((item) => !item.platformAdminOnly || isPlatformAdmin)
+    .filter((item) => !item.platformAdminOnly || isMaster)
     .map((item) => {
+      if (item.masterOnly && !isMaster) return null;
       if (!item.children) return item;
-      const children = item.children.filter((child) => !child.adminOnly || isTenantAdmin);
+      const children = item.children.filter((child) => {
+        if (child.masterOnly && !isMaster) return false;
+        if (child.adminOnly && !isTenantAdmin) return false;
+        return true;
+      });
       if (!children.length) return null;
       return { ...item, children };
     })

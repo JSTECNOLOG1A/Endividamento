@@ -14,8 +14,16 @@ export const PARAMETER_CATEGORIES = {
 };
 
 export const LAYOUT_OPTIONS = [
-  { value: "classic", label: "Clássico", description: "Mantém o layout atual exatamente como está hoje." },
-  { value: "modern", label: "Moderno", description: "Utiliza a nova experiência com menu lateral e identidade visual moderna." },
+  {
+    value: "modern",
+    label: "Moderno",
+    description: "Padrão da plataforma — menu lateral e identidade visual atual.",
+  },
+  {
+    value: "classic",
+    label: "Clássico",
+    description: "Layout homologado anterior. Disponível por escolha do tenant.",
+  },
 ];
 
 export const parametersApi = {

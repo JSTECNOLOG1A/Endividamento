@@ -59,19 +59,42 @@ export function resetPasswordEmail({ fullName, resetUrl }) {
 }
 
 export function inviteEmail({ fullName, inviteUrl, invitedBy }) {
-  const subject = "Convite para o Endividamento";
+  const subject = "Convite para o AllDebt";
   const text = [
     `Olá, ${fullName}.`,
     "",
-    `${invitedBy || "Um administrador"} convidou você para acessar o Endividamento.`,
+    `${invitedBy || "Um administrador"} convidou você para acessar o AllDebt.`,
     "Defina sua senha neste link (válido por 7 dias):",
     inviteUrl,
   ].join("\n");
   const html = `
     <p>Olá, ${escapeHtml(fullName)}.</p>
-    <p>${escapeHtml(invitedBy || "Um administrador")} convidou você para acessar o Endividamento.</p>
-    <p><a href="${escapeHtml(inviteUrl)}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Definir senha</a></p>
+    <p>${escapeHtml(invitedBy || "Um administrador")} convidou você para acessar o AllDebt.</p>
+    <p><a href="${escapeHtml(inviteUrl)}" style="display:inline-block;background:#155EEF;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Definir senha</a></p>
     <p>O link vale por 7 dias.</p>
+  `;
+  return { subject, text, html };
+}
+
+/** E-mail enviado na criação do tenant pelo PLATFORM MASTER. */
+export function tenantOwnerWelcomeEmail({ fullName, companyName, inviteUrl }) {
+  const subject = `Bem-vindo ao AllDebt — defina a senha de ${companyName}`;
+  const text = [
+    `Olá, ${fullName}.`,
+    "",
+    `A empresa ${companyName} foi provisionada no AllDebt.`,
+    "Para ativar sua conta de administrador, defina sua senha neste link (válido por 7 dias):",
+    inviteUrl,
+    "",
+    "Se você não esperava este e-mail, ignore-o ou fale com o suporte.",
+  ].join("\n");
+  const html = `
+    <p>Olá, ${escapeHtml(fullName)}.</p>
+    <p>A empresa <strong>${escapeHtml(companyName)}</strong> foi provisionada no AllDebt.</p>
+    <p>Para ativar sua conta de administrador, defina sua senha no botão abaixo:</p>
+    <p><a href="${escapeHtml(inviteUrl)}" style="display:inline-block;background:#155EEF;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Definir senha e acessar</a></p>
+    <p>Ou copie este link:<br/><a href="${escapeHtml(inviteUrl)}">${escapeHtml(inviteUrl)}</a></p>
+    <p>O link vale por 7 dias. Se você não esperava este e-mail, ignore-o.</p>
   `;
   return { subject, text, html };
 }

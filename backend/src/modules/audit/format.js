@@ -34,6 +34,9 @@ const ROTINA_BY_RESOURCE = {
   Tenant: "Cadastro",
   TenantSignup: "Cadastro",
   Function: "Processamento",
+  LegalAcceptance: "Privacidade",
+  PrivacyRequest: "Privacidade",
+  SupportSession: "Suporte",
 };
 
 const ACTION_LABELS = {
@@ -52,6 +55,26 @@ const ACTION_LABELS = {
   REVERSE: "Estorno",
   CLASSIFY: "Classificação",
   CONSULT: "Consulta",
+  USER_FIRST_LOGIN: "Primeiro login",
+  PRIVACY_POLICY_ACKNOWLEDGED: "Ciência da Política de Privacidade",
+  TERMS_ACCEPTED: "Aceite dos Termos de Uso",
+  MARKETING_CONSENT_GRANTED: "Consentimento de marketing",
+  MARKETING_CONSENT_REVOKED: "Revogação de marketing",
+  USER_ONBOARDING_STARTED: "Início do tour",
+  USER_ONBOARDING_COMPLETED: "Tour concluído",
+  USER_ONBOARDING_SKIPPED: "Tour pulado",
+  PRIVACY_REQUEST_CREATED: "Solicitação de privacidade",
+  PLATFORM_MASTER_LOGIN: "Login PLATFORM_MASTER",
+  TENANT_CREATED: "Tenant criado",
+  TENANT_UPDATED: "Tenant atualizado",
+  TENANT_SUSPENDED: "Tenant suspenso",
+  TENANT_REACTIVATED: "Tenant reativado",
+  TENANT_DISABLED: "Tenant desabilitado",
+  TENANT_CANCELLED: "Tenant cancelado",
+  TENANT_PLAN_CHANGED: "Plano do tenant alterado",
+  SUPPORT_ACCESS_STARTED: "Suporte iniciado",
+  SUPPORT_ACCESS_ENDED: "Suporte encerrado",
+  SUPPORT_ACCESS_EXPIRED: "Suporte expirado",
 };
 
 const LABEL_FIELDS = [
