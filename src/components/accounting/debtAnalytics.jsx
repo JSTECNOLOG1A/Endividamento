@@ -166,10 +166,11 @@ export function getDebtMaturityBreakdown(contracts, baseDate) {
       let shortTermMaturity = null;
       let longTermMaturity = null;
 
+      // CPC 26: circulante = vence em até 12 meses da data-base (data a data).
+      const shortLimit = new Date(baseDateObj.getFullYear(), baseDateObj.getMonth() + 12, baseDateObj.getDate());
       schedule.forEach((row) => {
         const rowDate = new Date(row.dataVencimento + "T00:00:00");
         const daysToMaturity = Math.ceil((rowDate - baseDateObj) / (1000 * 60 * 60 * 24));
-        const monthsToMaturity = Math.floor(daysToMaturity / 30.44);
 
         if (row.amortizacao > 0) {
           if (daysToMaturity < 0) {
@@ -180,7 +181,7 @@ export function getDebtMaturityBreakdown(contracts, baseDate) {
             dueSoonBalance += row.amortizacao;
             shortTermBalance += row.amortizacao;
             shortTermMaturity = shortTermMaturity ? new Date(Math.min(new Date(shortTermMaturity).getTime(), rowDate.getTime())) : rowDate;
-          } else if (monthsToMaturity <= 12) {
+          } else if (rowDate <= shortLimit) {
             // Circulante
             shortTermBalance += row.amortizacao;
             shortTermMaturity = shortTermMaturity ? new Date(Math.max(new Date(shortTermMaturity).getTime(), rowDate.getTime())) : rowDate;
@@ -281,6 +282,8 @@ export function getContractCirculanteSplit(contract, baseDate) {
   }
 
   const baseDateObj = new Date(baseDate + "T00:00:00");
+  // CPC 26: circulante = vence em até 12 meses da data-base (data a data).
+  const shortLimit = new Date(baseDateObj.getFullYear(), baseDateObj.getMonth() + 12, baseDateObj.getDate());
   schedule.forEach((row) => {
     if (!(row.amortizacao > 0)) return;
     const rowDate = new Date(row.dataVencimento + "T00:00:00");
@@ -289,8 +292,7 @@ export function getContractCirculanteSplit(contract, baseDate) {
       result.shortTerm += row.amortizacao; // Vencido — obrigação corrente.
       return;
     }
-    const monthsToMaturity = Math.floor(daysToMaturity / 30.44);
-    if (monthsToMaturity <= 12) result.shortTerm += row.amortizacao;
+    if (rowDate <= shortLimit) result.shortTerm += row.amortizacao;
     else result.longTerm += row.amortizacao;
   });
 
