@@ -2,11 +2,7 @@
 # Uso no servidor:
 #   docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build
 #
-# Rede externa `traefik-net`.
-# Host operacional (certificado válido hoje): alldebt.clarityib.com.br
-# Host alldebit.clarityib.com.br: só entra no router quando o DNS/Let's Encrypt
-# estiver ok — NÃO redirecionamos o legado para alldebit enquanto o cert falha
-# (ERR_CERT_AUTHORITY_INVALID + HSTS).
+# Rede externa `traefik-net` e host alldebt.clarityib.com.br (DNS já no ar).
 
 services:
   db:
@@ -73,18 +69,10 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-net
-      # Host principal com certificado válido em produção
       - traefik.http.routers.alldebt-web.rule=Host(`alldebt.clarityib.com.br`) || Host(`endividamento.clarityib.com.br`) || Host(`staging-alldebt.clarityib.com.br`)
       - traefik.http.routers.alldebt-web.entrypoints=websecure
       - traefik.http.routers.alldebt-web.tls.certresolver=myresolver
-      - traefik.http.routers.alldebt-web.tls=true
       - traefik.http.services.alldebt-web.loadbalancer.server.port=80
-      # alldebit: mesmo serviço, sem redirect forçado (cert/DNS ainda instável)
-      - traefik.http.routers.alldebt-web-alldebit.rule=Host(`alldebit.clarityib.com.br`)
-      - traefik.http.routers.alldebt-web-alldebit.entrypoints=websecure
-      - traefik.http.routers.alldebt-web-alldebit.tls.certresolver=myresolver
-      - traefik.http.routers.alldebt-web-alldebit.tls=true
-      - traefik.http.routers.alldebt-web-alldebit.service=alldebt-web
     networks:
       - alldebt-net
       - traefik-net
