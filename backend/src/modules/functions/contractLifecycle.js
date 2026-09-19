@@ -66,6 +66,7 @@ export async function renegotiateContract(payload = {}, actor = "system") {
       group_id: oldContract.group_id,
       entity_id: oldContract.entity_id,
       bank_id: oldContract.bank_id,
+      creditor_cnpj: oldContract.creditor_cnpj || null,
       disbursement_bank_account_id: oldContract.disbursement_bank_account_id,
       contract_number: `${oldContract.contract_number}-REN${Date.now().toString().slice(-4)}`,
       operation_category: oldContract.operation_category,

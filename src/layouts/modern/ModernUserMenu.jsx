@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { usePlatform } from "@/lib/PlatformContext";
 import { useFirstAccess } from "@/lib/FirstAccessContext";
 import { createPageUrl } from "@/utils";
+import MasterTenantAccessSelect from "@/components/platform/MasterTenantAccessSelect";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,13 +14,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 const ROLE_LABELS = {
   admin: "Administrador",
@@ -46,7 +40,7 @@ function initials(name, email) {
 
 export default function ModernUserMenu() {
   const { user, logout } = useAuth();
-  const { isMaster, tenants, tenantId, selectTenant } = usePlatform();
+  const { isMaster } = usePlatform();
   const { startManualTour } = useFirstAccess();
 
   if (!user) return null;
@@ -67,7 +61,7 @@ export default function ModernUserMenu() {
             </p>
           </div>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuContent align="end" className="w-64">
           <DropdownMenuLabel className="font-normal">
             <p className="text-sm font-medium">{user.full_name || user.email}</p>
             <p className="text-xs text-muted-foreground truncate">{user.email}</p>
@@ -111,24 +105,8 @@ export default function ModernUserMenu() {
           {isMaster ? (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-xs text-muted-foreground flex items-center gap-1">
-                <Shield className="w-3 h-3" />
-                Trocar empresa
-              </DropdownMenuLabel>
-              <div className="px-2 pb-2">
-                <Select value={tenantId || "all"} onValueChange={(value) => selectTenant(value)}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os clientes</SelectItem>
-                    {tenants.map((tenant) => (
-                      <SelectItem key={tenant.id} value={tenant.id}>
-                        {tenant.tenant_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="px-2 pb-2 pt-1">
+                <MasterTenantAccessSelect variant="light" />
               </div>
             </>
           ) : null}

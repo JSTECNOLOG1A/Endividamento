@@ -12,6 +12,7 @@ import { cleanupOrphanedReceivableTitles as cleanupOrphanedReceivableTitlesImpl 
 import { reversePayableTitles } from "./erpIntegrate.js";
 import { reverseReceivableTitles } from "../receivables/erpIntegrate.js";
 import { resolveParameter } from "../parameters/service.js";
+import { resolveSupplierByCnpj } from "./erpLookup.js";
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -153,7 +154,7 @@ export function supplierFromBank(bank) {
   };
 }
 
-export function buildPayableTitles(contract, bank = null, entity = null, financeParams = null) {
+export function buildPayableTitles(contract, bank = null, entity = null, financeParams = null, supplierOverride = null) {
   if (!contract?.id || !contract.entity_id) return [];
   const finance = normalizeFinanceTitleParams(financeParams);
   const amort = prefixAndType(contract);
@@ -161,7 +162,7 @@ export function buildPayableTitles(contract, bank = null, entity = null, finance
   const tituloNumero = titleNumberFromContract(contract.contract_number);
   const emissao = dateOnly(contract.operation_date);
   const contractNumber = String(contract.contract_number || tituloNumero).trim();
-  const supplier = supplierFromBank(bank);
+  const supplier = supplierOverride || supplierFromBank(bank);
   const se2 = se2FilialFromSm0(null, entity);
 
   const titles = [];
@@ -352,11 +353,42 @@ export async function reopenApprovedContractForEditing(payload = {}, req = null)
   if (contract.status !== "aprovado") {
     throw httpError(400, "Só é possível reabrir contratos aprovados");
   }
+
+  const auditReopen = async (fields) => {
+    if (!req) return;
+    try {
+      await writeAudit({
+        req,
+        action: fields.action || "REVERSE",
+        resourceType: "LoanContract",
+        resourceId: contractId,
+        rotina: "Contratos",
+        registro: fields.registro || `Reabertura do contrato ${contract.contract_number || contractId}`,
+        before: fields.before || { status: contract.status },
+        after: fields.after || null,
+        payload: {
+          contractId,
+          contractNumber: contract.contract_number || null,
+          ...(fields.payload || {}),
+        },
+      });
+    } catch (auditError) {
+      logger.warn({ err: auditError, contractId }, "falha ao gravar auditoria da reabertura");
+    }
+  };
+
   const decision = await resolveContractReopen(contract);
   if (decision.action === "request") {
     await store.update("LoanContract", contractId, {
       reopen_requested_by: decision.requestedBy,
       reopen_requested_at: new Date().toISOString(),
+    });
+    logger.info({ contractId, requestedBy: decision.requestedBy }, "pedido de reabertura de contrato registrado");
+    await auditReopen({
+      action: "UPDATE",
+      registro: `Pedido de reabertura do contrato ${contract.contract_number || contractId}`,
+      after: { status: "aprovado", reopen_requested_by: decision.requestedBy },
+      payload: { requested: true, comments: payload.comments || null },
     });
     return {
       ok: true,
@@ -383,20 +415,43 @@ export async function reopenApprovedContractForEditing(payload = {}, req = null)
 
   let erpReversalAttempt = null;
   if ((integrated.length || receivableIntegrated.length) && payload.confirmErpReversal) {
-    // Usuário confirmou explicitamente que quer estornar esses títulos NO
-    // ERP também (não só localmente) — chama as mesmas funções que "Estornar
-    // no ERP" usa em Contas a Pagar/Receber (ver reversePayableTitles /
-    // reverseReceivableTitles). Reconsulta depois: a chamada pode falhar
-    // pra alguns títulos (ex.: já baixado no ERP, movimentação pendente),
-    // então o que continuar bloqueado é decidido pelo estado real, não pela
-    // resposta em si.
-    const payableResult = integrated.length
-      ? await reversePayableTitles({ ids: integrated.map((t) => t.id) })
-      : null;
-    const receivableErpResult = receivableIntegrated.length
-      ? await reverseReceivableTitles({ ids: receivableIntegrated.map((t) => t.id) })
-      : null;
-    erpReversalAttempt = { payable: payableResult, receivable: receivableErpResult };
+    // Timeout curto por título: o mínimo antigo (60s) fazia a reabertura
+    // abortar no browser (~3 min) sem resposta e sem log de auditoria.
+    const erpTimeoutSeconds = 20;
+    try {
+      const payableResult = integrated.length
+        ? await reversePayableTitles({
+          ids: integrated.map((t) => t.id),
+          timeoutSeconds: erpTimeoutSeconds,
+        })
+        : null;
+      const receivableErpResult = receivableIntegrated.length
+        ? await reverseReceivableTitles({
+          ids: receivableIntegrated.map((t) => t.id),
+          timeoutSeconds: erpTimeoutSeconds,
+        })
+        : null;
+      erpReversalAttempt = { payable: payableResult, receivable: receivableErpResult };
+    } catch (erpError) {
+      logger.warn({ err: erpError, contractId }, "estorno ERP na reabertura falhou ou estourou tempo");
+      const err = new Error(
+        erpError.message || "Falha ao estornar títulos no ERP durante a reabertura do contrato"
+      );
+      err.status = erpError.status || 504;
+      err.code = erpError.code || "ESTORNO_ERP_FALHOU";
+      err.details = {
+        titulos: integrated.map((t) => ({ id: t.id, parcela: t.parcela, prefixo: t.prefixo, valor: t.valor, erp_mensagem: t.erp_mensagem })),
+        titulosReceber: receivableIntegrated.map((t) => ({ id: t.id, parcela: t.parcela, prefixo: t.prefixo, valor: t.valor, erp_mensagem: t.erp_mensagem })),
+        erpError: erpError.message,
+      };
+      await auditReopen({
+        action: "REVERSE",
+        registro: `Falha ao estornar ERP na reabertura do contrato ${contract.contract_number || contractId}`,
+        after: { status: "aprovado", blocked: true, code: err.code },
+        payload: { confirmErpReversal: true, error: err.message, code: err.code },
+      });
+      throw err;
+    }
 
     titlesResult = await pool.query(
       `SELECT * FROM payable_titles WHERE contract_id = $1 AND group_id = $2`,
@@ -426,6 +481,24 @@ export async function reopenApprovedContractForEditing(payload = {}, req = null)
       titulosReceber: receivableIntegrated.map((t) => ({ id: t.id, parcela: t.parcela, prefixo: t.prefixo, valor: t.valor, erp_mensagem: t.erp_mensagem })),
       erpReversalAttempt,
     };
+    logger.warn({
+      contractId,
+      code: err.code,
+      payableIntegrated: integrated.length,
+      receivableIntegrated: receivableIntegrated.length,
+      confirmErpReversal: Boolean(payload.confirmErpReversal),
+    }, "reabertura de contrato bloqueada por títulos no ERP");
+    await auditReopen({
+      action: "REVERSE",
+      registro: `Reabertura bloqueada — ${total} título(s) no ERP (${contract.contract_number || contractId})`,
+      after: { status: "aprovado", blocked: true, code: err.code },
+      payload: {
+        code: err.code,
+        confirmErpReversal: Boolean(payload.confirmErpReversal),
+        titulosIntegrados: integrated.length,
+        titulosReceberIntegrados: receivableIntegrated.length,
+      },
+    });
     throw err;
   }
 
@@ -462,31 +535,35 @@ export async function reopenApprovedContractForEditing(payload = {}, req = null)
     ),
   });
 
-  // store.update (não SQL cru) — assim campos não-coluna vindos em
-  // extraFields (ex.: recalculation_flag, usado pelo "Reabrir para
-  // recálculo" do Fechamento Contábil) vão pro extra_json automaticamente,
-  // igual qualquer update feito pela rota genérica de entidades.
   await store.update("LoanContract", contractId, {
     status: "rascunho",
     exported_to_payables: false,
     exported_to_receivables: false,
+    reopen_requested_by: null,
+    reopen_requested_at: null,
     status_history: JSON.stringify(history),
     ...(payload.extraFields && typeof payload.extraFields === "object" ? payload.extraFields : {}),
   });
 
-  if (req) {
-    await writeAudit({
-      req,
-      action: "REVERSE",
-      resourceType: "PayableTitle",
-      resourceId: contractId,
-      rotina: "Contas a pagar",
-      registro: `${toReverse.length} título(s) a pagar e ${toReverseReceivable.length} a receber estornado(s) — reabertura do contrato ${contract.contract_number}`,
-      before: { titulos: toReverse, titulosReceber: toReverseReceivable },
-      after: { contractId, novoStatus: "rascunho" },
-      payload: { contractId, titulosEstornados: toReverse.length, titulosReceberEstornados: toReverseReceivable.length },
-    });
-  }
+  logger.info({
+    contractId,
+    titulosEstornados: toReverse.length,
+    titulosReceberEstornados: toReverseReceivable.length,
+    titulosEstornadosNoErp: erpReversedCount,
+  }, "contrato reaberto para edição");
+
+  await auditReopen({
+    action: "REVERSE",
+    registro: `${toReverse.length} título(s) a pagar e ${toReverseReceivable.length} a receber estornado(s) — reabertura do contrato ${contract.contract_number}`,
+    before: { titulos: toReverse, titulosReceber: toReverseReceivable, status: "aprovado" },
+    after: { contractId, novoStatus: "rascunho" },
+    payload: {
+      titulosEstornados: toReverse.length,
+      titulosReceberEstornados: toReverseReceivable.length,
+      titulosEstornadosNoErp: erpReversedCount,
+      comments: payload.comments || null,
+    },
+  });
 
   return {
     ok: true,
@@ -556,14 +633,42 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
     bank = bankResult.rows[0] || null;
   }
 
+  let supplierOverride = null;
+  const creditorCnpj = String(contract.creditor_cnpj || "").replace(/\D/g, "");
+  if (creditorCnpj.length === 14) {
+    supplierOverride = await resolveSupplierByCnpj(creditorCnpj);
+    if (supplierOverride) {
+      logger.info(
+        {
+          contractId: contract.id,
+          cnpj: creditorCnpj,
+          fornecedor: supplierOverride.fornecedor,
+          loja: supplierOverride.fornecedor_loja,
+          origem: supplierOverride.origem,
+        },
+        "fornecedor SA2 resolvido pelo CNPJ do credor"
+      );
+    } else {
+      logger.warn(
+        { contractId: contract.id, cnpj: creditorCnpj },
+        "CNPJ do credor informado, mas fornecedor não encontrado no ERP — usando fallback do banco"
+      );
+    }
+  }
+
   const entityResult = await pool.query(
     `SELECT codigo_empresa, codigo_filial FROM company_entities WHERE id = $1 AND group_id = $2`,
     [contract.entity_id, groupId]
   );
   const scheduleContract = await scheduleContractForGeneration(contract);
   const financeParams = await loadFinanceTitleParams(groupId);
-  const titles = buildPayableTitles(scheduleContract, bank, entityResult.rows[0] || null, financeParams)
-    .filter((title) => !existingKeys.has(`${title.prefixo}::${title.parcela}`));
+  const titles = buildPayableTitles(
+    scheduleContract,
+    bank,
+    entityResult.rows[0] || null,
+    financeParams,
+    supplierOverride
+  ).filter((title) => !existingKeys.has(`${title.prefixo}::${title.parcela}`));
   if (!titles.length) {
     if (!existing.rows.length) {
       logger.warn({ contractId: contract.id }, "contrato aprovado sem parcelas para contas a pagar");

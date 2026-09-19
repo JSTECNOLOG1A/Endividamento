@@ -76,10 +76,15 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-net
-      - traefik.http.routers.alldebt-web.rule=Host(`alldebt.clarityib.com.br`) || Host(`endividamento.clarityib.com.br`) || Host(`staging-alldebt.clarityib.com.br`)
+      - traefik.http.routers.alldebt-web.rule=Host(`alldebt.clarityib.com.br`)
       - traefik.http.routers.alldebt-web.entrypoints=websecure
+      - traefik.http.routers.alldebt-web.tls=true
       - traefik.http.routers.alldebt-web.tls.certresolver=myresolver
       - traefik.http.services.alldebt-web.loadbalancer.server.port=80
+      - traefik.http.routers.alldebt-web-http.rule=Host(`alldebt.clarityib.com.br`)
+      - traefik.http.routers.alldebt-web-http.entrypoints=web
+      - traefik.http.routers.alldebt-web-http.middlewares=alldebt-https-redirect
+      - traefik.http.middlewares.alldebt-https-redirect.redirectscheme.scheme=https
     networks:
       - alldebt-net
       - traefik-net

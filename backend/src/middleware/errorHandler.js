@@ -18,6 +18,20 @@ export function errorHandler(error, req, res, _next) {
   const status = error.status || 500;
   if (status >= 500) {
     logger.error({ err: error, requestId: req.requestId }, "erro interno");
+  } else if (status >= 400) {
+    // Reabertura/ERP e outros bloqueios de negócio não eram logados — só 500s.
+    // Sem isso, falhas 409/403/504 somem do log e da auditoria operacional.
+    logger.warn(
+      {
+        requestId: req.requestId,
+        status,
+        code: error.code || null,
+        path: req.originalUrl || req.url,
+        method: req.method,
+        message: error.message,
+      },
+      "requisição rejeitada"
+    );
   }
   res.status(status).json({
     error: status >= 500 ? "Erro interno" : error.message,

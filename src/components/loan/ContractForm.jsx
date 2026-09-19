@@ -20,6 +20,7 @@ import { Calculator, FileText, Percent, AlertCircle, Info, Paperclip, Trash2, Sa
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { toBRDecimalString } from "@/lib/brNumber";
+import { digitsOnly, formatCnpj } from "@/api/signup";
 
 
 import {
@@ -35,6 +36,7 @@ const defaultForm = {
   group_id: "",
   entity_id: "",
   bank_id: "",
+  creditor_cnpj: "",
   disbursement_bank_account_id: "",
   currency_id: "",
   exchange_lag: "1",
@@ -119,6 +121,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       group_id: data.group_id || "",
       entity_id: data.entity_id || "",
       bank_id: data.bank_id || "",
+      creditor_cnpj: digitsOnly(data.creditor_cnpj || ""),
       disbursement_bank_account_id: data.disbursement_bank_account_id || "",
       currency_id: data.currency_id || "",
       exchange_lag: data.exchange_lag !== undefined ? data.exchange_lag.toString() : "1",
@@ -221,6 +224,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       group_id: form.group_id,
       entity_id: form.entity_id,
       bank_id: form.bank_id,
+      creditor_cnpj: digitsOnly(form.creditor_cnpj),
       disbursement_bank_account_id: form.disbursement_bank_account_id,
       contract_number: form.contract_number,
       operation_category: form.operation_category,
@@ -233,6 +237,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     form.group_id,
     form.entity_id,
     form.bank_id,
+    form.creditor_cnpj,
     form.disbursement_bank_account_id,
     form.contract_number,
     form.operation_category,
@@ -615,6 +620,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
 
     onCalculate({
       ...form,
+      creditor_cnpj: digitsOnly(form.creditor_cnpj) || null,
       operation_value: form.disbursement_mode === "parcelada" ? trancheTotal : (parseFloat(form.operation_value || '0') || 0),
       disbursement_schedule: form.disbursement_mode === "parcelada"
         ? form.disbursement_schedule.map((t) => ({ date: t.date, amount: parseBRNumber(t.amount) }))
@@ -768,11 +774,25 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nº Contrato *</Label>
-              <Input value={form.contract_number} onChange={(e) => update("contract_number", e.target.value)} placeholder="000.000.000" className="h-9" required />
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">CNPJ da Instituição Financeira</Label>
+              <Input
+                value={formatCnpj(form.creditor_cnpj)}
+                onChange={(e) => update("creditor_cnpj", digitsOnly(e.target.value).slice(0, 14))}
+                placeholder="00.000.000/0000-00"
+                className="h-9"
+                inputMode="numeric"
+                autoComplete="off"
+              />
+              <p className="text-[11px] text-slate-500">
+                Usado na geração dos títulos para localizar o fornecedor (código e loja) no ERP.
+              </p>
             </div>
           </div>
           <div className={gridCols2}>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nº Contrato *</Label>
+              <Input value={form.contract_number} onChange={(e) => update("contract_number", e.target.value)} placeholder="000.000.000" className="h-9" required />
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Conta Bancária de Liberação *</Label>
               <Combobox

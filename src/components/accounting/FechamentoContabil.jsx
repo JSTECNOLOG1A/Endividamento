@@ -766,7 +766,17 @@ export default function FechamentoContabil({ entityId, entityName }) {
       if (err.data?.code === "TITULOS_INTEGRADOS_PENDENTES" || err.data?.code === "ESTORNO_ERP_FALHOU") {
         setRecalcErpBlock({ code: err.data.code, details: err.data.details, message: err.message });
       } else {
-        toast.error("Erro ao reabrir contrato: " + (err.message || "tente novamente"));
+        const aborted = err.name === "AbortError"
+          || /aborted|timeout|excedeu o tempo|Failed to fetch|NetworkError/i.test(err.message || "");
+        if (aborted) {
+          setRecalcErpBlock({
+            code: "ESTORNO_ERP_FALHOU",
+            details: err.data?.details || null,
+            message: "O estorno no ERP demorou demais ou a conexão caiu. Estorne manualmente em Contas a Pagar/Receber e tente reabrir de novo.",
+          });
+        } else {
+          toast.error("Erro ao reabrir contrato: " + (err.message || "tente novamente"));
+        }
       }
     } finally {
       setRecalcSubmitting(false);

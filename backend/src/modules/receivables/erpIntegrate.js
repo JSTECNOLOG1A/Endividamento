@@ -509,6 +509,9 @@ export function extornoPathFromInclude(path) {
 export async function reverseReceivableTitles(payload = {}) {
   const ids = asIdList(payload.ids);
   if (!ids.length) throw httpError(400, "Selecione ao menos um título para estornar");
+  const timeoutSeconds = Number.isFinite(Number(payload.timeoutSeconds))
+    ? Math.max(5, Math.min(Number(payload.timeoutSeconds), 90))
+    : null;
 
   const { linked, credential } = await loadReceivableActionEndpoint("titulos_receber_extornar", extornoPathFromInclude);
   let consultLinked = null;
@@ -654,7 +657,7 @@ export async function reverseReceivableTitles(payload = {}) {
         authHeader: linked.integration.authHeader,
         username: linked.integration.username,
         credential,
-        timeoutSeconds: Math.max(linked.integration.timeoutSeconds || 30, 60),
+        timeoutSeconds: timeoutSeconds ?? Math.max(linked.integration.timeoutSeconds || 30, 60),
         body,
         ...ctx,
       });

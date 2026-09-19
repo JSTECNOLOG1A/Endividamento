@@ -181,6 +181,16 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
             setErpBlock({ code: reopenErr.data.code, details: reopenErr.data.details, message: reopenErr.message });
             return;
           }
+          const aborted = reopenErr.name === "AbortError"
+            || /aborted|timeout|excedeu o tempo|Failed to fetch|NetworkError/i.test(reopenErr.message || "");
+          if (aborted) {
+            setErpBlock({
+              code: "ESTORNO_ERP_FALHOU",
+              details: reopenErr.data?.details || null,
+              message: "O estorno no ERP demorou demais ou a conexão caiu. Tente de novo, ou estorne os títulos manualmente em Contas a Pagar/Receber e então reabra o contrato.",
+            });
+            return;
+          }
           throw reopenErr;
         }
       } else {
