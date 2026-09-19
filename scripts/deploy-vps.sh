@@ -34,8 +34,9 @@ USER="${DEPLOY_USER:-root}"
 REMOTE_PATH="${DEPLOY_PATH:-/var/www/html/alldebt}"
 SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/fal_hostinger}"
 SERVICES="${DEPLOY_SERVICES:-web api}"
-CANONICAL_URL="${DEPLOY_CANONICAL_URL:-https://alldebit.clarityib.com.br}"
-LEGACY_URL="${DEPLOY_LEGACY_URL:-https://alldebt.clarityib.com.br}"
+# Host operacional com cert válido hoje; alldebit ainda pode falhar TLS.
+CANONICAL_URL="${DEPLOY_CANONICAL_URL:-https://alldebt.clarityib.com.br}"
+ALT_URL="${DEPLOY_ALT_URL:-https://alldebit.clarityib.com.br}"
 
 SSH=(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o BatchMode=yes)
 RSYNC_SSH="ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
@@ -139,8 +140,8 @@ smoke() {
 smoke_ok=1
 smoke "$CANONICAL_URL/api/health" || smoke_ok=0
 smoke "$CANONICAL_URL/" || smoke_ok=0
-# legado também, se canônico ok
-smoke "$LEGACY_URL/api/health" || true
+# alldebit: informativo (não falha o deploy se o cert ainda estiver inválido)
+smoke "$ALT_URL/api/health" || echo "  (aviso: $ALT_URL sem health 200 — use $CANONICAL_URL)"
 
 "${SSH[@]}" "$USER@$HOST" "docker ps --filter name=alldebt --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'; echo '---'; cat '$REMOTE_PATH/DEPLOYED_COMMIT'"
 

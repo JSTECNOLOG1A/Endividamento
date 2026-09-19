@@ -8,8 +8,8 @@ oficial `scripts/deploy-vps.sh`.
 | Código no servidor | `/var/www/html/alldebt` |
 | Compose | `docker-compose.traefik.yml` |
 | Env | `.env.production` (**só no servidor**, nunca no Git) |
-| URL canônica | https://alldebit.clarityib.com.br |
-| URL legado | https://alldebt.clarityib.com.br |
+| URL operacional | https://alldebt.clarityib.com.br |
+| URL alldebit | https://alldebit.clarityib.com.br (só quando o certificado TLS estiver válido) |
 | Script | `./scripts/deploy-vps.sh` |
 
 > **Importante:** o diretório no VPS **não é clone Git**.  

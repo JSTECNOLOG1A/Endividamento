@@ -3,8 +3,10 @@
 #   docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build
 #
 # Rede externa `traefik-net`.
-# Canônico: alldebit.clarityib.com.br
-# Legado: alldebt.clarityib.com.br (e hosts antigos redirecionam para o canônico).
+# Host operacional (certificado válido hoje): alldebt.clarityib.com.br
+# Host alldebit.clarityib.com.br: só entra no router quando o DNS/Let's Encrypt
+# estiver ok — NÃO redirecionamos o legado para alldebit enquanto o cert falha
+# (ERR_CERT_AUTHORITY_INVALID + HSTS).
 
 services:
   db:
@@ -71,21 +73,18 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-net
-      - traefik.http.routers.alldebt-web.rule=Host(`alldebit.clarityib.com.br`)
+      # Host principal com certificado válido em produção
+      - traefik.http.routers.alldebt-web.rule=Host(`alldebt.clarityib.com.br`) || Host(`endividamento.clarityib.com.br`) || Host(`staging-alldebt.clarityib.com.br`)
       - traefik.http.routers.alldebt-web.entrypoints=websecure
       - traefik.http.routers.alldebt-web.tls.certresolver=myresolver
       - traefik.http.routers.alldebt-web.tls=true
       - traefik.http.services.alldebt-web.loadbalancer.server.port=80
-      # Redirect legado — hosts antigos apontam para o mesmo serviço
-      - traefik.http.routers.alldebt-web-legacy.rule=Host(`alldebt.clarityib.com.br`) || Host(`endividamento.clarityib.com.br`) || Host(`staging-alldebt.clarityib.com.br`)
-      - traefik.http.routers.alldebt-web-legacy.entrypoints=websecure
-      - traefik.http.routers.alldebt-web-legacy.tls.certresolver=myresolver
-      - traefik.http.routers.alldebt-web-legacy.tls=true
-      - traefik.http.routers.alldebt-web-legacy.service=alldebt-web
-      - traefik.http.middlewares.alldebt-canonical.redirectregex.regex=^https?://[^/]+/(.*)
-      - traefik.http.middlewares.alldebt-canonical.redirectregex.replacement=https://alldebit.clarityib.com.br/$${1}
-      - traefik.http.middlewares.alldebt-canonical.redirectregex.permanent=true
-      - traefik.http.routers.alldebt-web-legacy.middlewares=alldebt-canonical
+      # alldebit: mesmo serviço, sem redirect forçado (cert/DNS ainda instável)
+      - traefik.http.routers.alldebt-web-alldebit.rule=Host(`alldebit.clarityib.com.br`)
+      - traefik.http.routers.alldebt-web-alldebit.entrypoints=websecure
+      - traefik.http.routers.alldebt-web-alldebit.tls.certresolver=myresolver
+      - traefik.http.routers.alldebt-web-alldebit.tls=true
+      - traefik.http.routers.alldebt-web-alldebit.service=alldebt-web
     networks:
       - alldebt-net
       - traefik-net
