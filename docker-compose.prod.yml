@@ -54,6 +54,10 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: "${SMTP_FROM:-AllDebt <noreply@localhost>}"
+      # emails-api — envio do convite de usuário. Opcional: sem as duas a API
+      # sobe normal e o convite apenas não é enviado.
+      EMAIL_SERVICE_URL: ${EMAIL_SERVICE_URL:-}
+      EMAIL_SERVICE_API_KEY: ${EMAIL_SERVICE_API_KEY:-}
     volumes:
       - api_uploads_prod:/app/uploads
     # Sem --watch e sem bind mount de source. API só na rede interna;

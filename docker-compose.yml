@@ -45,6 +45,10 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: "${SMTP_FROM:-Endividamento <noreply@localhost>}"
+      # emails-api — envio do convite de usuário. Vazio = convite não sai e o
+      # link aparece na tela do administrador (comportamento de dev).
+      EMAIL_SERVICE_URL: ${EMAIL_SERVICE_URL:-}
+      EMAIL_SERVICE_API_KEY: ${EMAIL_SERVICE_API_KEY:-}
     ports:
       - "${API_PORT:-3001}:3001"
     command: ["node", "--watch", "src/index.js"]

@@ -29,4 +29,10 @@ export const config = {
   smtpUser: process.env.SMTP_USER || "",
   smtpPass: process.env.SMTP_PASS || "",
   smtpFrom: process.env.SMTP_FROM || "Endividamento <noreply@localhost>",
+  // emails-api — serviço central de e-mail da Clarity, dono do texto e do envio
+  // do convite de usuário. Ambos opcionais de propósito: sem eles a API sobe
+  // normalmente e o convite só não é enviado (email_sent: false), como já
+  // acontecia sem SMTP. Não entram em validateSecrets.js.
+  emailServiceUrl: (process.env.EMAIL_SERVICE_URL || "").replace(/\/+$/, ""),
+  emailServiceApiKey: process.env.EMAIL_SERVICE_API_KEY || "",
 };
