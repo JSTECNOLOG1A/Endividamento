@@ -18,6 +18,7 @@ import { groupIdOrThrow } from "../tenants/access.js";
 import { resolveParameter } from "../parameters/service.js";
 import {
   calculateClosingReconciliation,
+  buildOpeningEntries,
   buildJournalEntries,
   canApproveClosing,
 } from "./closingEngine.js";
@@ -193,7 +194,22 @@ async function closeEntityForCompetencia(entity, competencia) {
   );
   const bankAccountsById = new Map(bankAccountsResult.rows.map((a) => [a.id, a]));
 
-  const journalResult = buildJournalEntries(reconciliation, mappingsResult.rows, competencia.end, bankAccountsById);
+  // Abertura da implantação de saldos: configuração aplicada cuja virada cai nesta competência.
+  const deployResult = await pool.query(
+    `SELECT * FROM balance_deployment_configs
+      WHERE entity_id = $1 AND group_id = $2 AND status = 'aplicada' AND data_virada >= $3::date AND data_virada <= $4::date`,
+    [entity.id, groupId, competencia.start, competencia.end]
+  );
+  const openingEntries = deployResult.rows.flatMap((cfg) => {
+    let snap = cfg.position_snapshot;
+    if (typeof snap === "string") { try { snap = JSON.parse(snap); } catch { snap = null; } }
+    const dv = cfg.data_virada instanceof Date
+      ? `${cfg.data_virada.getFullYear()}-${String(cfg.data_virada.getMonth() + 1).padStart(2, "0")}-${String(cfg.data_virada.getDate()).padStart(2, "0")}`
+      : String(cfg.data_virada).slice(0, 10);
+    return buildOpeningEntries({ ...cfg, data_virada: dv }, snap);
+  });
+
+  const journalResult = buildJournalEntries(reconciliation, mappingsResult.rows, competencia.end, bankAccountsById, openingEntries);
 
   const previousResult = closing.previous_closing_id
     ? await pool.query(`SELECT status FROM accounting_closings WHERE id = $1`, [closing.previous_closing_id])

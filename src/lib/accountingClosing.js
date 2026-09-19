@@ -69,6 +69,7 @@ export const EVENT_TYPE_LABELS = {
   custo_transacao_inicial: "Custo de transação inicial",
   custo_transacao_apropriacao: "Apropriação de custo de transação (fee de estruturação)",
   capitalizacao_juros: "Capitalização de juros (juros a pagar → principal)",
+  abertura_implantacao: "Abertura — implantação de saldos",
   reclassificacao_circulante_principal: "Reclassificação de principal para circulante",
   reclassificacao_circulante_juros: "Reclassificação de juros para circulante",
   multa_mora: "Multa e mora",
@@ -332,16 +333,48 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     settlementsByParcela.set(String(s.parcela), s);
   });
 
+  // Implantação de saldos: parcelas até a data de corte informadas como vencidas em aberto continuam
+  // devidas depois da virada — só saem do saldo quando existir baixa.
+  const deployOpen = new Set((() => {
+    let list = contract.deployment_open_parcelas;
+    if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
+    return (Array.isArray(list) ? list : []).map((p) => String(Number(p)));
+  })());
+
   // Linhas com pagamento efetivo já resolvido (baixa x cronograma x regra de baixa efetiva).
   const rows = schedule.map((row, idx) => {
     const settlement = settlementsByParcela.get(String(row.parcela));
-    const unpaidByRule = Boolean(requireFrom) && row.dataVencimento >= requireFrom && !settlement;
+    const unpaidByDeployment = Boolean(cutoffIso) && row.dataVencimento <= cutoffIso && deployOpen.has(String(Number(row.parcela))) && !settlement;
+    const unpaidByRule = unpaidByDeployment || (Boolean(requireFrom) && row.dataVencimento >= requireFrom && !settlement);
+    const payIso = settlement && settlement.actual_payment_date ? isoDateOnly(settlement.actual_payment_date) : "";
+
+    // Moeda estrangeira: os campos de topo misturam USD e BRL (jurosPagos e jurosCapitalizados vêm em
+    // USD). O bloco contábil da linha traz tudo em REAIS — é o que o fechamento usa.
+    const bloco = contract.currency_id ? row.blocoContabil : null;
+    const brl = bloco
+      ? {
+        jurosPagos: bloco.jurosPagosBRL ?? 0,
+        capitalizado: bloco.jurosCapitalizadosBRL ?? 0,
+        amortizacao: bloco.amortizacaoPagaBRL ?? row.amortizacao ?? 0,
+        fx: bloco.ajusteCambialMes ?? row.varCambial ?? 0,
+        abertura: bloco.valorAberturaBRL ?? 0,
+        fechamento: bloco.valorFechamentoBRL ?? 0,
+      }
+      : null;
+    const rowJurosPagos = brl ? brl.jurosPagos : (row.jurosPagos || 0);
+    const rowAmortizacao = brl ? brl.amortizacao : (row.amortizacao || 0);
+    const rowCapitalizado = brl ? brl.capitalizado : (row.jurosCapitalizados || 0);
 
     // Juros capitalizados que a parcela paga depois: o motor os inclui em `jurosPagos`, mas eles já
     // viraram principal (evento de capitalização) — então a parte deles amortiza o PRINCIPAL. Aparece
     // como queda do saldo além da amortização: sdInicial + capitalizado − sdFinal − amortização.
     // (Contratos em moeda estrangeira e liberação parcelada ficam fora: o saldo tem outros componentes.)
-    const scheduledExtra = !row.liberacaoInjetada && !contract.currency_id
+    const scheduledExtra = brl
+      ? (() => {
+          const gap = r2(brl.abertura + brl.fx + brl.capitalizado - brl.fechamento - brl.amortizacao);
+          return gap > 0.05 ? gap : 0;
+        })()
+      : !row.liberacaoInjetada && !contract.currency_id
       ? (() => {
           const gap = r2((row.sdInicial || 0) + (row.jurosCapitalizados || 0) - (row.sdFinal || 0) - (row.amortizacao || 0));
           return gap > 0.05 ? gap : 0; // ignora ruído de arredondamento
@@ -349,12 +382,12 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
       : 0;
     let extra = 0;
     if (settlement) {
-      const scheduledInterest = row.jurosPagos || 0;
+      const scheduledInterest = rowJurosPagos;
       extra = scheduledInterest > 0 ? r2(Math.min(scheduledExtra, scheduledExtra * ((settlement.interest_paid || 0) / scheduledInterest))) : 0;
     } else if (!unpaidByRule) {
       extra = scheduledExtra;
     }
-    const rawInterestPaid = settlement ? r2(settlement.interest_paid || 0) : (unpaidByRule ? 0 : (row.jurosPagos || 0));
+    const rawInterestPaid = settlement ? r2(settlement.interest_paid || 0) : (unpaidByRule ? 0 : rowJurosPagos);
     extra = Math.min(extra, rawInterestPaid);
     return {
       row,
@@ -362,11 +395,15 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
       settlement,
       unpaidByRule,
       date: new Date(row.dataVencimento + "T12:00:00"),
+      payIso,
+      payDate: payIso ? new Date(payIso + "T12:00:00") : new Date(row.dataVencimento + "T12:00:00"),
       interest: (row.jurosFixosMes || 0) + (row.jurosVariaveisMes || 0),
-      fx: row.varCambial || 0,
-      capitalizado: row.jurosCapitalizados || 0,
+      fx: brl ? brl.fx : (row.varCambial || 0),
+      capitalizado: rowCapitalizado,
       liberacao: idx === 0 ? 0 : (row.liberacaoInjetada || 0),
-      principalPaid: r2((settlement ? r2(settlement.principal_paid || 0) : (unpaidByRule ? 0 : (row.amortizacao || 0))) + extra),
+      scheduledPrincipal: rowAmortizacao,
+      scheduledInterest: rowJurosPagos,
+      principalPaid: r2((settlement ? r2(settlement.principal_paid || 0) : (unpaidByRule ? 0 : rowAmortizacao)) + extra),
       interestPaid: r2(rawInterestPaid - extra),
     };
   });
@@ -400,9 +437,13 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     let fx = 0;
     rows.forEach((r) => {
       if (r.date <= limit) {
-        principal += r.liberacao - r.principalPaid + r.capitalizado;
-        paidInterest += r.interestPaid + r.capitalizado;
+        principal += r.liberacao + r.capitalizado + (contract.currency_id ? r.fx : 0);
+        paidInterest += r.capitalizado;
         fx += r.fx;
+      }
+      if (r.payDate <= limit) {
+        principal -= r.principalPaid;
+        paidInterest += r.interestPaid;
       }
     });
     return {
@@ -433,46 +474,54 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
   rows.forEach((r) => {
     const { row, idx, settlement } = r;
     const rowDate = r.date;
-    const isWithinMonth = rowDate >= monthStart && rowDate <= monthEnd;
+    const inMonthRow = rowDate >= monthStart && rowDate <= monthEnd;
+    const inMonthPay = r.payDate >= monthStart && r.payDate <= monthEnd;
+    const payDateIso = r.payIso || row.dataVencimento;
+    const origin = settlement ? `baixa-${settlement.id}` : `parcela-${row.parcela}`;
 
-    // Parcela vencida até o fim do mês, sem baixa, sob a regra de baixa efetiva: pendência.
-    if (r.unpaidByRule && rowDate <= monthEnd && ((row.amortizacao || 0) > 0 || (row.jurosPagos || 0) > 0)) {
+    // Parcela vencida até o fim do mês, sem baixa (regra de baixa efetiva ou implantação): pendência.
+    if (r.unpaidByRule && rowDate <= monthEnd && ((r.scheduledPrincipal || 0) > 0 || (r.scheduledInterest || 0) > 0)) {
       result.pendingUnsettled.push({
         contractId: contract.id,
         contractNumber: contract.contract_number,
         parcela: row.parcela,
         dataVencimento: row.dataVencimento,
-        principal: r2(row.amortizacao || 0),
-        juros: r2(row.jurosPagos || 0),
+        principal: r2(r.scheduledPrincipal || 0),
+        juros: r2(r.scheduledInterest || 0),
       });
     }
 
-    if (!isWithinMonth) return;
+    // Eventos do cronograma: no mês da data da parcela.
+    if (inMonthRow) {
+      // Liberação parcelada: tranche que caiu nesta linha (o motor expõe `liberacaoInjetada`).
+      if (idx > 0 && r.liberacao) push(SETTLEMENT_EVENT_TYPES.LIBERACAO, r2(r.liberacao), row.dataVencimento, `tranche-${row.parcela}`, { bankAccountId: contract.disbursement_bank_account_id || null });
 
-    // Liberação parcelada: tranche que caiu nesta linha (o motor expõe `liberacaoInjetada`).
-    if (idx > 0 && r.liberacao) push(SETTLEMENT_EVENT_TYPES.LIBERACAO, r2(r.liberacao), row.dataVencimento, `tranche-${row.parcela}`, { bankAccountId: contract.disbursement_bank_account_id || null });
+      // Juros capitalizados na linha: saem de juros a pagar e passam a compor o principal.
+      if (r.capitalizado) push(SETTLEMENT_EVENT_TYPES.CAPITALIZACAO_JUROS, r2(r.capitalizado), row.dataVencimento, `parcela-${row.parcela}`);
 
-    // Juros capitalizados na linha: saem de juros a pagar e passam a compor o principal.
-    if (r.capitalizado) push(SETTLEMENT_EVENT_TYPES.CAPITALIZACAO_JUROS, r2(r.capitalizado), row.dataVencimento, `parcela-${row.parcela}`);
-
-    if (r.fx) {
-      push(
-        r.fx >= 0 ? SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA : SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA,
-        r2(Math.abs(r.fx)),
-        row.dataVencimento,
-        `parcela-${row.parcela}`
-      );
+      if (r.fx) {
+        push(
+          r.fx >= 0 ? SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA : SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA,
+          r2(Math.abs(r.fx)),
+          row.dataVencimento,
+          `parcela-${row.parcela}`
+        );
+      }
     }
-    if (r.principalPaid) push(SETTLEMENT_EVENT_TYPES.PAGAMENTO_PRINCIPAL, r2(r.principalPaid), row.dataVencimento, settlement ? `baixa-${settlement.id}` : `parcela-${row.parcela}`, { extraordinary: settlement?.extraordinary_amortization, bankAccountId: settlement?.bank_account_id || null });
-    if (r.interestPaid) push(SETTLEMENT_EVENT_TYPES.PAGAMENTO_JUROS, r2(r.interestPaid), row.dataVencimento, settlement ? `baixa-${settlement.id}` : `parcela-${row.parcela}`, { bankAccountId: settlement?.bank_account_id || null });
+
+    // Eventos de pagamento: no mês da DATA REAL do pagamento (parcela paga em atraso cai no mês em que foi paga).
+    if (inMonthPay) {
+      if (r.principalPaid) push(SETTLEMENT_EVENT_TYPES.PAGAMENTO_PRINCIPAL, r2(r.principalPaid), payDateIso, origin, { extraordinary: settlement?.extraordinary_amortization, bankAccountId: settlement?.bank_account_id || null });
+      if (r.interestPaid) push(SETTLEMENT_EVENT_TYPES.PAGAMENTO_JUROS, r2(r.interestPaid), payDateIso, origin, { bankAccountId: settlement?.bank_account_id || null });
 
       if (settlement) {
         result.settlementsUsed.push(settlement.id);
-        if (settlement.penalty_paid) result.events.push({ type: SETTLEMENT_EVENT_TYPES.MULTA_MORA, amount: r2(settlement.penalty_paid), date: settlement.actual_payment_date });
-        if (settlement.fee_paid) result.events.push({ type: SETTLEMENT_EVENT_TYPES.TARIFA_BANCARIA, amount: r2(settlement.fee_paid), date: settlement.actual_payment_date });
-        if (settlement.discount_amount) result.events.push({ type: SETTLEMENT_EVENT_TYPES.DESCONTO_FINANCEIRO, amount: r2(settlement.discount_amount), date: settlement.actual_payment_date });
-        if (settlement.rounding_adjustment) result.events.push({ type: SETTLEMENT_EVENT_TYPES.AJUSTE_ARREDONDAMENTO, amount: r2(settlement.rounding_adjustment), date: settlement.actual_payment_date });
-        if (settlement.other_amount) result.events.push({ type: SETTLEMENT_EVENT_TYPES.OUTROS, amount: r2(settlement.other_amount), date: settlement.actual_payment_date });
+        const extra = (type, amount) => push(type, r2(amount), payDateIso, origin);
+        if (settlement.penalty_paid) extra(SETTLEMENT_EVENT_TYPES.MULTA_MORA, settlement.penalty_paid);
+        if (settlement.fee_paid) extra(SETTLEMENT_EVENT_TYPES.TARIFA_BANCARIA, settlement.fee_paid);
+        if (settlement.discount_amount) extra(SETTLEMENT_EVENT_TYPES.DESCONTO_FINANCEIRO, settlement.discount_amount);
+        if (settlement.rounding_adjustment) extra(SETTLEMENT_EVENT_TYPES.AJUSTE_ARREDONDAMENTO, settlement.rounding_adjustment);
+        if (settlement.other_amount) extra(SETTLEMENT_EVENT_TYPES.OUTROS, settlement.other_amount);
         if (settlement.triggers_recalculation && !settlement.recalculation_snapshot_id) {
           result.pendingRecalculation.push(settlement.id);
         }
@@ -483,14 +532,16 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
         if (ptaxPagamento && sdInicialUSD && ptaxAssumida) {
           const fxRealizado = r2(sdInicialUSD * (ptaxPagamento - ptaxAssumida));
           if (fxRealizado) {
-            result.events.push({
-              type: fxRealizado >= 0 ? SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA_REALIZADA : SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA_REALIZADA,
-              amount: r2(Math.abs(fxRealizado)),
-              date: settlement.actual_payment_date,
-            });
+            push(
+              fxRealizado >= 0 ? SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA_REALIZADA : SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA_REALIZADA,
+              r2(Math.abs(fxRealizado)),
+              payDateIso,
+              origin
+            );
           }
         }
       }
+    }
   });
 
   return result;
@@ -704,7 +755,40 @@ function mappingKey(eventType, operationCategory) {
   return `${eventType}::${operationCategory || "emprestimos"}`;
 }
 
-export function buildJournalEntries(reconciliation, eventMappings, entryDate, bankAccountsById = new Map()) {
+export const OPENING_EVENT_TYPE = "abertura_implantacao";
+
+/**
+ * Lançamento de abertura da Implantação de Saldos: um lançamento por contrato, contra a conta
+ * transitória, com os valores da FOTOGRAFIA aprovada (não recalcula nada).
+ *   Débito  — conta transitória (total do contrato)
+ *   Crédito — passivo principal circulante / não circulante e juros a pagar circulante / não circulante
+ * A data do lançamento é a da virada. Cada linha tem chave de idempotência
+ * (abertura|configuração|contrato|componente): lançar duas vezes não duplica.
+ */
+export function buildOpeningEntries(config, snapshot) {
+  if (!config || !snapshot?.contratos?.length) return [];
+  const date = String(config.data_virada || "").slice(0, 10);
+  const parts = [
+    ["principalCP", config.principal_cp_account_id, "principal circulante"],
+    ["principalLP", config.principal_lp_account_id, "principal não circulante"],
+    ["jurosCP", config.juros_cp_account_id, "juros a pagar circulante"],
+    ["jurosLP", config.juros_lp_account_id, "juros a pagar não circulante"],
+  ];
+  const entries = [];
+  snapshot.contratos.forEach((c) => {
+    const pos = c.position || {};
+    const credits = parts.map(([k, account, label]) => ({ k, account, label, amount: r2(pos[k]) })).filter((p) => p.amount > 0);
+    const total = r2(credits.reduce((s, p) => s + p.amount, 0));
+    if (!total) return;
+    const historico = `Abertura da implantação de saldos — contrato ${c.contractNumber}`;
+    const base = { contract_id: c.contractId, event_type: OPENING_EVENT_TYPE, entry_date: date, historico };
+    entries.push({ ...base, account_id: config.transitoria_account_id, side: "debito", amount: total, event_key: `abertura|${config.id}|${c.contractId}|transitoria` });
+    credits.forEach((p) => entries.push({ ...base, account_id: p.account, side: "credito", amount: p.amount, historico: `${historico} (${p.label})`, event_key: `abertura|${config.id}|${c.contractId}|${p.k}` }));
+  });
+  return entries;
+}
+
+export function buildJournalEntries(reconciliation, eventMappings, entryDate, bankAccountsById = new Map(), openingEntries = []) {
   const mappingByType = new Map(
     eventMappings
       .filter((m) => m.status !== "inativo" && m.debit_account_id && m.credit_account_id)
@@ -768,6 +852,9 @@ export function buildJournalEntries(reconciliation, eventMappings, entryDate, ba
       event_key: evt.key || null,
     });
   });
+
+  // Abertura da implantação de saldos (contas já definidas na configuração, não passam pela matriz).
+  openingEntries.forEach((e) => entries.push(e));
 
   const totalDebito = r2(entries.filter((e) => e.side === "debito").reduce((s, e) => s + e.amount, 0));
   const totalCredito = r2(entries.filter((e) => e.side === "credito").reduce((s, e) => s + e.amount, 0));

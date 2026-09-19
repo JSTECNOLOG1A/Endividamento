@@ -24,6 +24,13 @@ function parseSchedule(contract) {
   }
 }
 
+// Juros pagos da linha em REAIS: em contrato em moeda estrangeira o campo de topo vem em USD; o bloco
+// contábil da linha traz o valor em reais.
+function rowInterestPaid(row, contract) {
+  if (contract.currency_id && row.blocoContabil && row.blocoContabil.jurosPagosBRL !== undefined) return row.blocoContabil.jurosPagosBRL || 0;
+  return row.jurosPagos || 0;
+}
+
 // Parte da parcela que amortiza principal além da amortização informada (juros capitalizados pagos depois).
 function capitalizedExtra(row, contract) {
   if (row.liberacaoInjetada || contract.currency_id) return 0;
@@ -57,7 +64,7 @@ export function computeDeploymentPosition(contract, cutoffIso, openParcelas = []
     parcela: r.parcela,
     dataVencimento: r.dataVencimento,
     principal: r2((r.amortizacao || 0) + capitalizedExtra(r, contract)),
-    juros: r2(Math.max(0, (r.jurosPagos || 0) - capitalizedExtra(r, contract))),
+    juros: r2(Math.max(0, rowInterestPaid(r, contract) - capitalizedExtra(r, contract))),
     emAberto: open.has(String(Number(r.parcela))),
   }));
 
@@ -73,7 +80,7 @@ export function computeDeploymentPosition(contract, cutoffIso, openParcelas = []
 
   const openRows = rowsUpTo.filter((r) => open.has(String(Number(r.parcela))));
   const principalVencido = Math.min(principalTotal, r2(openRows.reduce((s, r) => s + (r.amortizacao || 0) + capitalizedExtra(r, contract), 0)));
-  const jurosVencido = Math.min(jurosTotal, r2(openRows.reduce((s, r) => s + Math.max(0, (r.jurosPagos || 0) - capitalizedExtra(r, contract)), 0)));
+  const jurosVencido = Math.min(jurosTotal, r2(openRows.reduce((s, r) => s + Math.max(0, rowInterestPaid(r, contract) - capitalizedExtra(r, contract)), 0)));
 
   // Circulante (CPC 26): vence até a data-base + 12 meses.
   const limit = addMonthsIso(cutoffIso, 12);
@@ -84,13 +91,13 @@ export function computeDeploymentPosition(contract, cutoffIso, openParcelas = []
   const principalCP = r2(principalVencido + principalCPvincendo);
   const principalLP = r2(principalTotal - principalCP);
 
-  const nextInterest = future.find((r) => (r.jurosPagos || 0) > 0);
+  const nextInterest = future.find((r) => rowInterestPaid(r, contract) > 0);
   const jurosVincendo = r2(jurosTotal - jurosVencido);
   const jurosShort = !nextInterest || nextInterest.dataVencimento <= limit;
   const jurosCP = r2(jurosVencido + (jurosShort ? jurosVincendo : 0));
   const jurosLP = r2(jurosTotal - jurosCP);
 
-  if (contract.currency_id) warnings.push("Contrato em moeda estrangeira: posição indicativa (variação cambial acumulada não incorporada ao principal).");
+  if (contract.currency_id) warnings.push("Contrato em moeda estrangeira: saldo em reais pela PTAX das linhas do cronograma — conferir com a PTAX da data-base.");
   if (schedule.some((r) => r.liberacaoInjetada)) warnings.push("Contrato com liberação parcelada: conferir as tranches com o demonstrativo do credor.");
   if (rec.closing.principal < -0.05 || rec.closing.interest < -0.05) warnings.push("Saldo negativo apurado: revisar parcelas em aberto e o cronograma.");
 

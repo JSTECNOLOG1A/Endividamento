@@ -105,12 +105,12 @@ function mapDbError(error) {
 }
 
 // Campos do fluxo da Implantação de Saldos: só as funções aprovar/reabrir/aplicar mudam.
-const DEPLOYMENT_WORKFLOW_FIELDS = ["status", "approved_by", "approved_at", "applied_at", "position_snapshot"];
+const DEPLOYMENT_WORKFLOW_FIELDS = ["status", "approved_by", "approved_at", "applied_at", "position_snapshot", "mirror_amount", "mirror_reference", "mirror_date", "mirror_by", "mirror_at"];
 
 const DATE_FIELDS = new Set([
   "operation_date", "first_payment_date", "final_maturity_date", "rate_date",
   "holiday_date", "trial_ends_at", "emissao", "vencimento", "approved_date",
-  "integrado_erp_em", "erp_consultado_em", "payoff_date", "deployment_cutoff", "baixa_data", "data_base", "data_virada",
+  "integrado_erp_em", "erp_consultado_em", "payoff_date", "deployment_cutoff", "baixa_data", "data_base", "data_virada", "mirror_date",
 ]);
 
 function toDbValue(entity, key, value) {

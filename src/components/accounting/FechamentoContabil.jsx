@@ -36,6 +36,7 @@ import {
   settlementTriggersRecalculation,
   evaluateSettlementMateriality,
   calculateClosingReconciliation,
+  buildOpeningEntries,
   buildJournalEntries,
   canApproveClosing,
 } from "@/lib/accountingClosing";
@@ -453,6 +454,14 @@ export default function FechamentoContabil({ entityId, entityName }) {
     initialData: [],
   });
 
+  // Implantação de saldos aplicada cuja virada cai neste mês: o lançamento de abertura entra aqui.
+  const { data: deploymentConfigs = [] } = useQuery({
+    queryKey: ["deployment-configs-applied", entityId],
+    queryFn: () => base44.entities.BalanceDeploymentConfig.filter({ entity_id: entityId, status: "aplicada" }, "", 5),
+    enabled: !!entityId,
+    initialData: [],
+  });
+
   const { data: eventMappings = [] } = useQuery({
     queryKey: ["accounting-event-mappings", entityId],
     queryFn: () => base44.entities.AccountingEventMapping.filter({ entity_id: entityId }, "", 200),
@@ -657,7 +666,15 @@ export default function FechamentoContabil({ entityId, entityName }) {
   const handleBuildJournal = () => {
     if (!calcResult) return;
     const bankAccountsById = new Map(bankAccounts.map((a) => [a.id, a]));
-    const result = buildJournalEntries(calcResult, eventMappings, dataBase, bankAccountsById);
+    const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
+    const openingEntries = deploymentConfigs
+      .filter((cfg) => String(cfg.data_virada || "").slice(0, 7) === monthPrefix)
+      .flatMap((cfg) => {
+        let snap = cfg.position_snapshot;
+        if (typeof snap === "string") { try { snap = JSON.parse(snap); } catch { snap = null; } }
+        return buildOpeningEntries({ ...cfg, data_virada: String(cfg.data_virada).slice(0, 10) }, snap);
+      });
+    const result = buildJournalEntries(calcResult, eventMappings, dataBase, bankAccountsById, openingEntries);
     setJournalResult(result);
   };
 

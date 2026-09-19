@@ -30,3 +30,14 @@ Nada disso muda o comportamento de contratos e clientes existentes até ser ativ
 - Posição (`deploymentPosition.js`): principal total = movimentos efetivos (parcela até a data-base conta como paga, exceto as marcadas em aberto), com vencido no circulante; circulante = vence até a data-base + 12 meses; juros apropriados pro rata até a data-base. Testes: `npm run test:deployment`.
 - Prévia do lançamento de abertura: Débito na transitória; Crédito nas quatro contas de passivo. **O lançamento em si é a T8**; a troca no Protheus é a T9.
 - Limitação: contratos em moeda estrangeira mostram posição indicativa (aviso na tela).
+
+## USD no fechamento e T8 (lançamento de abertura)
+
+**Contratos em moeda estrangeira.** O fechamento agora usa o bloco contábil em reais de cada linha do cronograma (juros pagos, juros capitalizados, amortização e variação cambial), e a variação cambial acumulada entra no principal em reais. Antes, `jurosPagos` e `jurosCapitalizados` (em USD) eram somados como reais, e o saldo não fechava em zero. Teste: 3 casos em USD (PTAX constante, PTAX oscilando, capitalização periódica) em `npm run test:closing`; principal e juros a pagar fecham em zero no fim. O campo `fx` do fechamento continua sendo o acumulado informativo (já incluído no principal).
+
+**Pagamento no mês da data real.** Parcela paga em atraso agora gera o evento de pagamento no mês de `actual_payment_date` da baixa (e o saldo só cai nesse mês), não no mês da parcela.
+
+**T8 — lançamento de abertura, sem tela nova de lançamento:**
+- A abertura entra no **Fechamento Contábil da competência da virada** (manual e automático): um lançamento por contrato, Débito na conta transitória, Crédito nas quatro contas de passivo, com os valores da fotografia aprovada e chave de idempotência por linha. Aprovar o fechamento é o que a lança.
+- Parcelas informadas como vencidas em aberto continuam devidas depois da virada e viram pendência até existir baixa; o saldo de abertura do primeiro fechamento é igual à posição aprovada (teste automático).
+- **Conciliação da transitória** (Implantação de Saldos, depois de aplicada): fotografia × lançado × espelho do sistema antigo. Estados: aguardando lançamento, aguardando espelho, conciliada (transitória zerada) e divergente (com a lista de problemas: valor diferente, duplicidade, conta errada, débitos ≠ créditos).

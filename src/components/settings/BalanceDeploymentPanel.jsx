@@ -41,6 +41,13 @@ function nextDay(iso) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 }
 
+const RECON_STATUS = {
+  aguardando_lancamento: { label: "Aguardando o fechamento da virada", cls: "bg-slate-100 text-slate-700" },
+  aguardando_espelho: { label: "Aguardando o lançamento espelho", cls: "bg-amber-50 text-amber-700" },
+  conciliada: { label: "Conciliada — transitória zerada", cls: "bg-emerald-50 text-emerald-700" },
+  divergente: { label: "Divergente", cls: "bg-rose-50 text-rose-700" },
+};
+
 const emptyForm = { data_base: "", data_virada: "", principal_cp_account_id: "", principal_lp_account_id: "", juros_cp_account_id: "", juros_lp_account_id: "", transitoria_account_id: "" };
 
 export default function BalanceDeploymentPanel() {
@@ -53,6 +60,8 @@ export default function BalanceDeploymentPanel() {
   const [expanded, setExpanded] = useState({});
   const [busy, setBusy] = useState(false);
   const previewSeq = useRef(0);
+  const [recon, setRecon] = useState(null);
+  const [mirror, setMirror] = useState({ amount: "", date: "", reference: "" });
 
   const { data: entities = [] } = useQuery({
     queryKey: ["deployment-entities"],
@@ -146,6 +155,31 @@ export default function BalanceDeploymentPanel() {
   };
 
   const refreshConfig = () => queryClient.invalidateQueries({ queryKey: ["deployment-configs", entityId] });
+
+  const loadRecon = async () => {
+    if (!cfg?.id || cfg.status !== "aplicada") { setRecon(null); return; }
+    try {
+      const { data } = await base44.functions.invoke("getDeploymentReconciliation", { configId: cfg.id });
+      setRecon(data);
+    } catch {
+      setRecon(null);
+    }
+  };
+  useEffect(() => { loadRecon(); }, [cfg?.id, cfg?.status, cfg?.updated_date]);
+
+  const saveMirror = async () => {
+    setBusy(true);
+    try {
+      const { data } = await base44.functions.invoke("recordDeploymentMirror", {
+        configId: cfg.id, amount: Number(String(mirror.amount).replace(",", ".")), mirrorDate: mirror.date, reference: mirror.reference,
+      });
+      setRecon(data);
+      toast.success("Lançamento espelho registrado.");
+      await refreshConfig();
+    } catch (err) {
+      toast.error(err.message || "Não foi possível registrar o espelho");
+    } finally { setBusy(false); }
+  };
 
   const save = async () => {
     setBusy(true);
@@ -384,6 +418,43 @@ export default function BalanceDeploymentPanel() {
                 <p>Crédito — {accountLabel(form.juros_cp_account_id)}: {brl(totals.jurosCP)}</p>
                 <p>Crédito — {accountLabel(form.juros_lp_account_id)}: {brl(totals.jurosLP)}</p>
                 <p className="text-slate-500">A conta transitória deve fechar em zero depois do lançamento espelho no sistema antigo.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {entityId && status === "aplicada" && (
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base text-slate-900">Lançamento de abertura e conciliação da transitória</CardTitle>
+            <CardDescription>
+              A abertura entra no Fechamento Contábil da competência da virada ({dmy(form.data_virada)}): aprove esse fechamento para lançá-la.
+              Depois, registre aqui o lançamento espelho feito no sistema antigo (Débito no passivo antigo / Crédito na conta transitória).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-xs">
+            {recon ? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={`${RECON_STATUS[recon.status]?.cls || ""} border-0 font-medium`}>{RECON_STATUS[recon.status]?.label || recon.status}</Badge>
+                  <span className="text-slate-600">Fotografia: {brl(recon.esperado)} · Lançado (débito): {brl(recon.lancadoDebito)} · Espelho: {recon.espelho ? brl(recon.espelho.valor) : "—"} · Saldo da transitória: <strong>{brl(recon.saldoTransitoria)}</strong></span>
+                </div>
+                {recon.problemas?.length ? (
+                  <ul className="list-disc pl-5 text-rose-700">{recon.problemas.map((p) => <li key={p}>{p}</li>)}</ul>
+                ) : null}
+                {recon.contratosComDiferenca?.length ? (
+                  <p className="text-rose-700">Diferença por contrato: {recon.contratosComDiferenca.map((c) => `${c.contractNumber} (esperado ${brl(c.esperado)}, lançado ${brl(c.lancado)})`).join("; ")}</p>
+                ) : null}
+                {recon.espelho ? <p className="text-slate-500">Espelho registrado por {recon.espelho.por} — ref. {recon.espelho.referencia} em {dmy(recon.espelho.data)}.</p> : null}
+              </>
+            ) : <p className="text-slate-500">Carregando conciliação…</p>}
+            {recon && recon.status !== "aguardando_lancamento" && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end max-w-3xl">
+                <div className="space-y-1"><label className="text-slate-600">Valor lançado no sistema antigo</label><Input inputMode="decimal" value={mirror.amount} onChange={(e) => setMirror((m) => ({ ...m, amount: e.target.value }))} /></div>
+                <div className="space-y-1"><label className="text-slate-600">Data</label><Input type="date" value={mirror.date} onChange={(e) => setMirror((m) => ({ ...m, date: e.target.value }))} /></div>
+                <div className="space-y-1"><label className="text-slate-600">Referência (lote/lançamento)</label><Input value={mirror.reference} onChange={(e) => setMirror((m) => ({ ...m, reference: e.target.value }))} /></div>
+                <Button size="sm" onClick={saveMirror} disabled={busy || !mirror.amount || !mirror.date || !mirror.reference}>Registrar espelho</Button>
               </div>
             )}
           </CardContent>

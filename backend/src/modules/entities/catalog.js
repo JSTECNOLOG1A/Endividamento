@@ -174,9 +174,10 @@ export const ENTITIES = {
       "group_id", "entity_id", "data_base", "data_virada",
       "principal_cp_account_id", "principal_lp_account_id", "juros_cp_account_id", "juros_lp_account_id",
       "transitoria_account_id", "status", "approved_by", "approved_at", "applied_at", "position_snapshot",
+      "mirror_amount", "mirror_reference", "mirror_date", "mirror_by", "mirror_at",
     ],
     booleans: [],
-    numbers: [],
+    numbers: ["mirror_amount"],
   },
   AccountingJournalEntry: {
     table: "accounting_journal_entries",
