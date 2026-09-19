@@ -311,10 +311,6 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-600">
-        Cada categoria de operação tem seu próprio conjunto de contas — obrigatório separar mútuos com
-        partes relacionadas e com terceiros entre si e das demais operações para o balancete.
-      </p>
       {copyCandidates.length > 0 && (
         <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
           <div className="space-y-1">
