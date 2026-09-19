@@ -774,7 +774,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">CNPJ da Instituição Financeira</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">CNPJ da Instituição Financeira do contrato</Label>
               <Input
                 value={formatCnpj(form.creditor_cnpj)}
                 onChange={(e) => update("creditor_cnpj", digitsOnly(e.target.value).slice(0, 14))}
