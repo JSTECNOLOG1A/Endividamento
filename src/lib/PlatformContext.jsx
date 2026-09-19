@@ -28,6 +28,9 @@ export function PlatformProvider({ children }) {
   const [tenantId, setTenantId] = useState(() => getPlatformTenantId());
   const [supportSession, setSupportSessionState] = useState(() => getSupportSession());
   const [loading, setLoading] = useState(false);
+  // Cliente para o qual o master escolheu trocar e ainda falta abrir a sessão de
+  // suporte (motivo + duração) — a tela do modal é montada em App.jsx.
+  const [accessRequest, setAccessRequest] = useState(null);
 
   const refreshSupport = useCallback(async () => {
     if (!isMaster) {
@@ -79,16 +82,36 @@ export function PlatformProvider({ children }) {
     return () => { cancelled = true; };
   }, [isAuthenticated, isMaster, user?.email, refreshSupport]);
 
+  // Trocar de cliente no seletor: no modelo de sessão de suporte o master só vê
+  // dados de um cliente dentro de uma sessão auditada (o servidor recusa
+  // X-Tenant-Id sem sessão ou diferente dela). Então o seletor abre o pedido de
+  // acesso do cliente escolhido — e, ao confirmar, a tela atual é refeita no
+  // lugar, sem navegar. "Todos os clientes" encerra a sessão.
   const selectTenant = useCallback(async (nextId) => {
-    // Preferência de control plane — NÃO concede data plane sozinha.
     const normalized = !nextId || nextId === "all" ? "" : nextId;
-    if (normalized === getPlatformTenantId()) return;
-    setPlatformTenantId(normalized);
-    resetTenantScopedQueries();
-    setTenantId(normalized);
-    // O registro de acesso (LGPD) é só auditoria: não bloqueia a troca.
-    platformApi.setContext(normalized || null).catch(() => {});
-  }, []);
+    const current = getSupportSession();
+    if (!normalized) {
+      setAccessRequest(null);
+      if (current?.id) {
+        try {
+          await platformApi.endSupportSession(current.id);
+        } catch {
+          /* encerra local mesmo se a API falhar */
+        }
+      }
+      clearSupportSession();
+      setSupportSessionState(null);
+      setPlatformTenantId("");
+      resetTenantScopedQueries();
+      setTenantId("");
+      return;
+    }
+    if (current?.id && current.tenant_id === normalized) return;
+    const target = tenants.find((item) => item.id === normalized);
+    if (target) setAccessRequest(target);
+  }, [tenants]);
+
+  const clearAccessRequest = useCallback(() => setAccessRequest(null), []);
 
   const startSupport = useCallback(async (targetTenantId, payload) => {
     const session = await platformApi.startSupportSession(targetTenantId, payload);
@@ -130,6 +153,8 @@ export function PlatformProvider({ children }) {
     currentTenant,
     loading,
     selectTenant,
+    accessRequest,
+    clearAccessRequest,
     viewingAll: isMaster && !supportSession,
     supportSession,
     inSupportMode: Boolean(supportSession?.id),
@@ -159,6 +184,8 @@ export function usePlatform() {
     currentTenant: null,
     loading: false,
     selectTenant: async () => {},
+    accessRequest: null,
+    clearAccessRequest: () => {},
     viewingAll: false,
     supportSession: null,
     inSupportMode: false,

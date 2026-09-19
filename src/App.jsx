@@ -20,6 +20,7 @@ import Onboarding from '@/components/Onboarding';
 import LegalFirstAccessModal from '@/components/firstAccess/LegalFirstAccessModal';
 import ProductTour from '@/components/firstAccess/ProductTour';
 import { FirstAccessBootScreen, FirstAccessProvider, useFirstAccess } from '@/lib/FirstAccessContext';
+import SupportAccessModal from '@/components/platform/SupportAccessModal';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -125,6 +126,20 @@ const AuthenticatedApp = () => {
   );
 };
 
+// Pedido de troca de cliente feito no seletor da barra lateral/cabeçalho.
+function TenantAccessHost() {
+  const { accessRequest, clearAccessRequest } = usePlatform();
+  if (!accessRequest) return null;
+  return (
+    <SupportAccessModal
+      tenant={accessRequest}
+      stayOnPage
+      onClose={clearAccessRequest}
+      onStarted={clearAccessRequest}
+    />
+  );
+}
+
 function AuthenticatedShell() {
   const { loading, needsLegal, tourMode } = useFirstAccess();
 
@@ -161,6 +176,7 @@ function AuthenticatedShell() {
         <Route path="/esqueci-senha" element={<Navigate to="/" replace />} />
         <Route path="*" element={<PageNotFound />} />
       </Routes>
+      <TenantAccessHost />
       {needsLegal ? <LegalFirstAccessModal /> : null}
       {!needsLegal && tourMode ? <ProductTour /> : null}
     </>

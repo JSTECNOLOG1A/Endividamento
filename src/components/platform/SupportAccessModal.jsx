@@ -5,7 +5,9 @@ import { usePlatform } from "@/lib/PlatformContext";
 import StepUpModal from "@/components/platform/StepUpModal";
 import { createPageUrl } from "@/utils";
 
-export default function SupportAccessModal({ tenant, onClose, onStarted }) {
+// stayOnPage: quando aberto pelo seletor de cliente, permanece na tela atual
+// (que é refeita com os dados do cliente) em vez de ir para a Calculadora.
+export default function SupportAccessModal({ tenant, onClose, onStarted, stayOnPage = false }) {
   const navigate = useNavigate();
   const { startSupport } = usePlatform();
   const [reason, setReason] = useState("");
@@ -25,7 +27,7 @@ export default function SupportAccessModal({ tenant, onClose, onStarted }) {
         duration_minutes: Number(duration),
       });
       onStarted?.();
-      navigate(createPageUrl("Simulator"));
+      if (!stayOnPage) navigate(createPageUrl("Simulator"));
     } catch (err) {
       if (err.code === "STEPUP_REQUIRED" || err.status === 403) {
         setNeedStepUp(true);
