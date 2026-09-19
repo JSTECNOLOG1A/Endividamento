@@ -7,7 +7,7 @@ import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import { PlatformProvider } from '@/lib/PlatformContext';
+import { PlatformProvider, usePlatform } from '@/lib/PlatformContext';
 import { GroupProvider } from '@/lib/GroupContext';
 import { LayoutProvider } from '@/lib/LayoutContext';
 import { ProcessingProvider } from '@/lib/ProcessingContext';
@@ -25,9 +25,16 @@ const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 
+// Trocar de tenant remonta a página atual (mesma rota): zera filtros, seleção e
+// diálogos do tenant anterior e refaz as consultas na hora, sem navegar.
+const TenantKeyed = ({ children }) => {
+  const { tenantId, supportSession } = usePlatform();
+  return <React.Fragment key={`${tenantId || "all"}:${supportSession?.id || ""}`}>{children}</React.Fragment>;
+};
+
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
-  <Layout currentPageName={currentPageName}>{children}</Layout>
-  : <>{children}</>;
+  <Layout currentPageName={currentPageName}><TenantKeyed>{children}</TenantKeyed></Layout>
+  : <TenantKeyed>{children}</TenantKeyed>;
 
 function isPublicAccountTokenPath(pathname) {
   return pathname === "/aceitar-convite" || pathname === "/redefinir-senha";

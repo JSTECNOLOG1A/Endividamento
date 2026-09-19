@@ -14,13 +14,14 @@ export function layoutCacheKey(groupId) {
   return groupId ? `alldebt:layout:${groupId}` : "alldebt:layout:anonymous";
 }
 
-export function readLayoutCache(groupId) {
+// `fallback` é o que devolver quando não há cache pra esse grupo (default do
+// produto); a troca de tenant passa o modo atual pra não piscar outro layout.
+export function readLayoutCache(groupId, fallback = DEFAULT_LAYOUT_MODE) {
   try {
     const value = localStorage.getItem(layoutCacheKey(groupId));
-    if (value == null) return DEFAULT_LAYOUT_MODE;
-    return resolveLayoutMode(value);
+    return value ? resolveLayoutMode(value) : fallback;
   } catch {
-    return DEFAULT_LAYOUT_MODE;
+    return fallback;
   }
 }
 

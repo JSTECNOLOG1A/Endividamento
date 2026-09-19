@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { AccountingMatrixFields } from "@/components/accounting/AccountingMatrixConfig";
 import { SETTLEMENT_MATERIALITY_CONFIG } from "@/lib/accountingClosing";
+import { ChartRecommendationCard, BankAccountAccountsCard, TitleClassificationCard } from "@/components/settings/AccountingLogicExtras";
 
 // Referência viva da lógica do motor de fechamento contábil
 // (src/lib/accountingClosing.js) — cada mudança de regra ali (novo evento,
@@ -110,14 +111,11 @@ export default function AccountingLogicPanel() {
 
   return (
     <div className="space-y-4">
+      <ChartRecommendationCard />
+
       <Card className="border-slate-200 shadow-sm">
         <CardHeader>
           <CardTitle className="text-base text-slate-900">Matriz de contas por empresa</CardTitle>
-          <CardDescription>
-            Onde cada evento abaixo é amarrado à conta de débito/crédito real do plano de contas do cliente — separado
-            por categoria de operação (empréstimos, financiamentos, mútuos com partes relacionadas e com terceiros).
-            Escolha a empresa e edite direto aqui — sem precisar abrir um fechamento primeiro.
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-1">
           <label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Empresa</label>
@@ -138,6 +136,10 @@ export default function AccountingLogicPanel() {
           </CardContent>
         )}
       </Card>
+
+      <BankAccountAccountsCard />
+
+      <TitleClassificationCard />
 
       <Card className="border-slate-200 shadow-sm">
         <CardHeader>

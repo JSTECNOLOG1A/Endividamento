@@ -603,7 +603,7 @@ function mappingKey(eventType, operationCategory) {
 export function buildJournalEntries(reconciliation, eventMappings, entryDate, bankAccountsById = new Map()) {
   const mappingByType = new Map(
     eventMappings
-      .filter((m) => m.status !== "inativo")
+      .filter((m) => m.status !== "inativo" && m.debit_account_id && m.credit_account_id)
       .map((m) => [mappingKey(m.event_type, m.operation_category), m])
   );
   const entries = [];
@@ -686,7 +686,7 @@ export function canApproveClosing({ journalResult, reconciliation, previousClosi
     const labels = journalResult.missingMappings.map(
       (m) => `${EVENT_TYPE_LABELS[m.type] || m.type} (${OPERATION_CATEGORY_LABELS[m.operationCategory] || m.operationCategory})`
     );
-    reasons.push(`Matriz contábil incompleta para: ${labels.join(", ")}.`);
+    reasons.push(`Matriz contábil incompleta para: ${labels.join(", ")}. Complete em Configurações → Lógica Contábil.`);
   }
   if (reconciliation.hasBlockingDivergence) {
     reasons.push("Existem baixas que exigem recálculo do contrato antes de aprovar (reabra o contrato na Calculadora).");

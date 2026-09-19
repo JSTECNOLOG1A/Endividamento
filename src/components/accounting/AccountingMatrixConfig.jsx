@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/notify";
@@ -14,7 +14,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Settings2, Save, Copy, Info } from "lucide-react";
+import { Settings2, Copy, Info, CheckCircle2, CircleDashed } from "lucide-react";
 import { SETTLEMENT_EVENT_TYPES, EVENT_TYPE_LABELS } from "@/lib/accountingClosing";
 import { OPERATION_CATEGORIES } from "@/lib/contractOptions";
 import { SORT_HEAD_CLASS } from "@/components/ui/sortable-table";
@@ -93,7 +93,20 @@ function EventMappingTable({ entityId, category, accountOptions, mappings, onSav
   }, [mappings, category]);
 
   const [drafts, setDrafts] = useState({});
-  const [savingType, setSavingType] = useState(null);
+  // Estado de salvamento por evento: "saving" | "saved" | "error".
+  const [rowState, setRowState] = useState({});
+
+  // O autosave dispara na hora em que a conta é escolhida (com um pequeno
+  // atraso pra juntar mudanças seguidas). Como o refetch da lista pode chegar
+  // depois de um segundo salvamento do mesmo evento, o id criado é guardado em
+  // ref — senão o segundo salvamento tentaria criar de novo (índice único) — e
+  // os salvamentos de um mesmo evento são enfileirados em ordem.
+  const mappingByTypeRef = useRef(mappingByType);
+  mappingByTypeRef.current = mappingByType;
+  const createdIds = useRef({});
+  const timers = useRef({});
+  const queues = useRef({});
+  useEffect(() => () => Object.values(timers.current).forEach(clearTimeout), []);
 
   const draftFor = (type) => {
     if (drafts[type]) return drafts[type];
@@ -101,47 +114,61 @@ function EventMappingTable({ entityId, category, accountOptions, mappings, onSav
     return { debit_account_id: existing?.debit_account_id || "", credit_account_id: existing?.credit_account_id || "" };
   };
 
-  const setDraft = (type, patch) => {
-    setDrafts((prev) => ({ ...prev, [type]: { ...draftFor(type), ...patch } }));
+  const persist = (type, draft) => {
+    const run = async () => {
+      const existingId = createdIds.current[type] || mappingByTypeRef.current.get(type)?.id;
+      const debit = draft.debit_account_id || null;
+      const credit = draft.credit_account_id || null;
+      setRowState((prev) => ({ ...prev, [type]: "saving" }));
+      try {
+        if (!debit && !credit) {
+          if (existingId) {
+            await base44.entities.AccountingEventMapping.delete(existingId);
+            delete createdIds.current[type];
+          }
+        } else if (existingId) {
+          await base44.entities.AccountingEventMapping.update(existingId, {
+            debit_account_id: debit,
+            credit_account_id: credit,
+            status: "ativo",
+          });
+        } else {
+          const created = await base44.entities.AccountingEventMapping.create({
+            entity_id: entityId,
+            event_type: type,
+            operation_category: category,
+            debit_account_id: debit,
+            credit_account_id: credit,
+            status: "ativo",
+          });
+          createdIds.current[type] = created?.id;
+        }
+        queryClient.invalidateQueries({ queryKey: ["accounting-event-mappings", entityId] });
+        await onSaved?.();
+        setRowState((prev) => ({ ...prev, [type]: "saved" }));
+      } catch (err) {
+        setRowState((prev) => ({ ...prev, [type]: "error" }));
+        toast.error("Erro ao salvar: " + (err.message || "tente novamente"));
+      }
+    };
+    queues.current[type] = (queues.current[type] || Promise.resolve()).then(run, run);
   };
 
-  const handleSave = async (type) => {
-    const draft = draftFor(type);
-    if (!draft.debit_account_id || !draft.credit_account_id) {
-      toast.warning("Selecione a conta de débito e de crédito.");
-      return;
-    }
-    setSavingType(type);
-    try {
-      const existing = mappingByType.get(type);
-      if (existing) {
-        await base44.entities.AccountingEventMapping.update(existing.id, {
-          debit_account_id: draft.debit_account_id,
-          credit_account_id: draft.credit_account_id,
-          status: "ativo",
-        });
-      } else {
-        await base44.entities.AccountingEventMapping.create({
-          entity_id: entityId,
-          event_type: type,
-          operation_category: category,
-          debit_account_id: draft.debit_account_id,
-          credit_account_id: draft.credit_account_id,
-          status: "ativo",
-        });
-      }
-      queryClient.invalidateQueries({ queryKey: ["accounting-event-mappings", entityId] });
-      await onSaved?.();
-      toast.success("Matriz atualizada.");
-    } catch (err) {
-      toast.error("Erro ao salvar: " + (err.message || "tente novamente"));
-    } finally {
-      setSavingType(null);
-    }
+  const setDraft = (type, patch) => {
+    const next = { ...draftFor(type), ...patch };
+    setDrafts((prev) => ({ ...prev, [type]: next }));
+    clearTimeout(timers.current[type]);
+    timers.current[type] = setTimeout(() => persist(type, next), 400);
   };
 
   return (
-    <table className="w-full text-[11px]">
+    <table className="w-full min-w-[900px] table-fixed text-[11px]">
+      <colgroup>
+        <col className="w-[27%]" />
+        <col className="w-[31%]" />
+        <col className="w-[31%]" />
+        <col className="w-[11%]" />
+      </colgroup>
       <thead>
         {/* Sem reordenação por clique: é um formulário de configuração
             (cada linha é um tipo de evento contábil com Selects de
@@ -158,13 +185,18 @@ function EventMappingTable({ entityId, category, accountOptions, mappings, onSav
       <tbody>
         {EVENT_TYPES_ORDERED.map((type) => {
           const draft = draftFor(type);
-          const configured = !!mappingByType.get(type);
+          const configured = !!(draft.debit_account_id && draft.credit_account_id);
+          const partial = !configured && !!(draft.debit_account_id || draft.credit_account_id);
+          // Conta(s) já gravadas no banco (o rascunho pode estar à frente por instantes).
+          const persisted = mappingByType.get(type);
+          const saved = !!(persisted?.debit_account_id && persisted?.credit_account_id);
+          const savedPartial = !saved && !!(persisted?.debit_account_id || persisted?.credit_account_id);
           return (
             <tr key={type} className="border-b border-slate-100">
               <td className="px-2 py-1.5 text-slate-700">
                 {EVENT_TYPE_LABELS[type]}
                 {EVENT_TYPE_HINTS[type] && <InfoTip text={EVENT_TYPE_HINTS[type]} />}
-                {!configured && <span className="ml-1.5 text-[10px] text-amber-600">não configurado</span>}
+                {!configured && <span className="ml-1.5 text-[10px] text-amber-600">{partial ? "incompleto — falta uma conta" : "não configurado"}</span>}
                 {RECLASSIFICATION_TYPES.has(type) && (
                   <p className="text-[10px] text-slate-500 mt-0.5">
                     Débito = conta não circulante · Crédito = conta circulante (o sistema inverte o lado
@@ -179,7 +211,8 @@ function EventMappingTable({ entityId, category, accountOptions, mappings, onSav
                   onChange={(v) => setDraft(type, { debit_account_id: v })}
                   placeholder="Selecione"
                   searchPlaceholder="Buscar conta..."
-                  className="h-8 w-56 text-xs"
+                  className="h-8 w-full text-xs"
+                  wideList
                 />
               </td>
               <td className="px-2 py-1.5">
@@ -189,13 +222,24 @@ function EventMappingTable({ entityId, category, accountOptions, mappings, onSav
                   onChange={(v) => setDraft(type, { credit_account_id: v })}
                   placeholder="Selecione"
                   searchPlaceholder="Buscar conta..."
-                  className="h-8 w-56 text-xs"
+                  className="h-8 w-full text-xs"
+                  wideList
                 />
               </td>
-              <td className="px-2 py-1.5">
-                <Button size="sm" variant="outline" className="h-8 gap-1.5" disabled={savingType === type} onClick={() => handleSave(type)}>
-                  <Save className="w-3 h-3" /> {savingType === type ? "..." : "Salvar"}
-                </Button>
+              <td className="px-2 py-1.5 text-[11px] whitespace-nowrap">
+                {rowState[type] === "saving" ? (
+                  <span className="text-slate-500">Salvando...</span>
+                ) : rowState[type] === "error" ? (
+                  <span className="text-red-600">Erro ao salvar</span>
+                ) : saved ? (
+                  <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                    <CheckCircle2 className="w-4 h-4" /> Salvo
+                  </span>
+                ) : savedPartial ? (
+                  <span className="inline-flex items-center gap-1 text-amber-600">
+                    <CircleDashed className="w-4 h-4" /> Falta uma conta
+                  </span>
+                ) : null}
               </td>
             </tr>
           );
@@ -216,7 +260,7 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
 
   const { data: chartOfAccounts = [] } = useQuery({
     queryKey: ["chart-of-accounts"],
-    queryFn: () => base44.entities.ChartOfAccount.list("account_code", 2000),
+    queryFn: () => base44.entities.ChartOfAccount.list("account_code", 20000),
     initialData: [],
   });
 
@@ -303,10 +347,6 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-600">
-        Cada categoria de operação tem seu próprio conjunto de contas — obrigatório separar mútuos com
-        partes relacionadas e com terceiros entre si e das demais operações para o balancete.
-      </p>
       {copyCandidates.length > 0 && (
         <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
           <div className="space-y-1">
@@ -329,7 +369,7 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
       {stacked ? (
         <div className="space-y-4">
           {OPERATION_CATEGORIES.map((c) => {
-            const count = mappings.filter((m) => (m.operation_category || "emprestimos") === c.value).length;
+            const count = mappings.filter((m) => (m.operation_category || "emprestimos") === c.value && m.debit_account_id && m.credit_account_id).length;
             return (
               <div key={c.value} className="rounded-lg border border-slate-200">
                 <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
@@ -341,6 +381,7 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
                 </div>
                 <div className="overflow-x-auto">
                   <EventMappingTable
+                    key={c.value}
                     entityId={entityId}
                     category={c.value}
                     accountOptions={accountOptions}
@@ -365,7 +406,11 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
             </TabsList>
           </Tabs>
           <div className="max-h-[70vh] overflow-y-auto pr-1">
+            {/* key={category}: cada categoria tem a sua própria tabela (rascunhos e
+                autosave isolados) — sem isso o estado da primeira aba vazava para as
+                demais ao trocar de aba. */}
             <EventMappingTable
+              key={category}
               entityId={entityId}
               category={category}
               accountOptions={accountOptions}
@@ -382,7 +427,7 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
 export default function AccountingMatrixConfig({ entityId, open, onOpenChange }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-6xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Settings2 className="w-4 h-4" /> Matriz contábil desta empresa</DialogTitle>
         </DialogHeader>

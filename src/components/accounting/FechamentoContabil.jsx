@@ -27,7 +27,7 @@ import {
 import { CheckCircle2, AlertTriangle, Lock, RotateCcw, Calculator, ClipboardCheck, Settings2, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSortableRows, SortableTh } from "@/components/ui/sortable-table";
-import AccountingMatrixConfig from "./AccountingMatrixConfig";
+import { Link } from "react-router-dom";
 import {
   EVENT_TYPE_LABELS,
   sumSettlementCashBuckets,
@@ -420,7 +420,6 @@ export default function FechamentoContabil({ entityId, entityName }) {
   const [dialogTarget, setDialogTarget] = useState(null); // { contract, scheduleRow, existing }
   const [reopenReason, setReopenReason] = useState("");
   const [reopenOpen, setReopenOpen] = useState(false);
-  const [matrixOpen, setMatrixOpen] = useState(false);
   const [calcResult, setCalcResult] = useState(null);
   const [journalResult, setJournalResult] = useState(null);
   const [recalcTarget, setRecalcTarget] = useState(null); // { contract, row, settlement }
@@ -842,8 +841,10 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 </p>
               )}
               <div className="flex gap-1.5">
-                <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={() => setMatrixOpen(true)}>
-                  <Settings2 className="w-3 h-3" /> Matriz contábil
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" asChild>
+                  <Link to="/SettingsAccountingLogic">
+                    <Settings2 className="w-3 h-3" /> Lógica contábil
+                  </Link>
                 </Button>
                 {isApproved && isAdmin && (
                   <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7" onClick={() => setReopenOpen(true)}>
@@ -1081,11 +1082,6 @@ export default function FechamentoContabil({ entityId, entityName }) {
         onSave={handleSaveSettlement}
         saving={savingSettlement}
       />
-
-      {/* key={entityId}: força remontagem ao trocar de empresa, senão o
-          estado de rascunho do AccountingMatrixConfig (guardado localmente,
-          não por entityId) vaza de uma empresa pra outra. */}
-      <AccountingMatrixConfig key={entityId} entityId={entityId} open={matrixOpen} onOpenChange={setMatrixOpen} />
 
       <Dialog open={reopenOpen} onOpenChange={setReopenOpen}>
         <DialogContent>

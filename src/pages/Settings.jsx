@@ -1,6 +1,7 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
-import { LogOut } from "lucide-react";
+import { Info, LogOut } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,6 +42,7 @@ const SECTION_COPY = {
   },
   "logica-contabil": {
     description: "Referência de manutenção do motor de fechamento contábil e matriz de contas por empresa.",
+    info: "Cada evento é amarrado à conta de débito/crédito do plano de contas do cliente, separado por categoria de operação (empréstimos, financiamentos, mútuos com partes relacionadas e com terceiros). É obrigatório separar mútuos com partes relacionadas e com terceiros entre si e das demais operações para o balancete. Escolha a empresa e edite direto aqui, sem precisar abrir um fechamento primeiro.",
   },
   usuarios: {
     description: "Convide por e-mail. A pessoa define a própria senha no link (válido por 7 dias).",
@@ -84,6 +86,18 @@ export function SettingsView({ section = "integracoes" }) {
           isModernLayout ? "text-[#172033]" : "text-slate-900"
         )}>
           {meta.name}
+          {copy.info && (
+            <TooltipProvider>
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <Info className="w-4 h-4 inline-block ml-2 align-middle text-slate-400 hover:text-slate-600 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-sm">
+                  <p className="text-xs font-normal">{copy.info}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </h1>
         <p className={cn("text-sm mt-1", isModernLayout ? "text-[#667085]" : "text-slate-500")}>
           {copy.description}

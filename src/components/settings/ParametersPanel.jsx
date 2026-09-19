@@ -1,3 +1,4 @@
+import { ACCOUNTING_LOGIC_PARAM_KEYS } from "@/lib/accountingLogicParams";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, Search, SlidersHorizontal } from "lucide-react";
 import { toast } from "@/lib/notify";
@@ -261,7 +262,8 @@ export default function ParametersPanel() {
     setLoading(true);
     try {
       const result = await parametersApi.list({ category, search });
-      const data = result.data || [];
+      // Natureza/conta contábil dos títulos ficam em Lógica Contábil.
+      const data = (result.data || []).filter((item) => !ACCOUNTING_LOGIC_PARAM_KEYS.includes(item.key));
       setItems(data);
       const initial = {};
       for (const item of data) {

@@ -12,6 +12,15 @@ import { queryClientInstance } from "@/lib/query-client";
 
 const PlatformContext = createContext(null);
 
+// Ao trocar de tenant (ou abrir/encerrar sessão de suporte) o cache inteiro
+// deixa de valer: cancela o que estava em voo e zera as consultas, senão a tela
+// atual continua mostrando dados do contexto anterior até alguém navegar. Só o
+// usuário logado não é escopado por tenant.
+function resetTenantScopedQueries() {
+  queryClientInstance.cancelQueries();
+  queryClientInstance.resetQueries({ predicate: (q) => q.queryKey[0] !== "current-user" });
+}
+
 export function PlatformProvider({ children }) {
   const { user, isAuthenticated } = useAuth();
   const isMaster = Boolean(user?.platform_admin);
@@ -73,13 +82,12 @@ export function PlatformProvider({ children }) {
   const selectTenant = useCallback(async (nextId) => {
     // Preferência de control plane — NÃO concede data plane sozinha.
     const normalized = !nextId || nextId === "all" ? "" : nextId;
+    if (normalized === getPlatformTenantId()) return;
     setPlatformTenantId(normalized);
+    resetTenantScopedQueries();
     setTenantId(normalized);
-    try {
-      await platformApi.setContext(normalized || null);
-    } catch {
-      /* log LGPD não bloqueia */
-    }
+    // O registro de acesso (LGPD) é só auditoria: não bloqueia a troca.
+    platformApi.setContext(normalized || null).catch(() => {});
   }, []);
 
   const startSupport = useCallback(async (targetTenantId, payload) => {
@@ -87,8 +95,8 @@ export function PlatformProvider({ children }) {
     persistSupportSession(session);
     setSupportSessionState(session);
     setPlatformTenantId(session.tenant_id);
+    resetTenantScopedQueries();
     setTenantId(session.tenant_id);
-    queryClientInstance.invalidateQueries();
     return session;
   }, []);
 
@@ -103,7 +111,7 @@ export function PlatformProvider({ children }) {
     }
     clearSupportSession();
     setSupportSessionState(null);
-    queryClientInstance.invalidateQueries();
+    resetTenantScopedQueries();
   }, []);
 
   const stepUp = useCallback(async (password) => {
