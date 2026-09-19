@@ -45,10 +45,10 @@ export default function ModernMobileNavigation({ open, onOpenChange, currentPage
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="w-[260px] p-0 bg-[#071A2F] text-white border-r-0 flex flex-col">
         <SheetHeader className="px-4 py-5 border-b border-white/10 shrink-0">
-          <SheetTitle className="text-white flex items-center justify-center">
+          <SheetTitle className="text-white flex items-center justify-start">
             <AllDebtLogoModern
-              variant="icon"
-              className="h-12 w-12 drop-shadow-[0_0_18px_rgba(6,182,212,0.35)]"
+              variant="brand"
+              className="drop-shadow-[0_0_18px_rgba(6,182,212,0.35)]"
             />
           </SheetTitle>
         </SheetHeader>

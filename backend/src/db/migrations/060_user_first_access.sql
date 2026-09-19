@@ -1,4 +1,4 @@
--- 051: primeiro acesso do usuário (onboarding por user) + documentos legais / LGPD
+-- 060: primeiro acesso do usuário (onboarding por user) + documentos legais / LGPD
 
 -- Estado de onboarding / tour por usuário (fonte oficial — não localStorage)
 ALTER TABLE users

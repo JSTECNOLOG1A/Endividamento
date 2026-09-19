@@ -6,6 +6,12 @@ export const ROLE_OPTIONS = [
   { value: "viewer", label: "Visualizador" },
 ];
 
+export const APPROVAL_LEVEL_OPTIONS = [
+  { value: 0, label: "Nenhum" },
+  { value: 1, label: "Aprovador Nível 1" },
+  { value: 2, label: "Aprovador Nível 2" },
+];
+
 export const YES_NO_OPTIONS = [
   { value: "sim", label: "Sim" },
   { value: "nao", label: "Não" },
@@ -13,6 +19,10 @@ export const YES_NO_OPTIONS = [
 
 export function roleLabel(role) {
   return ROLE_OPTIONS.find((item) => item.value === role)?.label || role || "—";
+}
+
+export function approvalLevelLabel(level) {
+  return APPROVAL_LEVEL_OPTIONS.find((item) => item.value === Number(level || 0))?.label || "Nenhum";
 }
 
 export function blockedLabel(blocked) {

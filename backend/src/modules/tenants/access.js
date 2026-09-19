@@ -50,13 +50,14 @@ export function runWithTenant(scope, fn) {
     tenantRole: scope.tenantRole || null,
     platformAdmin: Boolean(scope.platformAdmin),
     supportSessionId: scope.supportSessionId || null,
+    approvalLevel: Number(scope.approvalLevel || 0),
   }, fn);
 }
 
 export async function loadUserById(userId, client = pool) {
   if (!userId) return null;
   const result = await client.query(
-    `SELECT id, email, full_name, role, status, blocked, platform_admin
+    `SELECT id, email, full_name, role, status, blocked, platform_admin, approval_level
      FROM users WHERE id = $1`,
     [userId]
   );

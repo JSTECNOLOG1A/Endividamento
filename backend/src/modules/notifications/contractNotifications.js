@@ -101,7 +101,7 @@ export async function notifyContractStatusChange(contract, previousStatus) {
     return;
   }
 
-  if (contract.status === "rascunho" && previousStatus === "pendente_aprovacao") {
+  if (contract.status === "devolvido") {
     const to = submitterEmail(contract);
     if (!to) return;
     const motivo = contract.rejection_comments

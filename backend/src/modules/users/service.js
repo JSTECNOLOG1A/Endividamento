@@ -28,12 +28,15 @@ const ROLES = ["admin", "user", "viewer"];
 
 const optionalText = z.string().trim().max(255).optional().transform((value) => value || "");
 
+const approvalLevelSchema = z.union([z.literal(0), z.literal(1), z.literal(2)]);
+
 export const createSchema = z.object({
   email: z.string().trim().email("Informe um e-mail válido").max(255),
   full_name: z.string().trim().min(2, "Informe o nome completo").max(255),
   cargo: optionalText,
   setor: optionalText,
   role: z.enum(ROLES),
+  approval_level: approvalLevelSchema.optional().default(0),
   blocked: z.boolean().optional().default(false),
 });
 
@@ -43,6 +46,7 @@ export const updateSchema = z.object({
   cargo: optionalText,
   setor: optionalText,
   role: z.enum(ROLES).optional(),
+  approval_level: approvalLevelSchema.optional(),
   blocked: z.boolean().optional(),
   password: z.string().min(8, "A senha deve ter ao menos 8 caracteres").max(128).optional(),
   password_confirm: z.string().optional(),
@@ -52,9 +56,9 @@ export const updateSchema = z.object({
   }
 });
 
-const USER_COLUMNS = `u.id, u.email, u.full_name, u.cargo, u.setor, u.role, u.status, u.blocked, u.blocked_at,
+const USER_COLUMNS = `u.id, u.email, u.full_name, u.cargo, u.setor, u.role, u.approval_level, u.status, u.blocked, u.blocked_at,
   u.last_login_at, u.created_date, u.updated_date, u.created_by`;
-const USER_RETURNING = `id, email, full_name, cargo, setor, role, status, blocked, blocked_at,
+const USER_RETURNING = `id, email, full_name, cargo, setor, role, approval_level, status, blocked, blocked_at,
   last_login_at, created_date, updated_date, created_by`;
 
 function publicUser(row) {
@@ -67,6 +71,7 @@ function publicUser(row) {
     cargo: row.cargo || "",
     setor: row.setor || "",
     role: row.role,
+    approval_level: Number(row.approval_level || 0),
     blocked,
     blocked_at: blocked ? row.blocked_at : null,
     last_login_at: row.last_login_at,
@@ -166,11 +171,12 @@ export async function create(data, createdBy) {
   const firstUser = (members.rows[0]?.n || 0) === 0;
   const role = firstUser ? "admin" : data.role;
   const tenantRole = firstUser ? "OWNER" : (data.role === "viewer" ? "VIEWER" : "ADMIN");
+  const approvalLevel = firstUser ? 2 : Number(data.approval_level || 0);
   const id = randomUUID();
   const result = await pool.query(
     `INSERT INTO users (
-       id, email, password_hash, full_name, cargo, setor, role, status, blocked, blocked_at, created_by
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       id, email, password_hash, full_name, cargo, setor, role, approval_level, status, blocked, blocked_at, created_by
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING ${USER_RETURNING}`,
     [
       id,
@@ -180,6 +186,7 @@ export async function create(data, createdBy) {
       data.cargo || "",
       data.setor || "",
       role,
+      approvalLevel,
       block.status,
       block.blocked,
       block.blocked_at,
@@ -242,6 +249,10 @@ export async function update(id, data, actorId) {
     cargo: data.cargo != null ? data.cargo : current.cargo,
     setor: data.setor != null ? data.setor : current.setor,
     role: data.role ?? current.role,
+    // Dono do tenant já tem bypass em tempo real via isOwner() (ver
+    // actorApprovalLevel em tenants/policy.js); trava aqui é só pra tela não
+    // mostrar um nível divergente do que ele efetivamente tem na prática.
+    approval_level: current.is_owner ? 2 : (data.approval_level != null ? Number(data.approval_level) : current.approval_level),
     ...block,
   };
 
@@ -265,9 +276,10 @@ export async function update(id, data, actorId) {
     "cargo = $3",
     "setor = $4",
     "role = $5",
-    "status = $6",
-    "blocked = $7",
-    "blocked_at = $8",
+    "approval_level = $6",
+    "status = $7",
+    "blocked = $8",
+    "blocked_at = $9",
     "updated_date = now()",
   ];
   const params = [
@@ -276,6 +288,7 @@ export async function update(id, data, actorId) {
     next.cargo || "",
     next.setor || "",
     next.role,
+    next.approval_level,
     next.status,
     next.blocked,
     next.blocked_at,

@@ -264,6 +264,16 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     pendingRecalculation: [],
   };
 
+  // Contrato renegociado/quitado antecipadamente antes desta competência —
+  // nada mais a conciliar pra ele a partir daí (ver payoff_date, gravado em
+  // renegotiateContract()/settleContractEarly(), backend/src/modules/
+  // functions/contractLifecycle.js). Na própria competência do corte, o
+  // schedule_data só tem uma linha por mês mesmo, então o loop abaixo já
+  // processa naturalmente só até ali.
+  if (contract.payoff_date && new Date(contract.payoff_date + "T12:00:00") < monthStart) {
+    return result;
+  }
+
   if (!contract.schedule_data) return result;
 
   let schedule;
@@ -296,7 +306,13 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     const isWithinMonth = rowDate >= monthStart && rowDate <= monthEnd;
     const settlement = settlementsByParcela.get(String(row.parcela));
 
-    const newPrincipalRow = idx === 0 ? (row.sdInicial || 0) : 0;
+    // Liberação parcelada: o motor (CalculationEngine.js) já expõe, em cada
+    // linha, quanto de principal foi injetado ali (`liberacaoInjetada`) —
+    // 0 em toda linha, exceto quando uma tranche caiu naquele mês. Pra
+    // contratos sem liberação parcelada isso também é 0 em toda linha
+    // menos a 0, então a fórmula abaixo reproduz o comportamento anterior
+    // sem precisar de nenhum branch/fallback separado.
+    const newPrincipalRow = idx === 0 ? (row.sdInicial || 0) : (row.liberacaoInjetada || 0);
     const interestAccruedRow = (row.jurosFixosMes || 0) + (row.jurosVariaveisMes || 0);
     const fxAccruedRow = row.varCambial || 0;
 
@@ -305,7 +321,7 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     const interestPaidRow = settlement ? r2(settlement.interest_paid || 0) : (row.jurosPagos || 0);
 
     if (isWithinMonth) {
-      if (newPrincipalRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.LIBERACAO, amount: r2(newPrincipalRow), date: row.dataVencimento });
+      if (newPrincipalRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.LIBERACAO, amount: r2(newPrincipalRow), date: row.dataVencimento, bankAccountId: contract.disbursement_bank_account_id || null });
       if (interestAccruedRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.JUROS_APROPRIADOS, amount: r2(interestAccruedRow), date: row.dataVencimento });
       if (fxAccruedRow) {
         result.events.push({
@@ -314,8 +330,8 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
           date: row.dataVencimento,
         });
       }
-      if (principalPaidRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.PAGAMENTO_PRINCIPAL, amount: r2(principalPaidRow), date: row.dataVencimento, extraordinary: settlement?.extraordinary_amortization });
-      if (interestPaidRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.PAGAMENTO_JUROS, amount: r2(interestPaidRow), date: row.dataVencimento });
+      if (principalPaidRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.PAGAMENTO_PRINCIPAL, amount: r2(principalPaidRow), date: row.dataVencimento, extraordinary: settlement?.extraordinary_amortization, bankAccountId: settlement?.bank_account_id || null });
+      if (interestPaidRow) result.events.push({ type: SETTLEMENT_EVENT_TYPES.PAGAMENTO_JUROS, amount: r2(interestPaidRow), date: row.dataVencimento, bankAccountId: settlement?.bank_account_id || null });
 
       // IOF: despesa integral no mês da liberação (não amortizado — é um
       // tributo incidente na operação, diferente do fee de estruturação
@@ -418,6 +434,9 @@ function addMonths(dateStr, delta) {
  */
 export function splitCirculanteNaoCirculante(contract, cutoffDate) {
   const result = { principalShort: 0, principalLong: 0, jurosShort: 0, jurosLong: 0 };
+  // Contrato já renegociado/quitado antecipadamente na data de corte (ou
+  // antes) — não tem mais saldo a classificar em circulante/não circulante.
+  if (contract.payoff_date && contract.payoff_date <= cutoffDate) return result;
   if (!contract.schedule_data) return result;
 
   let schedule;
@@ -565,11 +584,23 @@ const RECLASSIFICATION_EVENT_TYPES = new Set([
   SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_JUROS,
 ]);
 
+// Pra esses 3 eventos, a perna "Banco" pode ser resolvida pela conta
+// bancária real da operação (contract.disbursement_bank_account_id na
+// liberação, settlement.bank_account_id no pagamento) em vez da conta
+// fixa da matriz — ver buildJournalEntries abaixo. Os demais eventos
+// (juros apropriados, IOF, tarifas, reclassificações etc.) não têm perna
+// de banco e continuam 100% pela matriz.
+const BANK_LEG_BY_EVENT = {
+  [SETTLEMENT_EVENT_TYPES.LIBERACAO]: "debito",
+  [SETTLEMENT_EVENT_TYPES.PAGAMENTO_PRINCIPAL]: "credito",
+  [SETTLEMENT_EVENT_TYPES.PAGAMENTO_JUROS]: "credito",
+};
+
 function mappingKey(eventType, operationCategory) {
   return `${eventType}::${operationCategory || "emprestimos"}`;
 }
 
-export function buildJournalEntries(reconciliation, eventMappings, entryDate) {
+export function buildJournalEntries(reconciliation, eventMappings, entryDate, bankAccountsById = new Map()) {
   const mappingByType = new Map(
     eventMappings
       .filter((m) => m.status !== "inativo")
@@ -598,6 +629,19 @@ export function buildJournalEntries(reconciliation, eventMappings, entryDate) {
     if (RECLASSIFICATION_EVENT_TYPES.has(evt.type) && evt.direction === "to_nao_circulante") {
       debitAccountId = mapping.credit_account_id;
       creditAccountId = mapping.debit_account_id;
+    }
+    // Sobrescreve a perna Banco pela conta bancária real da operação,
+    // quando ela existir e tiver conta contábil vinculada — senão, fica a
+    // conta da matriz (fallback, comportamento idêntico ao de antes desta
+    // opção existir).
+    const bankLeg = BANK_LEG_BY_EVENT[evt.type];
+    if (bankLeg) {
+      const bankAccount = evt.bankAccountId ? bankAccountsById.get(evt.bankAccountId) : null;
+      const bankChartAccountId = bankAccount?.chart_account_id || null;
+      if (bankChartAccountId) {
+        if (bankLeg === "debito") debitAccountId = bankChartAccountId;
+        else creditAccountId = bankChartAccountId;
+      }
     }
     entries.push({
       contract_id: evt.contractId,

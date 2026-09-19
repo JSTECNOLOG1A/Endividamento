@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { base44, getToken, setToken } from '@/api/base44Client';
 import { setPlatformTenantId } from '@/api/platformScope';
+import { toast } from '@/lib/notify';
 
 const AuthContext = createContext();
 
@@ -14,6 +15,17 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     checkAppState();
+  }, []);
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      setUser(null);
+      setIsAuthenticated(false);
+      setPlatformTenantId("");
+      toast.warning("Sua sessão expirou. Faça login novamente.");
+    };
+    window.addEventListener("auth:session-expired", handleSessionExpired);
+    return () => window.removeEventListener("auth:session-expired", handleSessionExpired);
   }, []);
 
   const checkAppState = async () => {

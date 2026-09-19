@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -6,12 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, FileText, Edit, Clock, CheckCircle, RotateCcw } from "lucide-react";
+import { ArrowLeft, FileText, Edit, Clock, CheckCircle, RotateCcw, Plus, Wallet } from "lucide-react";
 import ContractsList from "../components/loan/ContractsList";
 import AmortizationTable from "../components/loan/AmortizationTable";
 import ScheduleChart from "../components/loan/ScheduleChart";
 import ContractWorkflow from "../components/loan/ContractWorkflow";
 import ContractSummary from "../components/loan/ContractSummary";
+import GuaranteedAccountFormDialog from "../components/loan/GuaranteedAccountFormDialog";
+import { RenegotiateDialog, SettleEarlyDialog } from "../components/loan/ContractLifecycleDialogs";
 import { createPageUrl } from "../utils";
 import { statusLabel } from "../lib/contractStatus";
 import { toBRDecimalString } from "../lib/brNumber";
@@ -29,6 +32,9 @@ export default function Contracts() {
   // lado no modo de revisão). Começa aberto automaticamente sempre que um
   // contrato com PDF anexado é selecionado.
   const [showPdf, setShowPdf] = useState(false);
+  const [newGuaranteedAccountOpen, setNewGuaranteedAccountOpen] = useState(false);
+  const [renegotiateTarget, setRenegotiateTarget] = useState(null);
+  const [settleEarlyTarget, setSettleEarlyTarget] = useState(null);
   const queryClient = useQueryClient();
 
   React.useEffect(() => {
@@ -99,7 +105,7 @@ export default function Contracts() {
     rascunho: contracts.filter(c => c.status === "rascunho").length,
     pendente_aprovacao: contracts.filter(c => c.status === "pendente_aprovacao").length,
     aprovado: contracts.filter(c => c.status === "aprovado").length,
-    cancelado: contracts.filter(c => c.status === "cancelado").length,
+    devolvido: contracts.filter(c => c.status === "devolvido").length,
   };
 
   const filteredContracts = contracts.filter(c => {
@@ -230,7 +236,7 @@ export default function Contracts() {
                   <CardTitle className="flex items-center gap-3">
                     {bankName} — {selected.contract.contract_number}
                     <Badge variant={selected.contract.status === "aprovado" ? "default" : "secondary"}>
-                      {statusLabel(selected.contract.status)}
+                      {statusLabel(selected.contract.status, selected.contract)}
                     </Badge>
                   </CardTitle>
                   <p className="text-sm text-slate-600 mt-1">
@@ -248,7 +254,7 @@ export default function Contracts() {
                   onDuplicate={() => handleDuplicate(selected.contract)}
                 />
               </CardHeader>
-              {selected.contract.status === "cancelado" && selected.contract.rejection_comments && (
+              {selected.contract.status === "devolvido" && selected.contract.rejection_comments && (
                 <CardContent className="pt-0">
                   <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
                     <span className="font-semibold">Motivo da devolução: </span>
@@ -277,6 +283,7 @@ export default function Contracts() {
                   entities={entities}
                   banks={banks}
                   currencies={currencies}
+                  allContracts={contracts}
                 />
               </TabsContent>
               <TabsContent value="tabela" className="mt-4">
@@ -321,10 +328,35 @@ export default function Contracts() {
   return (
     // Largura máxima da tela, como o padrão em todas as telas do sistema.
     <div className="w-full px-4 sm:px-6 py-8" data-tour="contracts-workspace">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contratos</h1>
-        <p className="text-sm text-slate-600 mt-0.5">Visualize e gerencie os contratos cadastrados</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contratos</h1>
+          <p className="text-sm text-slate-600 mt-0.5">Visualize e gerencie os contratos cadastrados</p>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" className="gap-1.5" onClick={() => setNewGuaranteedAccountOpen(true)}>
+            <Wallet className="w-4 h-4" />
+            Nova Conta Garantida
+          </Button>
+          <Button asChild className="gap-1.5">
+            <Link to={createPageUrl("Simulator")}>
+              <Plus className="w-4 h-4" />
+              Novo Contrato
+            </Link>
+          </Button>
+        </div>
       </div>
+
+      <GuaranteedAccountFormDialog
+        open={newGuaranteedAccountOpen}
+        onOpenChange={setNewGuaranteedAccountOpen}
+        groups={groups}
+        entities={entities}
+        banks={banks}
+        onSaved={(created) => {
+          window.location.href = createPageUrl("GuaranteedAccounts") + "?open=" + created.id;
+        }}
+      />
 
       {/* Dashboard Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
@@ -364,13 +396,13 @@ export default function Contracts() {
             <div className="text-2xl font-bold mt-1 text-green-600">{statusCounts.aprovado}</div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("cancelado")}>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("devolvido")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <RotateCcw className="w-4 h-4 text-red-500" />
+              <RotateCcw className="w-4 h-4 text-orange-500" />
               <div className="text-xs text-slate-600">Devolvido</div>
             </div>
-            <div className="text-2xl font-bold mt-1 text-red-600">{statusCounts.cancelado}</div>
+            <div className="text-2xl font-bold mt-1 text-orange-600">{statusCounts.devolvido}</div>
           </CardContent>
         </Card>
       </div>
@@ -387,7 +419,7 @@ export default function Contracts() {
               <SelectItem value="rascunho">Rascunho</SelectItem>
               <SelectItem value="pendente_aprovacao">Pendente</SelectItem>
               <SelectItem value="aprovado">Aprovado</SelectItem>
-              <SelectItem value="cancelado">Devolvido para Correção</SelectItem>
+              <SelectItem value="devolvido">Devolvido para Correção</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -415,7 +447,19 @@ export default function Contracts() {
         onEdit={handleEdit}
         onDelete={(id) => deleteMutation.mutate(id)}
         onDuplicate={handleDuplicate}
+        onRenegotiate={setRenegotiateTarget}
+        onSettleEarly={setSettleEarlyTarget}
         isLoading={isLoading}
+      />
+      <RenegotiateDialog
+        open={!!renegotiateTarget}
+        onOpenChange={(open) => !open && setRenegotiateTarget(null)}
+        contract={renegotiateTarget}
+      />
+      <SettleEarlyDialog
+        open={!!settleEarlyTarget}
+        onOpenChange={(open) => !open && setSettleEarlyTarget(null)}
+        contract={settleEarlyTarget}
       />
     </div>
   );

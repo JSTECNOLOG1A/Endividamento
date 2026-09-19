@@ -55,7 +55,7 @@ export default function AllDebtLogoModern({ variant = "brand", subtitle, classNa
 
   if (variant === "brand") {
     return (
-      <div className={cn("flex items-center gap-3 min-w-0", className)} aria-label="AllDebt BACEN">
+      <div className={cn("flex items-center gap-3 min-w-0", className)} aria-label="AllDebt">
         <Mark gradientId={gradientId} className="h-10 w-10 shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="text-[1.05rem] font-bold leading-tight text-white truncate">
@@ -65,11 +65,7 @@ export default function AllDebtLogoModern({ variant = "brand", subtitle, classNa
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 truncate mt-0.5">
               {subtitle}
             </p>
-          ) : (
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 mt-0.5">
-              BACEN
-            </p>
-          )}
+          ) : null}
         </div>
       </div>
     );

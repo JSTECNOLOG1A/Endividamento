@@ -55,10 +55,10 @@ const CIRCULANTE_HINT = "Conta de PASSIVO — parcela da dívida desta categoria
 const NAO_CIRCULANTE_HINT = "Conta de PASSIVO — parcela da dívida desta categoria que vence depois de 12 meses da data-base do fechamento.";
 
 const EVENT_TYPE_HINTS = {
-  liberacao: "Contas movimentadas quando o empréstimo é liberado — reconhece o passivo já líquido (valor captado menos fee de estruturação, se houver).",
+  liberacao: "Contas movimentadas quando o empréstimo é liberado — reconhece o passivo já líquido (valor captado menos fee de estruturação, se houver). Se o contrato tiver uma \"Conta Bancária de Liberação\" com conta contábil vinculada (Governança > Contas Bancárias), a conta de débito aqui é só o respaldo — o lançamento usa a conta bancária.",
   juros_apropriados: "Débito = despesa financeira; Crédito = passivo de juros a pagar. Lançado todo mês, mesmo antes de pago (regime de competência).",
-  pagamento_principal: "Contas usadas quando o principal é baixado (pago) na conciliação do fechamento.",
-  pagamento_juros: "Contas usadas quando os juros são baixados (pagos) na conciliação do fechamento.",
+  pagamento_principal: "Contas usadas quando o principal é baixado (pago) na conciliação do fechamento. Se a baixa tiver uma conta bancária com conta contábil vinculada, a conta de crédito aqui é só o respaldo.",
+  pagamento_juros: "Contas usadas quando os juros são baixados (pagos) na conciliação do fechamento. Se a baixa tiver uma conta bancária com conta contábil vinculada, a conta de crédito aqui é só o respaldo.",
   variacao_cambial_ativa: "Só contratos em USD. Débito = despesa/redução; calculada mês a mês pela curva de PTAX do cronograma (projeção, não o pagamento real).",
   variacao_cambial_passiva: "Só contratos em USD. Débito = despesa/aumento do passivo; calculada mês a mês pela curva de PTAX do cronograma (projeção, não o pagamento real).",
   variacao_cambial_ativa_realizada: "Só contratos em USD, e só quando a PTAX do dia do pagamento é informada na baixa — recalcula a variação sobre o valor efetivamente liquidado, separada da provisão.",
@@ -225,8 +225,15 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
   // JSX (26x972 elementos recriados a cada render), o que deixava a matriz
   // lenta pra abrir com um plano de contas grande (Grupo Cangaia tem quase
   // mil contas).
+  //
+  // Só contas analíticas entram aqui — conta sintética é só agrupador/
+  // totalizador do plano de contas, não recebe lançamento contábil direto
+  // (regra contábil básica), então nunca deveria aparecer como opção de
+  // débito/crédito na matriz.
   const accountOptions = useMemo(
-    () => chartOfAccounts.map((a) => ({ value: a.id, label: `${a.account_code} — ${a.account_name}` })),
+    () => chartOfAccounts
+      .filter((a) => a.account_type !== "sintetica")
+      .map((a) => ({ value: a.id, label: `${a.account_code} — ${a.account_name}` })),
     [chartOfAccounts]
   );
 

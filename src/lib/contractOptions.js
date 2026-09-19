@@ -104,6 +104,11 @@ export const GRACE_INTEREST_BEHAVIORS = [
   { value: "CAPITALIZAR", label: "Capitalizar (Anatocismo)" },
   { value: "INTEREST_ONLY", label: "Pagar Juros (Interest Only)" },
   { value: "BALLOON", label: "Balloon (Juros Simples)" },
+  // Juros compostos (juros sobre juros) nos meses sem parcela, mas
+  // liquidados a cada parcela agendada — não só no fim do contrato como o
+  // "Capitalizar" clássico. Comum em FINAME/crédito rural com periodicidade
+  // de pagamento maior que mensal (ex.: SAC anual). Só disponível no SAC.
+  { value: "CAPITALIZAR_PERIODICO", label: "Acumular, Capitalizar (paga o acumulado na parcela)", systemsOnly: ["SAC"] },
 ];
 
 export const AMORTIZATION_TRIGGERS = [

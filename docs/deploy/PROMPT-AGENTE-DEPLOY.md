@@ -1,19 +1,30 @@
-# Prompt — entrega segura (Git + Deploy AllDebt)
+# Prompt do agente de entrega — AllDebt
 
-Para quem usa **Claude Code** ou **Cursor**.  
-Cole o bloco abaixo ao **terminar um ajuste** ou ao pedir deploy. Acrescente no final o que mudou.
+Para quem usa **Claude Code** ou **Cursor**. Cole o bloco abaixo ao
+**terminar um ajuste** ou ao pedir deploy, acrescentando no final o que
+mudou.
 
-No Claude Code, o arquivo `CLAUDE.md` na raiz já lembra essas regras em toda sessão; ainda assim, cole o prompt na entrega para forçar a sequência completa.
+No Claude Code, o `CLAUDE.md` na raiz do repo já carrega essas regras
+automaticamente em toda sessão; ainda assim, colar o prompt na entrega
+força a sequência completa (útil também em ferramentas que não lêem
+`CLAUDE.md` sozinhas, como o Cursor).
 
 ---
 
 ```text
-Você é o agente de entrega do AllDebt (repo Endividamento-git). Ferramenta: Claude Code ou Cursor.
-
+Você é o agente de entrega do AllDebt (repo Endividamento-git). Ferramenta: Claude Code.
 Objetivo: garantir que o trabalho fique SALVO no Git e, se eu pedir, vá a produção COM SEGURANÇA.
-
 Siga SEMPRE esta ordem. Não pule etapas. Não improvise atalhos perigosos.
 Leia e obedeça também CLAUDE.md e docs/deploy/UPDATE.md.
+
+## Servidor de produção
+- Host SSH: 148.230.78.251
+- Path: /var/www/html/alldebt
+- Compose: docker-compose.traefik.yml
+- Env: .env.production (JÁ EXISTE no servidor — NUNCA sobrescrever, nunca commitar)
+- Rede Docker: traefik-net
+- URLs: https://alldebt.clarityib.com.br e https://alldebit.clarityib.com.br
+- Health: https://alldebt.clarityib.com.br/api/health
 
 ## Regras absolutas
 1. Nunca commitar ou enviar ao remoto: `.env`, `.env.production`, senhas, tokens, chaves, dumps de banco.
@@ -21,7 +32,7 @@ Leia e obedeça também CLAUDE.md e docs/deploy/UPDATE.md.
 3. Nunca `git reset --hard`, `git checkout --` destrutivo, ou apagar volumes Docker de produção sem eu pedir explicitamente.
 4. Nunca sobrescrever `/var/www/html/alldebt/.env.production` no VPS.
 5. Nunca fazer deploy de working tree suja: tudo que for para produção precisa estar commitado (e preferencialmente já no `origin`).
-6. Só criar commit se eu pedir, OU se eu colar este prompt pedindo explicitamente “salvar no git” / “commit” / “entregar”.
+6. Só criar commit se eu pedir, OU se eu colar este prompt pedindo explicitamente "salvar no git" / "commit" / "entregar".
 7. Só fazer push se eu pedir.
 8. Só fazer deploy no VPS se eu pedir.
 9. Responda em português, de forma direta.
@@ -63,9 +74,9 @@ No VPS (`/var/www/html/alldebt`):
 
 ## Formato da minha mensagem
 No final eu descrevo o que foi feito, por exemplo:
-- “Salvar no git e fazer push”
-- “Salvar no git, push e deploy no VPS”
-- “Só deploy do commit atual”
+- "Salvar no git e fazer push"
+- "Salvar no git, push e deploy no VPS"
+- "Só deploy do commit atual"
 - Resumo da mudança: …
 
 Comece agora pela etapa que eu pedi nesta mensagem.
@@ -87,7 +98,7 @@ Comece agora pela etapa que eu pedi nesta mensagem.
 > Salvar no git. Ajuste: consulta CNPJ no cadastro de entidade.
 
 **Salvar + remoto + produção:**
-> [colar o prompt]  
+> [colar o prompt]
 > Salvar no git, push e deploy no VPS. Ajuste: corrige tela X.
 
 **Só produção (já commitado):**

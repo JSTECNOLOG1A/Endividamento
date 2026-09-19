@@ -24,7 +24,7 @@ export const ENTITIES = {
     table: "bank_accounts",
     columns: [
       "group_id", "entity_id", "bank_id", "empresa", "filial", "bank_code", "agencia", "conta",
-      "digito", "nome", "tipo", "moeda", "conta_contabil", "natureza", "origem", "status",
+      "digito", "nome", "tipo", "moeda", "conta_contabil", "chart_account_id", "natureza", "origem", "status",
     ],
     booleans: [],
     numbers: [],
@@ -67,21 +67,23 @@ export const ENTITIES = {
   LoanContract: {
     table: "loan_contracts",
     columns: [
-      "group_id", "entity_id", "bank_id", "contract_number", "operation_category", "operation_type",
+      "group_id", "entity_id", "bank_id", "disbursement_bank_account_id", "disbursement_schedule", "contract_number", "operation_category", "operation_type",
       "operation_value", "amount_foreign", "exchange_rate_closing", "signal_value", "iof_value",
       "iof_financed", "encargo_garantia_value", "encargo_garantia_financed", "other_fees",
       "other_fees_financed", "mip_value", "mip_embedded", "dfi_value",
       "dfi_embedded", "other_insurance_value", "other_insurance_embedded", "fixed_rate", "indexer",
-      "indexer_spread", "currency_id", "exchange_lag", "exchange_rates", "operation_date",
+      "indexer_spread", "interest_day_count_convention", "indexer_capitalization_mode", "currency_id", "exchange_lag", "exchange_rates", "operation_date", "emission_date",
       "first_payment_date", "total_term_months", "final_maturity_date", "principal_grace_months",
       "interest_grace_months", "grace_action", "grace_interest_behavior", "amortization_trigger",
       "principal_installments", "interest_installments", "principal_frequency", "interest_frequency",
       "calculation_system", "amortization_percentages", "percentage_base", "schedule_data",
       "contract_pdf_url", "status", "status_history", "approved_by", "approved_date",
+      "level1_approved_by", "level1_approved_at",
       "rejection_comments", "exported_to_payables", "exported_to_receivables",
       "reopen_requested_by", "reopen_requested_at",
       "current_snapshot_id", "approved_snapshot_id",
       "last_recalculated_at", "guarantee_real_type", "guarantee_personal_type",
+      "payoff_date", "renegotiated_from_id", "settlement_discount_amount", "settlement_discount_mode",
     ],
     booleans: [
       "iof_financed", "encargo_garantia_financed", "other_fees_financed", "mip_embedded", "dfi_embedded",
@@ -92,7 +94,7 @@ export const ENTITIES = {
       "encargo_garantia_value", "other_fees", "mip_value", "dfi_value", "other_insurance_value",
       "fixed_rate", "indexer_spread",
       "exchange_lag", "total_term_months", "principal_grace_months", "interest_grace_months",
-      "principal_installments", "interest_installments",
+      "principal_installments", "interest_installments", "settlement_discount_amount",
     ],
   },
   CalculationSnapshot: {

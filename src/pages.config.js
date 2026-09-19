@@ -51,6 +51,7 @@ import Accounting from './pages/Accounting';
 import AccountsPayable from './pages/AccountsPayable';
 import AccountsReceivable from './pages/AccountsReceivable';
 import CDIManager from './pages/CDIManager';
+import CommercialProposal from './pages/CommercialProposal';
 import Configuracoes from './pages/Configuracoes';
 import Consolidation from './pages/Consolidation';
 import Contracts from './pages/Contracts';
@@ -88,6 +89,7 @@ export const PAGES = {
     "AccountsPayable": AccountsPayable,
     "AccountsReceivable": AccountsReceivable,
     "CDIManager": CDIManager,
+    "CommercialProposal": CommercialProposal,
     "Configuracoes": Configuracoes,
     "Consolidation": Consolidation,
     "Contracts": Contracts,

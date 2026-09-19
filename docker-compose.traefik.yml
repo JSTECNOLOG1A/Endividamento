@@ -2,7 +2,9 @@
 # Uso no servidor:
 #   docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build
 #
-# Rede externa `traefik-net` e host alldebit.clarityib.com.br.
+# Rede externa `traefik-net`.
+# Canônico: alldebit.clarityib.com.br
+# Legado: alldebt.clarityib.com.br (e hosts antigos redirecionam para o canônico).
 
 services:
   db:
@@ -74,7 +76,7 @@ services:
       - traefik.http.routers.alldebt-web.tls.certresolver=myresolver
       - traefik.http.routers.alldebt-web.tls=true
       - traefik.http.services.alldebt-web.loadbalancer.server.port=80
-      # Redirect legado (opcional) — hosts antigos apontam para o mesmo serviço
+      # Redirect legado — hosts antigos apontam para o mesmo serviço
       - traefik.http.routers.alldebt-web-legacy.rule=Host(`alldebt.clarityib.com.br`) || Host(`endividamento.clarityib.com.br`) || Host(`staging-alldebt.clarityib.com.br`)
       - traefik.http.routers.alldebt-web-legacy.entrypoints=websecure
       - traefik.http.routers.alldebt-web-legacy.tls.certresolver=myresolver

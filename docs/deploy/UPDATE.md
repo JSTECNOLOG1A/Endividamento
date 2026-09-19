@@ -1,113 +1,86 @@
-# Atualizar produção — AllDebt
+# Deploy de atualização — AllDebt (VPS Clarity)
 
-Guia curto para o time. Deploy atual: **manual** no VPS Clarity (Traefik).
+Este projeto já está em produção. Este documento cobre **atualizar** um
+deploy existente — não o primeiro deploy (não há necessidade disso hoje).
+
+## Onde roda
 
 | Item | Valor |
 |---|---|
-| Código no servidor | `/var/www/html/alldebt` |
-| Compose | `docker-compose.traefik.yml` |
-| Env | `.env.production` (**só no servidor**, nunca no Git) |
-| URL | https://alldebt.clarityib.com.br (legado) / https://alldebit.clarityib.com.br (canônico) |
+| Host SSH | `148.230.78.251` |
+| Path no servidor | `/var/www/html/alldebt` |
+| Compose file | `docker-compose.traefik.yml` |
+| Env file | `.env.production` (já existe no servidor — nunca sobrescrever) |
+| Rede Docker | `traefik-net` |
+| URLs | `https://alldebt.clarityib.com.br`, `https://alldebit.clarityib.com.br` |
+| Health check | `https://alldebt.clarityib.com.br/api/health` |
 
----
+A credencial SSH é fornecida pelo usuário fora do chat quando necessário.
+Nunca inventar senha, nunca colar secret no chat se evitável.
 
-## Fluxo obrigatório (cada entrega)
+## Pré-requisitos antes de deployar
 
-```
-1. Ajuste local → teste
-2. Commit no Git
-3. Push para origin
-4. Sync do código no VPS
-5. docker compose up -d --build
-6. Smoke test (health + tela afetada)
-```
+- [ ] Working tree local limpa, ou as mudanças pendentes claramente não
+      fazem parte desta entrega.
+- [ ] O(s) commit(s) da entrega já existem localmente.
+- [ ] De preferência já foi feito `git push` para `origin/main` — se não
+      foi, avisar o usuário e confirmar antes de seguir (o servidor deve
+      sincronizar a partir do commit certo).
+- [ ] Acesso SSH ao host acima disponível nesta sessão.
 
-Nunca faça deploy de código que **não** esteja commitado.  
-Nunca faça push de `.env`, senhas ou chaves.
+## Passo a passo
 
----
+1. **Sincronizar o código** para `/var/www/html/alldebt` no VPS.
+   - Se o diretório no servidor for um clone git: `git pull origin main`
+     (ou `git fetch && git reset --hard origin/main` **somente** se o
+     usuário confirmar explicitamente — nunca por padrão, para não
+     descartar algo feito direto no servidor).
+   - Se não for um clone (deploy via rsync/scp): sincronizar exatamente o
+     commit que acabou de subir, nunca a working tree local suja.
+   - **Nunca** sincronizar/sobrescrever `.env.production` do servidor.
 
-## 1. No notebook (dev)
+2. **Subir os containers** a partir do diretório do projeto no VPS:
 
-```bash
-git pull
-# ... alterações + teste local (docker compose up --build) ...
-git status
-git add <arquivos relevantes>
-git commit -m "mensagem clara do porquê"
-git push origin HEAD
-```
+   ```bash
+   cd /var/www/html/alldebt
+   docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build
+   ```
 
-### Segurança no Git
+   Se a mudança for claramente restrita a um lado (só frontend ou só
+   backend), pode-se rebuildar apenas esse serviço
+   (`... up -d --build web` ou `... up -d --build api`) para ser mais
+   rápido — na dúvida, sobe os dois.
 
-- **Não** commitar: `.env`, `.env.production`, credenciais, dumps, chaves SSH
-- Evitar `git push --force` em `main`/`master`
-- Preferir commits pequenos e revisáveis
+3. **Esperar ficar healthy**:
 
----
+   ```bash
+   docker ps --filter name=alldebt
+   ```
 
-## 2. No VPS (produção)
+   Confirmar que os containers relevantes (`alldebt-web`, `alldebt-api`)
+   aparecem como `healthy` antes de seguir. Se o Traefik responder 404
+   logo após o rebuild, isso é esperado durante o boot — aguardar o
+   healthcheck passar, não declarar sucesso cedo demais.
 
-Com SSH no servidor:
+4. **Smoke test**:
 
-```bash
-cd /var/www/html/alldebt
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}\n" https://alldebt.clarityib.com.br/api/health
+   curl -s -o /dev/null -w "%{http_code}\n" https://alldebt.clarityib.com.br/
+   ```
 
-# Se o diretório for um clone Git:
-git pull
+   Ambos devem responder `200`. Depois, validar manualmente (ou via
+   navegador) a funcionalidade específica que motivou o deploy — não
+   basta o healthcheck genérico passar.
 
-# Rebuild e sobe (migrations rodam no boot da API)
-docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build
-```
+5. **Relatar ao usuário**: hash do commit deployado, status dos
+   containers, resultado do smoke test e da validação manual.
 
-Se o VPS **não** estiver com Git remoto configurado, sincronize o código commitado via `rsync`/`scp` a partir da máquina local (após o `git push`) e rode o mesmo `docker compose ... up -d --build`.
+## Proibido
 
-### Rebuild parcial (opcional)
-
-| Mudança | Comando sugerido |
-|---|---|
-| Só frontend (`src/…`) | `... up -d --build web` |
-| API / migrations / backend | `... up -d --build api` (ou stack completa) |
-| Compose / env / ambos | stack completa (`up -d --build`) |
-
-**Não** edite nem sobrescreva `.env.production` no servidor sem alinhamento do time.
-
----
-
-## 3. Smoke test pós-deploy
-
-```bash
-docker ps --filter name=alldebt
-# Esperar alldebt-web e alldebt-api = healthy
-
-curl -sk https://alldebt.clarityib.com.br/api/health
-curl -sk -o /dev/null -w '%{http_code}\n' https://alldebt.clarityib.com.br/
-```
-
-1. Health API → 200  
-2. Front carrega (hard refresh se cache)  
-3. Validar a tela/fluxo que você alterou  
-
-Traefik pode responder `404` enquanto o container está `starting`/`unhealthy` — aguarde **healthy**.
-
----
-
-## Checklist rápido
-
-- [ ] `git status` limpo (ou só arquivos intencionais)
-- [ ] Commit feito
-- [ ] Push feito (`origin` atualizado)
-- [ ] Código no VPS sincronizado com o commit
-- [ ] `docker compose ... up -d --build` ok
-- [ ] Containers healthy
-- [ ] Health + smoke da feature ok
-- [ ] `.env.production` intacto
-
----
-
-## Prompt para o agente (Claude Code / Cursor)
-
-- **Claude Code:** o arquivo [`CLAUDE.md`](../../CLAUDE.md) na raiz já aplica as regras em toda sessão. Na entrega, use também [`PROMPT-AGENTE-DEPLOY.md`](./PROMPT-AGENTE-DEPLOY.md) ou diga: “Salvar no git, push e deploy”.
-- **Cursor:** cole o prompt em [`PROMPT-AGENTE-DEPLOY.md`](./PROMPT-AGENTE-DEPLOY.md) ou @ a rule `deploy-seguro`.
-
-Primeiro deploy / secrets: [`FIRST-DEPLOY.md`](./FIRST-DEPLOY.md).
+- `git push --force` (ou `--force-with-lease`) em `main`/`master`.
+- Deploy de working tree suja.
+- Apagar volumes Docker de produção.
+- Sobrescrever ou recriar `.env.production` no servidor.
+- Assumir sucesso do deploy sem esperar os containers ficarem healthy e
+  sem rodar o smoke test.

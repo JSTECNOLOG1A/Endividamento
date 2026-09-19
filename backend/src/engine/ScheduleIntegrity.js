@@ -213,8 +213,12 @@ export function validateAmortizationNotExceedBalance(schedule) {
  */
 export function validateCapitalizationRules(schedule, graceInterestBehavior) {
   const errors = [];
-  
-  const shouldCapitalize = graceInterestBehavior === 'CAPITALIZAR';
+
+  // CAPITALIZAR_PERIODICO também capitaliza (juros sobre juros) nos meses
+  // sem parcela — só desconta o valor a cada parcela em vez de só no fim do
+  // contrato (ver SACStrategy.js). Pra essa validação, é o mesmo caso do
+  // CAPITALIZAR "clássico": jurosCapitalizados > 0 é esperado, não um erro.
+  const shouldCapitalize = graceInterestBehavior === 'CAPITALIZAR' || graceInterestBehavior === 'CAPITALIZAR_PERIODICO';
   
   for (let i = 0; i < schedule.length; i++) {
     const row = schedule[i];

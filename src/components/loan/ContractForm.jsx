@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Label } from "@/components/ui/label";
@@ -15,9 +15,11 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Combobox } from "@/components/ui/combobox";
-import { Calculator, Building2, FileText, Percent, Calendar, CreditCard, AlertCircle, Info, Paperclip, Trash2, Save, Send, Banknote, Receipt, LayoutList } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Calculator, FileText, Percent, AlertCircle, Info, Paperclip, Trash2, Save, Send, Banknote, Receipt, LayoutList, Plus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { toBRDecimalString } from "@/lib/brNumber";
 
 
 import {
@@ -33,6 +35,7 @@ const defaultForm = {
   group_id: "",
   entity_id: "",
   bank_id: "",
+  disbursement_bank_account_id: "",
   currency_id: "",
   exchange_lag: "1",
   contract_number: "",
@@ -53,7 +56,10 @@ const defaultForm = {
   fixed_rate: "",
   indexer: "NA",
   indexer_spread: "0",
+  interest_day_count_convention: "dias_corridos_360",
+  indexer_capitalization_mode: "paga_junto",
   operation_date: new Date().toISOString().split("T")[0],
+  emission_date: "",
   calculation_system: "SAC",
   total_term_months: "",
   final_maturity_date: "",
@@ -67,6 +73,8 @@ const defaultForm = {
   first_payment_date: "",
   amortization_percentages: "", // Ex: "24.18,28.09,32.72,38.18"
   percentage_base: "saldo_devedor", // "saldo_devedor" ou "principal"
+  disbursement_mode: "unica", // "unica" ou "parcelada" (liberação em tranches)
+  disbursement_schedule: [], // [{key, date, amount}] — só usado quando disbursement_mode === "parcelada"
 };
 
 // Helper: Converter string BR (2.000.000,00) para número
@@ -76,37 +84,42 @@ const parseBRNumber = (str) => {
   return parseFloat(cleaned) || 0;
 };
 
-// Numeral discreto antes do ícone de cada seção principal (Identificação /
-// Composição / Prazos) — reforça a leitura de "passo 1, 2, 3" do formulário
-// sem precisar de um wizard de verdade (o usuário continua vendo tudo numa
-// tela só, mas a numeração ajuda a orientar por onde começar).
-function SectionBadge({ n }) {
-  return (
-    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] font-bold shrink-0">
-      {n}
-    </span>
-  );
-}
-
 // Sub-título interno usado para dividir a seção "Composição e Remuneração da
 // Dívida" (a mais longa das três) em blocos menores e escaneáveis — sem criar
 // Cards separados, que quebrariam o agrupamento de 3 seções pedido.
 function SubsectionHeading({ icon: Icon, children }) {
   return (
     <h4 className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide">
-      <Icon className="w-3.5 h-3.5 text-blue-600" />
+      <Icon className="w-3.5 h-3.5 text-cyan-600" />
       {children}
     </h4>
   );
 }
 
-export default function ContractForm({ onCalculate, onIdentificationChange, initialData, groups, entities, banks, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf, draftKey = "new", hasResult = false, onSaveDraft, onSubmitForReview, isSaving = false, narrowColumn = false }) {
+// Ícone "i" com tooltip — substitui o parágrafo de descrição que ficava
+// sempre visível abaixo do título de cada aba, agora só sob hover, pra
+// ganhar espaço vertical sem perder a explicação de cada seção.
+function SectionInfo({ children }) {
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={150}>
+        <TooltipTrigger asChild>
+          <Info className="w-3.5 h-3.5 text-slate-400 hover:text-cyan-600 cursor-help shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[260px] text-xs">{children}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+export default function ContractForm({ onCalculate, onIdentificationChange, initialData, groups, entities, banks, bankAccounts, currencies, loadingRates, cdiRates, isEditing = false, isCalculating = false, uploadedPdfUrl, onPdfUpload, isUploadingPdf, draftKey = "new", hasResult = false, onSaveDraft, onSubmitForReview, isSaving = false, narrowColumn = false }) {
   const buildFormFromInitial = (data) => {
     if (!data) return defaultForm;
     return {
       group_id: data.group_id || "",
       entity_id: data.entity_id || "",
       bank_id: data.bank_id || "",
+      disbursement_bank_account_id: data.disbursement_bank_account_id || "",
       currency_id: data.currency_id || "",
       exchange_lag: data.exchange_lag !== undefined ? data.exchange_lag.toString() : "1",
       contract_number: data.contract_number || "",
@@ -127,7 +140,10 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       fixed_rate: data.fixed_rate || "",
       indexer: data.indexer || "NA",
       indexer_spread: data.indexer_spread || "0",
+      interest_day_count_convention: data.interest_day_count_convention || "dias_corridos_360",
+      indexer_capitalization_mode: data.indexer_capitalization_mode || "paga_junto",
       operation_date: data.operation_date || new Date().toISOString().split("T")[0],
+      emission_date: data.emission_date || "",
       calculation_system: data.calculation_system || "SAC",
       total_term_months: data.total_term_months !== undefined && data.total_term_months !== null ? data.total_term_months.toString() : "",
       final_maturity_date: data.final_maturity_date || "",
@@ -141,12 +157,31 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       first_payment_date: data.first_payment_date || "",
       amortization_percentages: data.amortization_percentages || "",
       percentage_base: data.percentage_base || "saldo_devedor",
+      disbursement_mode: Array.isArray(data.disbursement_schedule) && data.disbursement_schedule.length > 0 ? "parcelada" : "unica",
+      disbursement_schedule: Array.isArray(data.disbursement_schedule)
+        ? data.disbursement_schedule.map((t) => ({ key: crypto.randomUUID(), date: t.date || "", amount: t.amount != null ? toBRDecimalString(t.amount) : "0" }))
+        : [],
     };
   };
 
   const [form, setForm] = useState(() => buildFormFromInitial(initialData));
   const gridCols2 = cn("grid grid-cols-1 gap-4", !narrowColumn && "md:grid-cols-2");
   const gridCols3 = cn("grid grid-cols-1 gap-4", !narrowColumn && "md:grid-cols-3");
+  // Pares de campos curtos (datas, moeda, números, selects compactos): ao
+  // contrário do gridCols2 acima, NÃO colapsa pra 1 coluna em narrowColumn —
+  // esses campos cabem lado a lado mesmo na largura estreita da coluna do
+  // layout Moderno, e empilhados só desperdiçam altura de tela à toa.
+  //
+  // gap-x-3/gap-y-3 em vez do atalho gap-3: existe uma regra global em
+  // modern-content.css (`main .grid.gap-3:has(label.uppercase)`) pensada
+  // pra uma barra de filtros em outra tela, que aplica `align-items: end`
+  // — como nossos rótulos também são uppercase, ela batia sem querer
+  // nessa grade também, fazendo o campo com rótulo mais curto "cair" pro
+  // fundo da linha em vez de ficar alinhado no topo com o outro (só
+  // visível no layout Moderno, por isso não aparecia nos testes no
+  // Clássico). gap-x-3/gap-y-3 dá o mesmo espaçamento sem casar com o
+  // seletor `.gap-3`.
+  const gridCols2Tight = "grid grid-cols-2 gap-x-3 gap-y-3";
   const [initialForm, setInitialForm] = useState(() => buildFormFromInitial(initialData));
   const [isLoaded, setIsLoaded] = useState(() => Boolean(initialData) || !isEditing);
   const [draftBanner, setDraftBanner] = useState(null);
@@ -186,6 +221,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       group_id: form.group_id,
       entity_id: form.entity_id,
       bank_id: form.bank_id,
+      disbursement_bank_account_id: form.disbursement_bank_account_id,
       contract_number: form.contract_number,
       operation_category: form.operation_category,
       operation_type: form.operation_type,
@@ -197,6 +233,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     form.group_id,
     form.entity_id,
     form.bank_id,
+    form.disbursement_bank_account_id,
     form.contract_number,
     form.operation_category,
     form.operation_type,
@@ -401,6 +438,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     
     setPrevSystem(form.calculation_system);
     
+    // CAPITALIZAR_PERIODICO só existe no SAC — trocar pra outro sistema com
+    // isso selecionado voltaria um valor que o backend rejeita.
+    if (form.calculation_system !== "SAC" && form.grace_interest_behavior === "CAPITALIZAR_PERIODICO") {
+      update("grace_interest_behavior", "CAPITALIZAR");
+    }
+
     if (form.calculation_system === "SAC") {
       update("interest_periodicity", form.principal_periodicity);
     } else if (form.calculation_system === "PRICE") {
@@ -414,12 +457,53 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     }
   }, [form.calculation_system, isLoaded]);
 
+  // Pro SAC, "Periodicidade Juros" fica travada em tela e deve sempre
+  // espelhar "Periodicidade Amortização" (ver hint "Segue periodicidade da
+  // amortização" no campo desabilitado) — o efeito acima só sincroniza no
+  // instante em que o sistema muda PARA SAC; se o usuário trocar a
+  // periodicidade de amortização depois disso, sem trocar de sistema de
+  // novo, o valor antigo ficava parado (ex.: Mensal) e ia pro cálculo
+  // divergente da amortização (ex.: Anual), fazendo juros e principal
+  // seguirem calendários diferentes — a causa do FINANCIAL_INTEGRITY_ERROR
+  // reportado num contrato SAC com carência + Primeiro Vencimento.
+  React.useEffect(() => {
+    if (!isLoaded || form.calculation_system !== "SAC") return;
+    if (form.interest_periodicity === form.principal_periodicity) return;
+    update("interest_periodicity", form.principal_periodicity);
+  }, [form.calculation_system, form.principal_periodicity, form.interest_periodicity, isLoaded]);
+
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
+
+  // Liberação parcelada: Data de Liberação (âncora da carência pro motor)
+  // segue automaticamente a data da 1ª tranche — evita duplicar essa
+  // decisão numa segunda lógica só no submit.
+  React.useEffect(() => {
+    if (form.disbursement_mode !== "parcelada") return;
+    const sorted = [...form.disbursement_schedule].filter((t) => t.date).sort((a, b) => a.date.localeCompare(b.date));
+    const firstDate = sorted[0]?.date;
+    if (firstDate && firstDate !== form.operation_date) update("operation_date", firstDate);
+  }, [form.disbursement_mode, form.disbursement_schedule]);
+
+  // Liberação parcelada (tranches) — mesmo padrão de lista repetível já
+  // usado em IntegrationForm.jsx (key/update/add/remove).
+  const updateTranche = (key, field, value) => setForm((prev) => ({
+    ...prev,
+    disbursement_schedule: prev.disbursement_schedule.map((t) => (t.key === key ? { ...t, [field]: value } : t)),
+  }));
+  const addTranche = () => setForm((prev) => ({
+    ...prev,
+    disbursement_schedule: [...prev.disbursement_schedule, { key: crypto.randomUUID(), date: "", amount: "0" }],
+  }));
+  const removeTranche = (key) => setForm((prev) => ({
+    ...prev,
+    disbursement_schedule: prev.disbursement_schedule.filter((t) => t.key !== key),
+  }));
+  const trancheTotal = form.disbursement_schedule.reduce((s, t) => s + parseBRNumber(t.amount), 0);
 
   const selectedGroup = groups?.find((g) => g.id === form.group_id);
   const filteredEntities = form.group_id ? entities?.filter((e) => e.group_id === form.group_id) : [];
   const selectedEntity = form.entity_id ? entities?.find((e) => e.id === form.entity_id) : null;
-  const missingData = !form.group_id || !form.entity_id || !form.bank_id;
+  const missingData = !form.group_id || !form.entity_id || !form.bank_id || !form.disbursement_bank_account_id;
   const selectedSystem = SYSTEMS.find((s) => s.value === form.calculation_system);
 
   const handleSubmit = async (e) => {
@@ -463,10 +547,16 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
     const principalGrace = parseInt(form.principal_grace_months) || 0;
     const principalPeriod = parseInt(form.principal_periodicity) || 1;
     const interestPeriod = parseInt(form.interest_periodicity) || 1;
-    
-    const principalInstallments = form.calculation_system === "BULLET" 
-      ? 1 
-      : Math.ceil((totalMonths - principalGrace) / principalPeriod);
+    // Com Primeiro Vencimento preenchido, o Prazo Total já conta a partir
+    // dele (carência não incluída — ver hint do campo) — subtrair a
+    // carência de novo aqui contaria ela em dobro e subestimaria o número
+    // de parcelas (ex.: prazo 49 + carência 20 + periodicidade anual vira
+    // 3 parcelas em vez das 5 que cabem de fato no prazo informado).
+    const hasExplicitFirstPaymentDate = Boolean(form.first_payment_date);
+
+    const principalInstallments = form.calculation_system === "BULLET"
+      ? 1
+      : Math.ceil((hasExplicitFirstPaymentDate ? totalMonths : (totalMonths - principalGrace)) / principalPeriod);
     const interestInstallments = form.calculation_system === "BULLET" 
       ? 1 
       : Math.ceil(totalMonths / interestPeriod);
@@ -503,9 +593,32 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       }
     }
 
+    // Validação da liberação parcelada, antes de calcular.
+    if (form.disbursement_mode === "parcelada") {
+      const tranches = form.disbursement_schedule;
+      if (tranches.length === 0) {
+        alert("⚠️ Adicione pelo menos uma tranche no cronograma de liberação, ou desative a liberação parcelada.");
+        return;
+      }
+      if (tranches.some((t) => !t.date || parseBRNumber(t.amount) <= 0)) {
+        alert("⚠️ Preencha data e valor (maior que zero) em todas as tranches do cronograma de liberação.");
+        return;
+      }
+      const sortedDates = [...tranches].map((t) => t.date).sort();
+      for (let i = 1; i < sortedDates.length; i++) {
+        if (sortedDates[i] <= sortedDates[i - 1]) {
+          alert("⚠️ As datas das tranches de liberação devem ser estritamente crescentes (sem datas repetidas).");
+          return;
+        }
+      }
+    }
+
     onCalculate({
       ...form,
-      operation_value: parseFloat(form.operation_value || '0') || 0,
+      operation_value: form.disbursement_mode === "parcelada" ? trancheTotal : (parseFloat(form.operation_value || '0') || 0),
+      disbursement_schedule: form.disbursement_mode === "parcelada"
+        ? form.disbursement_schedule.map((t) => ({ date: t.date, amount: parseBRNumber(t.amount) }))
+        : null,
       amount_foreign: parseBR(form.amount_foreign),
       exchange_rate_closing: parseBR(form.exchange_rate_closing),
       signal_value: parseFloat(form.signal_value.replace(/\./g, '').replace(',', '.')) || 0,
@@ -577,18 +690,45 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
         banco estando certo. Como nenhum SelectItem real usa value="", é
         seguro ignorar esses valores vazios aqui.
       */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
-            <SectionBadge n={1} />
-            <Building2 className="w-4 h-4 text-blue-600" />
-            Identificação
-          </CardTitle>
-          <CardDescription className="text-xs text-slate-600 pl-7">
-            Grupo, entidade, banco credor e garantias do contrato.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+      <Tabs defaultValue="identificacao" className="w-full">
+        {/* Sem overflow-hidden aqui: um ancestral com overflow diferente de
+            visible vira o "contêiner de scroll" usado pelo cálculo de
+            position:sticky do TabsList logo abaixo, mesmo sem barra de
+            rolagem própria — isso trava o sticky (ele simplesmente rola
+            junto com o conteúdo, nunca gruda no topo). O arredondamento do
+            canto superior fica no próprio TabsList (rounded-t-xl). */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          {/* grid-cols-3 (em vez do flex-wrap anterior): 3 colunas de largura
+              igual preenchendo a barra inteira, sempre em UMA linha só, sem
+              scrollbar horizontal — igual abas clássicas de diálogo (ex.:
+              "Geral | Compartilhamento | Segurança" do Windows). divide-x
+              desenha a linha vertical entre elas; a aba ativa fica branca e
+              em negrito, "destacando" das outras duas (cinza, recolhidas). */}
+          <TabsList className="sticky top-0 z-10 grid w-full grid-cols-3 h-auto gap-0 divide-x divide-slate-300 rounded-t-xl border-b border-slate-300 bg-slate-100 p-0">
+            <TabsTrigger
+              value="identificacao"
+              className="w-full rounded-none whitespace-normal text-center leading-tight gap-1 py-2.5 px-2 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:font-semibold data-[state=active]:shadow-none"
+            >
+              Identificação
+              <SectionInfo>Grupo, entidade, banco credor e garantias do contrato.</SectionInfo>
+            </TabsTrigger>
+            <TabsTrigger
+              value="composicao"
+              className="w-full rounded-none whitespace-normal text-center leading-tight gap-1 py-2.5 px-2 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:font-semibold data-[state=active]:shadow-none"
+            >
+              Composição e Remuneração da Dívida
+              <SectionInfo>Moeda, valores, custos da operação e como a dívida é remunerada.</SectionInfo>
+            </TabsTrigger>
+            <TabsTrigger
+              value="prazos"
+              className="w-full rounded-none whitespace-normal text-center leading-tight gap-1 py-2.5 px-2 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-cyan-700 data-[state=active]:font-semibold data-[state=active]:shadow-none"
+            >
+              Prazos e Periodicidades
+              <SectionInfo>Prazo total, datas de vencimento, carências e frequência de pagamento.</SectionInfo>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="identificacao" className="p-5 space-y-5 mt-0">
           <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Grupo Econômico *</Label>
@@ -630,6 +770,21 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nº Contrato *</Label>
               <Input value={form.contract_number} onChange={(e) => update("contract_number", e.target.value)} placeholder="000.000.000" className="h-9" required />
+            </div>
+          </div>
+          <div className={gridCols2}>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Conta Bancária de Liberação *</Label>
+              <Combobox
+                value={form.disbursement_bank_account_id || ""}
+                onChange={(v) => update("disbursement_bank_account_id", v || "")}
+                options={(bankAccounts || [])
+                  .filter((a) => !form.bank_id || a.bank_id === form.bank_id)
+                  .map((a) => ({ value: a.id, label: `${a.nome} — Ag ${a.agencia}, CC ${a.conta}${a.digito ? `-${a.digito}` : ""}` }))}
+                placeholder="Em qual conta o recurso cai"
+                searchPlaceholder="Buscar conta bancária..."
+                disabled={!form.bank_id}
+              />
             </div>
           </div>
           <div className={gridCols2}>
@@ -715,25 +870,12 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           {missingData && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              Preencha grupo, entidade e banco antes de calcular.
+              Preencha grupo, entidade, banco e a conta bancária de liberação antes de calcular.
             </div>
           )}
-        </CardContent>
-      </Card>
+          </TabsContent>
 
-      {/* Seção B: Composição e Remuneração da Dívida */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
-            <SectionBadge n={2} />
-            <CreditCard className="w-4 h-4 text-blue-600" />
-            Composição e Remuneração da Dívida
-          </CardTitle>
-          <CardDescription className="text-xs text-slate-600 pl-7">
-            Moeda, valores, custos da operação e como a dívida é remunerada.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+          <TabsContent value="composicao" className="p-5 space-y-5 mt-0">
           {/* Moeda e Defasagem PTAX - Primeiro Bloco */}
           <SubsectionHeading icon={Banknote}>Moeda e Câmbio</SubsectionHeading>
           <div className={gridCols2}>
@@ -884,28 +1026,59 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <Separator />
 
           <SubsectionHeading icon={Receipt}>Custos da Operação</SubsectionHeading>
+
+          {/* Liberação única (padrão) vs parcelada (tranches): linhas de
+              crédito com carência longa (FCO/FNO, projetos de investimento)
+              costumam liberar o capital aos poucos, não tudo de uma vez. */}
+          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+            <Switch
+              checked={form.disbursement_mode === "parcelada"}
+              onCheckedChange={(checked) => update("disbursement_mode", checked ? "parcelada" : "unica")}
+            />
+            <Label className="text-xs font-medium text-slate-700">
+              Liberação parcelada (várias datas)
+              <TooltipProvider>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-xs">
+                    <p className="text-xs">
+                      Pra contratos como FCO/FNO ou projetos de investimento onde o banco libera o capital aos
+                      poucos, em datas específicas, em vez de tudo de uma vez. Só suportado quando todas as
+                      liberações acontecem durante a carência (antes da 1ª parcela de amortização/juros).
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+          </div>
+
           {/* Valor da Operação e Sinal */}
-          <div className={gridCols2}>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Valor da Operação (R$) *
-                {form.currency_id && (
-                  <span className="ml-1 text-xs text-blue-600 font-normal">(Calculado automaticamente)</span>
+                {(form.currency_id || form.disbursement_mode === "parcelada") && (
+                  <span className="ml-1 text-xs text-cyan-600 font-normal">(Calculado automaticamente)</span>
                 )}
               </Label>
-              <CurrencyInput 
-                type="currency" 
-                value={form.operation_value} 
-                onChange={(e) => update("operation_value", e.target.value)} 
-                placeholder="0,00" 
-                className="h-9" 
-                disabled={!!form.currency_id}
-                required 
+              <CurrencyInput
+                type="currency"
+                value={form.disbursement_mode === "parcelada" ? trancheTotal.toFixed(2).replace(".", ",") : form.operation_value}
+                onChange={(e) => update("operation_value", e.target.value)}
+                placeholder="0,00"
+                className="h-9"
+                disabled={!!form.currency_id || form.disbursement_mode === "parcelada"}
+                required
               />
               {form.currency_id && (
                 <p className="text-xs text-slate-600">
                   Este campo é somente leitura quando operação em moeda estrangeira
                 </p>
+              )}
+              {form.disbursement_mode === "parcelada" && (
+                <p className="text-xs text-slate-600">Soma das tranches de liberação abaixo</p>
               )}
             </div>
             <div className="space-y-1.5">
@@ -913,6 +1086,41 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               <CurrencyInput type="currency" value={form.signal_value} onChange={(e) => update("signal_value", e.target.value)} className="h-9" />
             </div>
           </div>
+
+          {form.disbursement_mode === "parcelada" && (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Cronograma de Liberação</Label>
+              {form.disbursement_schedule.map((tranche) => (
+                <div key={tranche.key} className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-[10px] text-slate-500 uppercase">Data</Label>
+                    <Input
+                      type="date"
+                      value={tranche.date}
+                      onChange={(e) => updateTranche(tranche.key, "date", e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-[10px] text-slate-500 uppercase">Valor (R$)</Label>
+                    <CurrencyInput
+                      type="currency"
+                      value={tranche.amount}
+                      onChange={(e) => updateTranche(tranche.key, "amount", e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => removeTranche(tranche.key)} aria-label="Remover tranche">
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </Button>
+                </div>
+              ))}
+              <Button type="button" variant="secondary" size="sm" onClick={addTranche} className="gap-1.5">
+                <Plus className="w-3.5 h-3.5" />
+                Adicionar tranche
+              </Button>
+            </div>
+          )}
           <Separator />
           <div className={cn(gridCols3, "rounded-lg border border-slate-100 bg-slate-50/70 p-4")}>
             <div className="space-y-3">
@@ -992,10 +1200,10 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
           </div>
           <Separator />
-          <div className={gridCols3}>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Data da Operação *
+                Data de Liberação *
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
@@ -1003,19 +1211,49 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-xs">
                       <p className="text-xs">
-                        Data de assinatura/desembolso do contrato. Se o "Primeiro Vencimento" abaixo ficar
-                        vazio, esta data também vira o ponto de partida para contar as parcelas.
+                        Data em que o recurso efetivamente caiu na conta (desembolso). É esta data que
+                        conta pro cálculo — se o "Primeiro Vencimento" abaixo ficar vazio, ela também
+                        vira o ponto de partida para contar as parcelas.
                       </p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </Label>
-              <Input type="date" value={form.operation_date} onChange={(e) => update("operation_date", e.target.value)} className="h-9" required />
+              <Input
+                type="date"
+                value={form.operation_date}
+                onChange={(e) => update("operation_date", e.target.value)}
+                className="h-9"
+                disabled={form.disbursement_mode === "parcelada"}
+                required
+              />
+              {form.disbursement_mode === "parcelada" && (
+                <p className="text-xs text-slate-600">Definida automaticamente pela 1ª tranche do cronograma de liberação</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Data da Operação
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        Data de emissão/assinatura do contrato, quando diferente da liberação do
+                        recurso. Apenas informativa — não entra no cálculo.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input type="date" value={form.emission_date || ""} onChange={(e) => update("emission_date", e.target.value)} className="h-9" />
             </div>
           </div>
           <Separator />
           <SubsectionHeading icon={Percent}>Taxa e Indexação</SubsectionHeading>
-          <div className={gridCols2}>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Taxa Fixa (% a.a.) *</Label>
               <CurrencyInput type="percent" value={form.fixed_rate} onChange={(e) => update("fixed_rate", e.target.value)} placeholder="0,0000" className="h-9" required />
@@ -1048,6 +1286,84 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </div>
             )}
           </div>
+          <div className={gridCols2}>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Convenção de Cálculo dos Juros Remuneratórios
+              </Label>
+              <Select
+                value={form.interest_day_count_convention}
+                onValueChange={(v) => update("interest_day_count_convention", v)}
+              >
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="dias_corridos_360">Dias corridos / 360</SelectItem>
+                  <SelectItem value="dias_corridos_365">Dias corridos / 365</SelectItem>
+                  <SelectItem value="dias_uteis_252">Dias úteis / 252</SelectItem>
+                  <SelectItem value="convencao_30_360">30/360</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500">
+                Padrão inicial da ferramenta. Confira a convenção prevista para a operação.
+                Não altera o cálculo do indexador (CDI/SELIC), que segue sempre 252 dias úteis.
+              </p>
+            </div>
+          </div>
+          {form.indexer !== "NA" && (
+            <div className={gridCols2}>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                  O que acontece com a correção do indexador a cada vencimento?
+                </Label>
+                <div className="space-y-2">
+                  <label
+                    className={`flex gap-2.5 items-start rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
+                      form.indexer_capitalization_mode === "paga_junto"
+                        ? "border-cyan-400 bg-cyan-50/60"
+                        : "border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="indexer_capitalization_mode"
+                      className="mt-0.5"
+                      checked={form.indexer_capitalization_mode === "paga_junto"}
+                      onChange={() => update("indexer_capitalization_mode", "paga_junto")}
+                    />
+                    <span>
+                      <span className="font-medium text-sm block text-slate-800">Entra na parcela paga</span>
+                      <span className="text-xs text-slate-500">
+                        Padrão de hoje. O boleto de cada vencimento já inclui a correção do
+                        indexador junto com o spread.
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    className={`flex gap-2.5 items-start rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
+                      form.indexer_capitalization_mode === "capitaliza_saldo"
+                        ? "border-cyan-400 bg-cyan-50/60"
+                        : "border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="indexer_capitalization_mode"
+                      className="mt-0.5"
+                      checked={form.indexer_capitalization_mode === "capitaliza_saldo"}
+                      onChange={() => update("indexer_capitalization_mode", "capitaliza_saldo")}
+                    />
+                    <span>
+                      <span className="font-medium text-sm block text-slate-800">Fica dentro da dívida (capitaliza)</span>
+                      <span className="text-xs text-slate-500">
+                        Só o spread é cobrado no boleto. A correção do indexador se soma ao
+                        saldo devedor e é quitada junto com o principal.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
           <Separator />
           <div className="space-y-2">
             <SubsectionHeading icon={LayoutList}>Sistema de Amortização</SubsectionHeading>
@@ -1069,79 +1385,19 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </p>
             )}
           </div>
-        </CardContent>
-      </Card>
+          </TabsContent>
 
-      {/* Seção C: Prazos e Periodicidades */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800">
-            <SectionBadge n={3} />
-            <Calendar className="w-4 h-4 text-blue-600" />
-            Prazos e Periodicidades
-          </CardTitle>
-          <CardDescription className="text-xs text-slate-600 pl-7">
-            Prazo total, datas de vencimento, carências e frequência de pagamento.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className={gridCols3}>
+          <TabsContent value="prazos" className="p-5 space-y-5 mt-0">
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Prazo Total (meses) *
-                <TooltipProvider>
-                  <Tooltip delayDuration={200}>
-                    <TooltipTrigger asChild>
-                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right" className="max-w-xs">
-                      <p className="text-xs">
-                        Total de meses/linhas gerados no cronograma — determina onde cai a Data Vencimento
-                        Final. Quando o Primeiro Vencimento está preenchido, a 1ª linha da tabela já nasce
-                        na própria data do Primeiro Vencimento (não um mês depois), então esse total fica 1
-                        a mais que os meses entre o Primeiro Vencimento e a Data Vencimento Final (ex.: um
-                        contrato de 5 anos = 60 meses de duração gera Prazo Total = 61). Não confundir com
-                        "Quantidade de Parcelas" (na tela de revisão): esse outro campo conta só as linhas
-                        com pagamento efetivo, que pode ser 1 a menos quando há carência sem pagamento no
-                        início.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-              <Input
-                type="number"
-                min="1"
-                value={form.total_term_months}
-                onChange={(e) => update("total_term_months", e.target.value)}
-                className="h-9"
-                disabled={!fieldsStatus.totalTerm}
-                required
-              />
-              {(form.calculation_system === "BULLET" || form.calculation_system === "AMERICANO") && (
-                <p className="text-xs text-slate-600 mt-1">
-                  {form.calculation_system === "BULLET" ? "Define quando ocorre o pagamento único" : "Define quando cai a amortização completa"}
-                </p>
-              )}
-              {totalTermDurationHint && (
-                <p className="text-xs text-slate-600 mt-1">{totalTermDurationHint}</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Data Vencimento Final {(form.calculation_system === "AMERICANO" || form.calculation_system === "BULLET") && "(Pagamento Final)"}
-              </Label>
-              <Input 
-                type="date" 
-                value={form.final_maturity_date} 
-                onChange={(e) => handleFinalDateChange(e.target.value)} 
-                className="h-9" 
-                disabled={!fieldsStatus.totalTerm}
-              />
-              <p className="text-xs text-slate-600">Calculado automaticamente, editável</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+              {/* block + min-h: os <label> são inline por padrão, então
+                  min-height só funciona com display:block. A altura fixa
+                  reserva espaço pra 2 linhas mesmo quando o texto cabe em 1
+                  (ex.: "Primeiro Vencimento" sozinho) — sem isso, o campo
+                  cujo rótulo quebra em 2 linhas (ex.: "Data Vencimento
+                  Final" numa coluna estreita) empurra sua própria caixa de
+                  data pra baixo, desalinhando as duas caixas lado a lado. */}
+              <Label className="block min-h-[2.25rem] text-xs font-medium text-slate-600 uppercase tracking-wider leading-snug">
                 Primeiro Vencimento
                 <TooltipProvider>
                   <Tooltip delayDuration={200}>
@@ -1167,9 +1423,63 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 placeholder="Se vazio, usa a Data da Operação"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label className="block min-h-[2.25rem] text-xs font-medium text-slate-600 uppercase tracking-wider leading-snug">
+                Data Vencimento Final {(form.calculation_system === "AMERICANO" || form.calculation_system === "BULLET") && "(Pagamento Final)"}
+              </Label>
+              <Input
+                type="date"
+                value={form.final_maturity_date}
+                onChange={(e) => handleFinalDateChange(e.target.value)}
+                className="h-9"
+                disabled={!fieldsStatus.totalTerm}
+              />
+              <p className="text-xs text-slate-600">Calculado automaticamente, editável</p>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+              Prazo Total (meses) *
+              <TooltipProvider>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-xs">
+                    <p className="text-xs">
+                      Total de meses/linhas gerados no cronograma — determina onde cai a Data Vencimento
+                      Final. Quando o Primeiro Vencimento está preenchido, a 1ª linha da tabela já nasce
+                      na própria data do Primeiro Vencimento (não um mês depois), então esse total fica 1
+                      a mais que os meses entre o Primeiro Vencimento e a Data Vencimento Final (ex.: um
+                      contrato de 5 anos = 60 meses de duração gera Prazo Total = 61). Não confundir com
+                      "Quantidade de Parcelas" (na tela de revisão): esse outro campo conta só as linhas
+                      com pagamento efetivo, que pode ser 1 a menos quando há carência sem pagamento no
+                      início.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              type="number"
+              min="1"
+              value={form.total_term_months}
+              onChange={(e) => update("total_term_months", e.target.value)}
+              className="h-9"
+              disabled={!fieldsStatus.totalTerm}
+              required
+            />
+            {(form.calculation_system === "BULLET" || form.calculation_system === "AMERICANO") && (
+              <p className="text-xs text-slate-600 mt-1">
+                {form.calculation_system === "BULLET" ? "Define quando ocorre o pagamento único" : "Define quando cai a amortização completa"}
+              </p>
+            )}
+            {totalTermDurationHint && (
+              <p className="text-xs text-slate-600 mt-1">{totalTermDurationHint}</p>
+            )}
           </div>
           <Separator />
-          <div className={gridCols2}>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Carência Principal (meses)
@@ -1230,7 +1540,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               )}
             </div>
           </div>
-          {(parseInt(form.interest_grace_months) > 0 && fieldsStatus.interestGrace) && (
+          {/* Esse comportamento não é só sobre carência: no SAC/PRICE com
+              periodicidade de juros maior que mensal (bimestral pra cima, ou
+              "No Vencimento"), TAMBÉM existem meses sem pagamento entre uma
+              parcela e outra, mesmo com carência = 0 (ex.: Hervalense —
+              carência 0, juros anuais). Sem essa segunda condição, o campo
+              ficava escondido exatamente nos casos em que mais importa
+              escolher entre capitalizar até o fim ou quitar a cada parcela. */}
+          {(fieldsStatus.interestGrace && (parseInt(form.interest_grace_months) > 0 || (form.interest_periodicity && form.interest_periodicity !== "1"))) && (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
@@ -1242,20 +1559,27 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                       </TooltipTrigger>
                       <TooltipContent side="right" className="max-w-xs">
                         <p className="text-xs">
-                          O que acontece com os juros apropriados durante a carência: Capitalizar soma ao saldo
-                          devedor (juros sobre juros); Pagar Juros exige desembolso mensal já na carência; Balloon
-                          acumula juros simples à parte para quitar depois.
+                          O que acontece com os juros apropriados durante a carência (e, no SAC, também entre
+                          parcelas de periodicidade maior que mensal): Capitalizar soma ao saldo devedor até o fim do
+                          contrato (juros sobre juros); Acumular/Capitalizar faz o mesmo mas quita o acumulado a cada
+                          parcela agendada, não só no fim; Pagar Juros exige desembolso mensal já na carência;
+                          Balloon acumula juros simples à parte para quitar depois.
                         </p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </Label>
                 <Select
-                  value={form.grace_interest_behavior} 
+                  value={form.grace_interest_behavior}
                   onValueChange={(v) => {
                     // Bloquear PRICE + BALLOON
                     if (form.calculation_system === "PRICE" && v === "BALLOON") {
                       alert("⚠️ Sistema PRICE é incompatível com BALLOON. Use CAPITALIZAR ou INTEREST_ONLY.");
+                      return;
+                    }
+                    // CAPITALIZAR_PERIODICO só está implementado no SAC por enquanto
+                    if (v === "CAPITALIZAR_PERIODICO" && form.calculation_system !== "SAC") {
+                      alert('⚠️ "Acumular, Capitalizar" só está disponível para o sistema SAC por enquanto.');
                       return;
                     }
                     update("grace_interest_behavior", v);
@@ -1266,9 +1590,17 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                     <SelectItem value="CAPITALIZAR">
                       <div className="py-1">
                         <div className="font-semibold">Capitalizar (Anatocismo)</div>
-                        <div className="text-xs text-slate-600">Juros sobre juros - SD cresce</div>
+                        <div className="text-xs text-slate-600">Juros sobre juros - vira saldo até o fim do contrato</div>
                       </div>
                     </SelectItem>
+                    {form.calculation_system === "SAC" && (
+                      <SelectItem value="CAPITALIZAR_PERIODICO">
+                        <div className="py-1">
+                          <div className="font-semibold">Acumular, Capitalizar</div>
+                          <div className="text-xs text-slate-600">Juros sobre juros - quita o acumulado a cada parcela</div>
+                        </div>
+                      </SelectItem>
+                    )}
                     <SelectItem value="INTEREST_ONLY">
                       <div className="py-1">
                         <div className="font-semibold">Pagar Juros (Interest Only)</div>
@@ -1283,10 +1615,11 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                {form.grace_interest_behavior === "CAPITALIZAR" && (
+                {(form.grace_interest_behavior === "CAPITALIZAR" || form.grace_interest_behavior === "CAPITALIZAR_PERIODICO") && (
                   <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs">
                     <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                     Anatocismo: Juros capitalizados geram juros sobre juros
+                    {form.grace_interest_behavior === "CAPITALIZAR_PERIODICO" && " (quitados a cada parcela)"}
                   </div>
                 )}
               </div>
@@ -1337,7 +1670,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
             </div>
           )}
           <Separator />
-          <div className={gridCols2}>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Periodicidade Amortização</Label>
               <Select 
@@ -1347,7 +1680,13 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               >
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {PERIODICITIES.map((p) => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
+                  {/* "No Vencimento" (bullet) só faz sentido pros sistemas
+                      Bullet/Americano, que já têm lógica própria de
+                      pagamento único — nos demais (SAC, PRICE, SACRE,
+                      %Residual), a fórmula de periodicidade não sabe lidar
+                      com frequência 0 e quebra silenciosamente (ver guard
+                      em CalculationEngine.js). */}
+                  {PERIODICITIES.filter((p) => p.value !== "bullet" || ["BULLET", "AMERICANO"].includes(form.calculation_system)).map((p) => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
                 </SelectContent>
               </Select>
               {!fieldsStatus.principalPeriodicity && (
@@ -1367,7 +1706,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               >
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {PERIODICITIES.map((p) => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
+                  {PERIODICITIES.filter((p) => p.value !== "bullet" || ["BULLET", "AMERICANO"].includes(form.calculation_system)).map((p) => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
                 </SelectContent>
               </Select>
               {!fieldsStatus.interestPeriodicity && (
@@ -1379,8 +1718,9 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               )}
             </div>
           </div>
-        </CardContent>
-      </Card>
+          </TabsContent>
+        </div>
+      </Tabs>
 
       {/* Seção D: Percentuais de Amortização (PERCENTAGE_RESIDUAL) */}
       {form.calculation_system === "PERCENTAGE_RESIDUAL" && (
@@ -1439,7 +1779,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                   href={uploadedPdfUrl} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="text-xs text-blue-600 hover:underline"
+                  className="text-xs text-cyan-600 hover:underline"
                 >
                   Visualizar PDF
                 </a>
@@ -1474,7 +1814,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               size="lg"
               variant="outline"
               disabled={isUploadingPdf}
-              className="w-full h-12 text-base font-semibold border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50 disabled:opacity-70"
+              className="w-full h-12 text-base font-semibold border-2 border-dashed border-cyan-300 hover:border-cyan-500 hover:bg-cyan-50 disabled:opacity-70"
               onClick={() => document.getElementById('pdf-upload').click()}
             >
               <Paperclip className="w-5 h-5 mr-2" />
@@ -1487,14 +1827,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           type="submit" 
           size="lg" 
           disabled={isCalculating}
-          className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base font-semibold shadow-lg shadow-blue-600/20 disabled:opacity-70 disabled:cursor-not-allowed"
+          className="w-full bg-cyan-600 hover:bg-cyan-700 h-12 text-base font-semibold shadow-lg shadow-cyan-600/20 disabled:opacity-70 disabled:cursor-not-allowed"
         >
           <Calculator className="w-5 h-5 mr-2" />
           {isCalculating ? "Calculando..." : (isEditing ? "Recalcular contrato" : "Calcular contrato")}
         </Button>
         {isCalculating && (
           <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-600 animate-pulse" style={{ width: "100%" }} />
+            <div className="h-full bg-cyan-600 animate-pulse" style={{ width: "100%" }} />
           </div>
         )}
 
@@ -1522,7 +1862,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 type="button"
                 disabled={!hasResult || isSaving}
                 onClick={onSubmitForReview}
-                className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="gap-1.5 text-xs bg-cyan-600 hover:bg-cyan-700 disabled:opacity-60 disabled:cursor-not-allowed"
                 title={!hasResult ? "Calcule o contrato antes de enviar" : undefined}
               >
                 <Send className="w-3.5 h-3.5" />

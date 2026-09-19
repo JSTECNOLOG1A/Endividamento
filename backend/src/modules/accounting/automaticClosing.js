@@ -177,7 +177,16 @@ async function closeEntityForCompetencia(entity, competencia) {
     [entity.id, groupId]
   );
 
-  const journalResult = buildJournalEntries(reconciliation, mappingsResult.rows, competencia.end);
+  // Conta bancária específica na liberação/pagamento (se cadastrada com
+  // conta contábil vinculada) — quando ausente, buildJournalEntries cai no
+  // fallback da matriz sozinho.
+  const bankAccountsResult = await pool.query(
+    `SELECT * FROM bank_accounts WHERE entity_id = $1 AND group_id = $2`,
+    [entity.id, groupId]
+  );
+  const bankAccountsById = new Map(bankAccountsResult.rows.map((a) => [a.id, a]));
+
+  const journalResult = buildJournalEntries(reconciliation, mappingsResult.rows, competencia.end, bankAccountsById);
 
   const previousResult = closing.previous_closing_id
     ? await pool.query(`SELECT status FROM accounting_closings WHERE id = $1`, [closing.previous_closing_id])

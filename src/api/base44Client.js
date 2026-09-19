@@ -40,7 +40,11 @@ async function request(path, options = {}) {
   }
 
   if (response.status === 401) {
+    const hadToken = Boolean(token);
     setToken(null);
+    if (hadToken) {
+      window.dispatchEvent(new Event("auth:session-expired"));
+    }
   }
 
   if (!response.ok) {

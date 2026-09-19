@@ -665,6 +665,7 @@ export function GovernanceView({ section = null }) {
                 key={editingItem?.id || `new-${selectedBankId || "all"}`}
                 banks={banks}
                 entities={entities}
+                chartOfAccounts={accounts}
                 bankId={editingItem?.bank_id || selectedBankId}
                 onSubmit={handleBankAccountSubmit}
                 onCancel={handleCancel}

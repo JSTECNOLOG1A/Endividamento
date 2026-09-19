@@ -83,9 +83,12 @@ export const TASKS = {
     defaultIntervaloMinutos: 1440,
     async run() {
       const result = await syncPtaxToCurrencies();
+      const message = result.ok
+        ? `${result.created} nova(s) · ${result.updated} atualizada(s) de ${result.fetched} consultada(s) · mais recente ${result.rate_date}: R$ ${result.exchange_rate}`
+        : (result.message || "Falha ao consultar PTAX no BACEN");
       return {
         ok: result.ok,
-        message: `PTAX ${result.action === "created" ? "gravada" : "atualizada"} para ${result.rate_date}: R$ ${result.exchange_rate}`,
+        message,
         detalhes: result,
       };
     },

@@ -1,4 +1,4 @@
--- 052: PLATFORM_MASTER — control plane, lifecycle de tenant, sessões de suporte
+-- 061: PLATFORM_MASTER — control plane, lifecycle de tenant, sessões de suporte
 
 -- Lifecycle administrativo (control plane). billing_status permanece para cobrança.
 ALTER TABLE tenants

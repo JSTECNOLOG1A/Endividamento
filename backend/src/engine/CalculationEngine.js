@@ -28,7 +28,7 @@
  * 🔐 VERSÃO DO MOTOR DE CÁLCULO
  * Incrementar sempre que houver mudança matemática
  */
-export const ENGINE_VERSION = "1.2.2"; // +Ancoragem de vencimentos no dia de referência + próximo DU
+export const ENGINE_VERSION = "1.2.3"; // +PRICE prefixado usa taxa mensal fixa (30/360) em vez de dias corridos, pra prestação não variar com o dia de vencimento
 
 /**
  * 🔐 BUILD ID DO MOTOR
@@ -325,6 +325,40 @@ function indexerFactorForPeriod(annualRate, businessDays) {
   return Math.pow(1 + annualRate / 100, businessDays / 252) - 1;
 }
 
+// Contagem 30E/360: cada mês tratado como 30 dias (dia 31 vira 30 em ambas
+// as pontas). Convenção documentada, distinta de dias corridos.
+function days30360(d1, d2) {
+  const date1 = new Date(d1);
+  const date2 = new Date(d2);
+  const day1 = date1.getDate() === 31 ? 30 : date1.getDate();
+  const day2 = date2.getDate() === 31 ? 30 : date2.getDate();
+  return (
+    (date2.getFullYear() - date1.getFullYear()) * 360 +
+    (date2.getMonth() - date1.getMonth()) * 30 +
+    (day2 - day1)
+  );
+}
+
+// Taxa do juro remuneratório/spread contratual pro período, na convenção
+// escolhida por contrato (interest_day_count_convention). NUNCA usada para o
+// fator do próprio indexador (CDI/SELIC etc.) — esse mantém sua convenção
+// própria (252 DU, ver indexers/CDIIndexer.js), imutável. `dias30360` é
+// calculado pelo chamador (não a partir de `dias`) pra poder respeitar o
+// mesmo override de 30 dias fixos do PRICE prefixado quando aplicável.
+function remuneratoryRateForPeriod(annualRate, { dias, du, dias30360: dias30 }, convention) {
+  switch (convention) {
+    case "dias_corridos_365":
+      return Math.pow(1 + annualRate / 100, dias / 365) - 1;
+    case "dias_uteis_252":
+      return Math.pow(1 + annualRate / 100, du / 252) - 1;
+    case "convencao_30_360":
+      return Math.pow(1 + annualRate / 100, dias30 / 360) - 1;
+    case "dias_corridos_360":
+    default:
+      return Math.pow(1 + annualRate / 100, dias / 360) - 1;
+  }
+}
+
 
 
 // Mapeia frequência para meses
@@ -517,6 +551,15 @@ export async function calculateAmortizationSchedule(params) {
     // Mutuamente exclusivos: em modo PERCENTAGE, indexerSpread é ignorado.
     indexerMode = "SPREAD",
     indexerPercentage = 100,
+    // Convenção de contagem de dias do juro remuneratório/spread (não do
+    // fator do indexador em si, que é sempre 252 DU — ver CDIIndexer.js).
+    // Default preserva o comportamento histórico quando o contrato ainda
+    // não tem a convenção salva (contratos criados antes desta feature).
+    interestDayCountConvention = (indexer === "NA" ? "dias_corridos_360" : "dias_uteis_252"),
+    // Só se aplica ao modo SPREAD do indexador (não PERCENTAGE). Default
+    // preserva o comportamento histórico: indexador e spread sempre pagos
+    // juntos, num valor só.
+    indexerCapitalizationMode = "paga_junto",
     operationDate: rawOperationDate,
     firstPaymentDate: rawFirstPaymentDate, // Dia de referência dos vencimentos
     first_payment_date: rawFirstPaymentDateSnake,
@@ -541,6 +584,7 @@ export async function calculateAmortizationSchedule(params) {
     exchangeLag = 1, // NOVO: Defasagem PTAX (0=D, 1=D-1, 2=D-2)
     exchangeRates = [], // NOVO: Array de {rate_date, ptax_rate, source, created_at}
     amount_foreign = null, // NOVO: Valor em moeda estrangeira
+    disbursementSchedule = null, // NOVO: [{date, amount}] — liberação em parcelas (tranches)
   } = params;
   
   // 🔐 VALIDAÇÃO 1: Inputs críticos
@@ -672,10 +716,57 @@ export async function calculateAmortizationSchedule(params) {
   }
 
   // 4️⃣ QUARTO: Definir o saldo inicial para o loop das estratégias
-  let sdInicialUSD = principal;
+  //
+  // Liberação parcelada (tranches): em vez de todo o principal entrar de
+  // uma vez na linha 0, cada tranche é injetada no saldo somente quando sua
+  // própria data chega (ver loop principal abaixo) — juros só incidem
+  // sobre capital já liberado. `principal` (líquido de sinal/IOF/ECG/
+  // taxas, calculado acima) continua sendo o TOTAL a ser liberado; aqui só
+  // decidimos COMO ele entra no saldo ao longo do tempo.
+  const hasStagedDisbursement = Array.isArray(disbursementSchedule) && disbursementSchedule.length > 0;
+  let pendingTranches = [];
+  let sdInicialUSD;
+
+  if (hasStagedDisbursement) {
+    pendingTranches = disbursementSchedule
+      .map((t) => ({ date: parseLocalDate(t.date), amount: Number(t.amount) || 0 }))
+      .sort((a, b) => a.date - b.date);
+    const grossSum = pendingTranches.reduce((s, t) => s + t.amount, 0);
+    if (Math.abs(grossSum - operationValue) > 0.01) {
+      throw new Error(
+        `Liberação em parcelas: a soma das tranches (${grossSum.toFixed(2)}) não bate com o Valor da Operação (${operationValue.toFixed(2)}).`
+      );
+    }
+    // Rateio proporcional de sinal/IOF/ECG/taxas entre as tranches — cada
+    // liberação parcelada é seu próprio fato gerador de IOF (Decreto
+    // 6.306/2007), então o líquido não é descontado inteiro da 1ª tranche.
+    const netFactor = grossSum > 0 ? principal / grossSum : 1;
+    pendingTranches.forEach((t) => { t.amount = roundTo(t.amount * netFactor, 2); });
+    sdInicialUSD = 0; // nada liberado ainda — injetado linha a linha no loop abaixo
+  } else {
+    sdInicialUSD = principal; // comportamento atual, sem mudança
+  }
 
   const principalFreqMonths = frequencyToMonths(principalFrequency);
   const interestFreqMonths = frequencyToMonths(interestFrequency);
+
+  // 🔐 BLOQUEIO: periodicidade "No Vencimento" (bullet) vira frequência 0
+  // meses — as fórmulas de offset abaixo (principalGraceMonths + i*freq)
+  // dependem de uma frequência positiva; com 0, o único evento cai no "mês
+  // 0" (antes da primeira linha gerada pelo loop) e nunca é processado,
+  // zerando a amortização/juros silenciosamente (só aparece depois como
+  // FINANCIAL_INTEGRITY_ERROR, sem pista do motivo real). Os sistemas
+  // BULLET e AMERICANO já tratam "pagamento único" com lógica própria
+  // (branch dedicado logo abaixo) — nos demais, bloquear com mensagem clara
+  // em vez de deixar cair nesse caso quebrado.
+  if (calculationSystem !== "BULLET" && calculationSystem !== "AMERICANO") {
+    if (principalFreqMonths === 0 || interestFreqMonths === 0) {
+      throw new Error(
+        `Periodicidade "No Vencimento" só está disponível para os sistemas Bullet e Americano. ` +
+        `Sistema selecionado: ${calculationSystem}.`
+      );
+    }
+  }
 
   // 2. Gerar cronograma MENSAL (sempre mês a mês para conciliação contábil)
   const startDate = parseLocalDate(operationDate);
@@ -689,6 +780,31 @@ export async function calculateAmortizationSchedule(params) {
     dueAnchorDate: dueAnchorDate ? toISODateLocal(dueAnchorDate) : null,
     usingOperationDateFallback: !hasFirstPaymentDate
   });
+
+  // Quando o Primeiro Vencimento é preenchido explicitamente, a linha 1 da
+  // tabela JÁ É essa data (dueAnchorDate = firstPaymentDate) — a carência já
+  // foi "consumida" posicionando esse vencimento. As fórmulas de offset
+  // abaixo somam principalGraceMonths/interestGraceMonths presumindo que a
+  // linha 1 é 1 mês após a Data de Liberação (caso sem Primeiro Vencimento
+  // explícito) — nesse outro caso, somar a carência de novo conta ela em
+  // dobro, empurrando parcelas pra fora do Prazo Total e fazendo a última
+  // (ou últimas) sumir da tabela sem nada absorver o saldo residual
+  // (FINANCIAL_INTEGRITY_ERROR). Corrigido deslocando a sequência inteira
+  // pra que o 1º evento (i=1) caia exatamente na linha 1, preservando o
+  // espaçamento relativo dos eventos seguintes conforme o gatilho.
+  function rawPrincipalOffset(i) {
+    if (amortizationTrigger === "END_OF_GRACE") return principalGraceMonths + (i * principalFreqMonths);
+    if (amortizationTrigger === "NEXT_MONTH") return principalGraceMonths + 1 + ((i - 1) * principalFreqMonths);
+    return principalGraceMonths + principalFreqMonths + ((i - 1) * principalFreqMonths); // GRACE_PLUS_FREQ
+  }
+  const principalOffsetShift = hasFirstPaymentDate ? (1 - rawPrincipalOffset(1)) : 0;
+  const principalMonthOffset = (i) => rawPrincipalOffset(i) + principalOffsetShift;
+
+  function rawInterestOffset(i) {
+    return interestGraceMonths + (i * interestFreqMonths);
+  }
+  const interestOffsetShift = hasFirstPaymentDate ? (1 - rawInterestOffset(1)) : 0;
+  const interestMonthOffset = (i) => rawInterestOffset(i) + interestOffsetShift;
 
   // Mapear quando há pagamentos de principal e juros
   const principalPaymentMonths = new Set();
@@ -736,71 +852,45 @@ export async function calculateAmortizationSchedule(params) {
       interestPaymentMonths.add(bulletMonth);
     } else {
       for (let i = 1; i <= interestInstallments; i++) {
-        const monthOffset = interestGraceMonths + (i * interestFreqMonths);
-        interestPaymentMonths.add(monthOffset);
+        interestPaymentMonths.add(interestMonthOffset(i));
       }
     }
-    
+
     if (!finalMaturityDate) {
       // Só calcular totalMonths aqui se não foi calculado acima (sem finalMaturityDate)
-      totalMonths = calculationSystem === "BULLET" ? bulletMonth : Math.max(bulletMonth, interestGraceMonths + (interestInstallments * interestFreqMonths));
+      totalMonths = calculationSystem === "BULLET" ? bulletMonth : Math.max(bulletMonth, interestMonthOffset(interestInstallments));
     }
   } else if (calculationSystem === "PERCENTAGE_RESIDUAL") {
     // PERCENTAGE_RESIDUAL: primeira PMT imediatamente após carência
     for (let i = 1; i <= principalInstallments; i++) {
-      let monthOffset;
-      
-      if (amortizationTrigger === "END_OF_GRACE") {
-        monthOffset = principalGraceMonths + (i * principalFreqMonths);
-      } else if (amortizationTrigger === "NEXT_MONTH") {
-        monthOffset = principalGraceMonths + 1 + ((i - 1) * principalFreqMonths);
-      } else { // GRACE_PLUS_FREQ
-        monthOffset = principalGraceMonths + principalFreqMonths + ((i - 1) * principalFreqMonths);
-      }
-      
-      principalPaymentMonths.add(Math.max(1, monthOffset));
+      principalPaymentMonths.add(Math.max(1, principalMonthOffset(i)));
     }
-    
+
     // Juros seguem sua própria carência e periodicidade
     for (let i = 1; i <= interestInstallments; i++) {
-      const monthOffset = interestGraceMonths + (i * interestFreqMonths);
-      interestPaymentMonths.add(monthOffset);
+      interestPaymentMonths.add(interestMonthOffset(i));
     }
-    
+
     // Total de meses: usar totalTermMonths se fornecido, senão calcular
     if (!totalMonths || totalMonths === 0) {
-      const maxPrincipalMonth = principalGraceMonths + (principalInstallments * principalFreqMonths);
-      const maxInterestMonth = interestGraceMonths + (interestInstallments * interestFreqMonths);
+      const maxPrincipalMonth = principalMonthOffset(principalInstallments);
+      const maxInterestMonth = interestMonthOffset(interestInstallments);
       totalMonths = Math.max(maxPrincipalMonth, maxInterestMonth);
     }
   } else {
     // Outros sistemas: respeitar amortizationTrigger
     for (let i = 1; i <= principalInstallments; i++) {
-      let monthOffset;
-      
-      if (amortizationTrigger === "END_OF_GRACE") {
-        // Primeira parcela no último mês da carência, demais seguem frequência
-        monthOffset = principalGraceMonths + (i * principalFreqMonths);
-      } else if (amortizationTrigger === "NEXT_MONTH") {
-        // Primeira parcela um mês após carência, demais seguem frequência
-        monthOffset = principalGraceMonths + 1 + ((i - 1) * principalFreqMonths);
-      } else { // GRACE_PLUS_FREQ
-        // Primeira parcela carência + 1 frequência, demais seguem frequência
-        monthOffset = principalGraceMonths + principalFreqMonths + ((i - 1) * principalFreqMonths);
-      }
-      
-      principalPaymentMonths.add(Math.max(1, monthOffset));
+      principalPaymentMonths.add(Math.max(1, principalMonthOffset(i)));
     }
-    
+
     for (let i = 1; i <= interestInstallments; i++) {
-      const monthOffset = interestGraceMonths + (i * interestFreqMonths);
-      interestPaymentMonths.add(monthOffset);
+      interestPaymentMonths.add(interestMonthOffset(i));
     }
-    
+
     // Total de meses: usar totalTermMonths se fornecido, senão calcular
     if (!totalMonths || totalMonths === 0) {
-      const maxPrincipalMonth = principalGraceMonths + (principalInstallments * principalFreqMonths);
-      const maxInterestMonth = interestGraceMonths + (interestInstallments * interestFreqMonths);
+      const maxPrincipalMonth = principalMonthOffset(principalInstallments);
+      const maxInterestMonth = interestMonthOffset(interestInstallments);
       totalMonths = Math.max(maxPrincipalMonth, maxInterestMonth);
     }
     
@@ -888,6 +978,21 @@ export async function calculateAmortizationSchedule(params) {
     }
   }
 
+  // 🔐 BLOQUEIO: liberação parcelada só suportada inteiramente durante a
+  // carência, antes da 1ª parcela de amortização/juros — evita ter que
+  // recalcular uma fatia SAC/PRICE já fixada por causa de uma liberação
+  // tardia. Cobre tanto o caminho normal quanto customDates (recálculo).
+  if (hasStagedDisbursement) {
+    const firstEvent = mergedEvents.find((e) => e.hasPrincipal || e.hasInterest);
+    const lateTranche = firstEvent && pendingTranches.find((t) => t.date >= firstEvent.date);
+    if (lateTranche) {
+      throw new Error(
+        `Liberação em parcelas: a tranche de ${toISODateLocal(lateTranche.date)} cai no mesmo mês ou depois do início da amortização/pagamento de juros (${toISODateLocal(firstEvent.date)}). ` +
+        `Só é suportada liberação inteiramente durante a carência (antes da 1ª parcela).`
+      );
+    }
+  }
+
   // 3. Calcular tabela
   const schedule = [];
   
@@ -928,21 +1033,29 @@ export async function calculateAmortizationSchedule(params) {
   let strategy = null;
   const isBulletSystem = calculationSystem === "BULLET";
   
+  // 🔐 Sempre `principal` (total líquido a ser liberado), NUNCA
+  // `sdInicialUSD`, aqui: com liberação parcelada, `sdInicialUSD` começa
+  // zerado (nada foi liberado ainda no instante da construção) e só cresce
+  // dentro do loop — passar `sdInicialUSD` corromperia PRICEStrategy
+  // especificamente, que usa esse valor construtor
+  // (`balanceAtLastPayment`) pra derivar a taxa composta da 1ª parcela
+  // amortizante. Sem liberação parcelada, `sdInicialUSD === principal`
+  // neste ponto de qualquer forma — comportamento 100% inalterado.
   if (calculationSystem === "SAC") {
-    strategy = new SACStrategy(sdInicialUSD, principalInstallments);
+    strategy = new SACStrategy(principal, principalInstallments);
   } else if (calculationSystem === "SACRE") {
-    strategy = new SACREStrategy(sdInicialUSD, principalInstallments);
+    strategy = new SACREStrategy(principal, principalInstallments);
   } else if (calculationSystem === "PRICE") {
     // PRICE valida BALLOON no construtor (vai lançar erro se incompatível).
     // A taxa de período é derivada dinamicamente pela própria strategy a partir do
     // juros realmente calculado a cada linha (ver PRICEStrategy.js) — isso garante
     // que a prestação se ajuste corretamente quando há indexador variável (CDI/SELIC)
     // e continua idêntica ao Price clássico quando a taxa é prefixada.
-    strategy = new PRICEStrategy(sdInicialUSD, principalInstallments, interestGraceMonths, effectiveGraceInterestBehavior);
+    strategy = new PRICEStrategy(principal, principalInstallments, interestGraceMonths, effectiveGraceInterestBehavior);
   } else if (calculationSystem === "AMERICANO") {
-    strategy = new AMERICANOStrategy(sdInicialUSD);
+    strategy = new AMERICANOStrategy(principal);
   } else if (calculationSystem === "BULLET") {
-    strategy = new BULLETStrategy(sdInicialUSD);
+    strategy = new BULLETStrategy(principal);
   } else if (calculationSystem === "PERCENTAGE_RESIDUAL") {
     // Parsear percentuais: "24.18,28.09,32.72" → {1: 0.2418, 2: 0.2809, 3: 0.3272}
     const parsedSchedule = {};
@@ -958,14 +1071,28 @@ export async function calculateAmortizationSchedule(params) {
   } else {
     strategy = new SACStrategy(principal, principalInstallments);
   }
-  
+
+  // 🔐 BLOQUEIO: CAPITALIZAR_PERIODICO (juros compostos entre parcelas,
+  // liquidados a cada parcela agendada — não só no fim do contrato) só está
+  // implementado no SAC por enquanto. Nas demais estratégias, esse valor
+  // não é tratado especificamente e cairia num ramo genérico, produzindo
+  // resultado silenciosamente errado — melhor bloquear explicitamente.
+  if (effectiveGraceInterestBehavior === "CAPITALIZAR_PERIODICO" && calculationSystem !== "SAC") {
+    throw new Error(
+      `Comportamento "Acumular, Capitalizar" (liquidação periódica) só está disponível para o sistema SAC por enquanto. ` +
+      `Sistema selecionado: ${calculationSystem}.`
+    );
+  }
+
   const strategyWarnings = [];
   
-  // Adicionar warning de anatocismo se CAPITALIZAR
-  if (effectiveGraceInterestBehavior === "CAPITALIZAR" && interestGraceMonths > 0) {
+  // Adicionar warning de anatocismo se CAPITALIZAR (na carência) ou
+  // CAPITALIZAR_PERIODICO (na carência e/ou entre parcelas, quando a
+  // periodicidade é maior que mensal)
+  if (effectiveGraceInterestBehavior === "CAPITALIZAR_PERIODICO" || (effectiveGraceInterestBehavior === "CAPITALIZAR" && interestGraceMonths > 0)) {
     strategyWarnings.push({
       type: "ANATOCISM",
-      message: "⚠️ Anatocismo: Juros capitalizados durante a carência geram juros sobre juros. Esta prática está sujeita a regulamentação específica no Brasil.",
+      message: "⚠️ Anatocismo: Juros capitalizados na carência e/ou entre parcelas geram juros sobre juros. Esta prática está sujeita a regulamentação específica no Brasil.",
     });
   }
   
@@ -981,7 +1108,21 @@ export async function calculateAmortizationSchedule(params) {
   for (let i = 0; i < mergedEvents.length; i++) {
     const evt = mergedEvents[i];
     parcela++;
-    
+
+    // 🏗️ LIBERAÇÃO PARCELADA: injeta no saldo qualquer tranche cujo
+    // vencimento caia dentro do período desta linha — ANTES de calcular os
+    // juros da linha, pra que juros só incidam sobre capital já liberado.
+    let liberacaoInjetadaUSD = 0;
+    while (
+      pendingTranches.length > 0 &&
+      pendingTranches[0].date <= evt.date &&
+      (i === 0 || pendingTranches[0].date > prevDate)
+    ) {
+      const tranche = pendingTranches.shift();
+      sdInicialUSD += tranche.amount;
+      liberacaoInjetadaUSD += tranche.amount;
+    }
+
     // 💱 Buscar PTAX do período com validação
     let currentPtaxRate = 1; // Fallback seguro
     if (isUSD) {
@@ -1015,18 +1156,49 @@ export async function calculateAmortizationSchedule(params) {
     const du = businessDaysBetween(prevDate, evt.date, holidays);
 
     // Calcular juros sobre SD Inicial USD (já atualizado com capitalizações anteriores).
-    // Base por dias corridos para TODOS os sistemas (inclusive PRICE) — o motor sempre
-    // gera uma linha por mês para conciliação contábil, então uma "taxa do período"
-    // (ex.: trimestral) aplicada linha a linha superestimaria juros nos meses
-    // intermediários sem pagamento. PRICEStrategy deriva sua taxa de período a partir
-    // do juros já calculado aqui (ver PRICEStrategy.js), então uma base única e
-    // consistente com SAC/AMERICANO/BULLET/%RESIDUAL é obrigatória.
-    const fixedInterestRate = fixedRateForPeriod(fixedRate, dias);
+    // Base por dias corridos para TODOS os sistemas — o motor sempre gera uma linha
+    // por mês para conciliação contábil, então uma "taxa do período" (ex.: trimestral)
+    // aplicada linha a linha superestimaria juros nos meses intermediários sem
+    // pagamento. Consistente com SAC/AMERICANO/BULLET/%RESIDUAL.
+    //
+    // EXCEÇÃO: PRICE com taxa prefixada (sem indexador). PRICEStrategy deriva sua
+    // taxa de período a partir do juros calculado aqui (ver PRICEStrategy.js) e
+    // recalcula o PMT a cada parcela — o que só reproduz a prestação fixa clássica
+    // do Price se essa taxa de período for REALMENTE constante. Como o motor ancora
+    // vencimentos no dia de referência (empurrando fim de semana/feriado pro próximo
+    // dia útil), o número de dias corridos entre parcelas varia (28 a 33), fazendo a
+    // taxa prorateada por dia variar mês a mês e a prestação "balançar" — divergindo
+    // da metodologia bancária padrão (mensal, base 30/360, prestação fixa). Toda
+    // linha já representa exatamente 1 mês nominal (datas geradas por addMonths),
+    // então usar dias=30 aqui reproduz a taxa mensal-equivalente constante — sem
+    // mexer em PRICEStrategy.js. PRICE indexado (CDI/SELIC) fica de fora: ali a
+    // taxa futura é desconhecida e precisa refletir o dia corrido real (ver
+    // docstring de PRICEStrategy.js sobre por que recalcula o PMT nesse caso).
+    // NOTA: o override de dias=30 fixa só o numerador; se o contrato PRICE
+    // prefixado escolher a convenção "dias_uteis_252", `du` (dias úteis reais)
+    // ainda varia mês a mês e a prestação pode voltar a balançar — combinação
+    // incomum (DU/252 normalmente é convenção do próprio indexador), não
+    // resolvida nesta entrega.
+    const priceFixedNoIndexer = calculationSystem === "PRICE" && indexer === "NA";
+    const fixedInterestRate = remuneratoryRateForPeriod(
+      fixedRate,
+      {
+        dias: priceFixedNoIndexer ? 30 : dias,
+        du,
+        dias30360: priceFixedNoIndexer ? 30 : days30360(prevDate, evt.date),
+      },
+      interestDayCountConvention
+    );
     const jurosFixosMes = sdInicialUSD * fixedInterestRate;
 
     let jurosVariaveisMes = 0;
     let indexerPeriodRate = 0;
     let indexerProjected = false;
+    // Correção do indexador que não é paga na parcela — some do boleto e
+    // capitaliza direto no saldo (ver sdAtualizadoUSD mais abaixo). Só existe
+    // quando indexerCapitalizationMode === "capitaliza_saldo" no modo SPREAD;
+    // em qualquer outro caso fica 0 e nada muda.
+    let indexerCorrectionCapitalized = 0;
     if (indexer !== "NA") {
      // Delegar ao factory de indexadores
      const indexAccum = indexerFactory.getFactor(indexer, toISODateLocal(prevDate), toISODateLocal(evt.date), holidays);
@@ -1037,16 +1209,31 @@ export async function calculateAmortizationSchedule(params) {
        // spread — é uma fórmula multiplicativa própria, mutuamente exclusiva
        // com o modo SPREAD.
        indexerPeriodRate = Math.pow(indexAccum.factor, indexerPercentage / 100) - 1;
+       jurosVariaveisMes = sdInicialUSD * indexerPeriodRate;
      } else {
-       const spreadRate = indexerFactorForPeriod(indexerSpread, du);
-       // REGRA 1 (Imutável): CAPITALIZAÇÃO COMPOSTA
-       // Indexador e spread SEMPRE multiplicam (não somam)
-       // Fórmula: (índice × (1 + spread)) - 1
-       // Justificativa: Em mercado financeiro, dois fatores capitalizam compostos
-       // Diferença em milhões: centavos se tornam milhares ao longo dos anos
-       indexerPeriodRate = (indexAccum.factor * (1 + spreadRate)) - 1;
+       // Convenção do spread contratual é configurável por contrato
+       // (interestDayCountConvention) — o fator do indexador em si
+       // (indexAccum.factor, acima) nunca muda, continua sempre 252 DU.
+       const spreadRate = remuneratoryRateForPeriod(
+         indexerSpread,
+         { dias, du, dias30360: days30360(prevDate, evt.date) },
+         interestDayCountConvention
+       );
+       if (indexerCapitalizationMode === "capitaliza_saldo") {
+         // Só o spread é cobrado na parcela; a correção do indexador
+         // (fator - 1) não entra no que é pago — capitaliza no saldo.
+         jurosVariaveisMes = sdInicialUSD * indexAccum.factor * spreadRate;
+         indexerCorrectionCapitalized = sdInicialUSD * (indexAccum.factor - 1);
+       } else {
+         // REGRA 1 (Imutável): CAPITALIZAÇÃO COMPOSTA
+         // Indexador e spread SEMPRE multiplicam (não somam)
+         // Fórmula: (índice × (1 + spread)) - 1
+         // Justificativa: Em mercado financeiro, dois fatores capitalizam compostos
+         // Diferença em milhões: centavos se tornam milhares ao longo dos anos
+         indexerPeriodRate = (indexAccum.factor * (1 + spreadRate)) - 1;
+         jurosVariaveisMes = sdInicialUSD * indexerPeriodRate;
+       }
      }
-     jurosVariaveisMes = sdInicialUSD * indexerPeriodRate;
 
      // Rastrear se há projeção para warning
      if (indexAccum.hasProjection) {
@@ -1089,7 +1276,15 @@ export async function calculateAmortizationSchedule(params) {
 
     // Delegar cálculo de amortização e prestação à estratégia (em USD)
     const isLastPayment = i === mergedEvents.length - 1;
-    const strategyResult = strategy.calculatePayment(evt, jurosTotal, acumulatedUnpaidInterest, isLastPayment, sdInicialUSD + jurosTotal, sdInicialUSD, principalPaymentIndex, effectiveGraceInterestBehavior);
+    // Na última parcela, a correção do indexador capitalizada NESTE mesmo
+    // período (indexerCapitalizationMode === "capitaliza_saldo") precisa
+    // entrar no saldo que a estratégia usa pra liquidar tudo — senão o
+    // contrato fecha com sobra (o "isLastPayment ? sdInicial : ..." das
+    // estratégias absorve o saldo ANTES dessa correção, deixando resíduo).
+    // Fora da última parcela ou fora desse modo, indexerCorrectionCapitalized
+    // é 0 e isso não muda nada.
+    const sdInicialParaEstrategia = isLastPayment ? (sdInicialUSD + indexerCorrectionCapitalized) : sdInicialUSD;
+    const strategyResult = strategy.calculatePayment(evt, jurosTotal, acumulatedUnpaidInterest, isLastPayment, sdInicialParaEstrategia + jurosTotal, sdInicialParaEstrategia, principalPaymentIndex, effectiveGraceInterestBehavior);
     
     // 🔐 PADRONIZAÇÃO: Garantir que todos os campos obrigatórios existam
     const {
@@ -1098,7 +1293,8 @@ export async function calculateAmortizationSchedule(params) {
       acumulatedUnpaidInterest: updatedAccumulated = 0,
       jurosCapitalizados = 0,
       jurosPagos = 0,
-      jurosAcruados = 0
+      jurosAcruados = 0,
+      capitalizedPaidOut = 0
     } = strategyResult;
 
     acumulatedUnpaidInterest = updatedAccumulated;
@@ -1120,7 +1316,19 @@ export async function calculateAmortizationSchedule(params) {
       // Pagamento normal: SD não é afetado por juros (serão pagos na prestação)
       sdAtualizadoUSD = sdInicialUSD;
     }
-    
+
+    // Correção do indexador não paga (indexerCapitalizationMode ===
+    // "capitaliza_saldo") soma no saldo independente do comportamento de
+    // carência acima — as duas capitalizações (carência e indexador) somam
+    // quando coincidirem, cada uma calculada separadamente. Fica 0 e não
+    // muda nada quando o modo é o padrão ("paga_junto").
+    sdAtualizadoUSD += indexerCorrectionCapitalized;
+
+    // CAPITALIZAR_PERIODICO: o que acabou de ser liquidado nesta parcela
+    // (juros compostos desde a última) sai do saldo — senão continuaria
+    // "contando" como saldo devedor além de já ter sido pago na prestação.
+    sdAtualizadoUSD -= capitalizedPaidOut;
+
     // 🔐 ETAPA 2: Shadow Calculation para Saldo Atualizado
     if (precisionAudit && jurosCapitalizados > 0) {
       const sdAtualizadoUSD_decimal = toNumber(toDecimal(sdInicialUSD).plus(toDecimal(jurosCapitalizados)));
@@ -1196,9 +1404,12 @@ export async function calculateAmortizationSchedule(params) {
     const ajusteCambialMes = isUSD 
       ? roundTo(varCambialPrincipal, 2) 
       : 0;
-    const jurosCapitalizadosBRL = isUSD 
+    const jurosCapitalizadosBRL = isUSD
       ? roundTo((jurosCapitalizados || 0) * currentPtaxRate, 2)
       : roundTo(jurosCapitalizados, 2);
+    const capitalizedPaidOutBRL = isUSD
+      ? roundTo((capitalizedPaidOut || 0) * currentPtaxRate, 2)
+      : roundTo(capitalizedPaidOut || 0, 2);
 
     // 📊 BLOCO CONTÁBIL (Rastreabilidade Total para Homologação)
     // 🔐 CRÍTICO: Todos os campos devem ser calculados com valores válidos (não NaN/undefined)
@@ -1238,6 +1449,7 @@ export async function calculateAmortizationSchedule(params) {
       
       // USD (campos originais - mantidos)
       sdInicial_USD: isUSD ? roundTo(sdInicialUSD, 2) : null,
+      liberacaoInjetada_USD: isUSD ? roundTo(liberacaoInjetadaUSD, 2) : null,
       sdAtualizado_USD: isUSD ? roundTo(sdAtualizadoUSD, 2) : null,
       sdFinal_USD: isUSD ? roundTo(sdFinalUSD, 2) : null,
       amortizacao_USD: isUSD ? roundTo(amortizacaoUSD, 2) : null,
@@ -1253,12 +1465,21 @@ export async function calculateAmortizationSchedule(params) {
       
       // BRL (campos originais - mantidos sem alteração)
       sdInicial: roundTo(sdInicialBRL, 2),
+      // Liberação parcelada: quanto de principal foi injetado NESTA linha
+      // (0 na maioria; > 0 na linha 0 ou em qualquer linha com uma tranche
+      // agendada). accountingClosing.js usa isso pra gerar um evento
+      // LIBERACAO por tranche, sem recalcular o rateio numa segunda vez.
+      liberacaoInjetada: roundTo(isUSD ? liberacaoInjetadaUSD * currentPtaxRate : liberacaoInjetadaUSD, 2),
       varCambial: roundTo(varCambialPrincipal, 2),
       indexadorPercent: roundTo(indexerPeriodRate * 100, 6),
       jurosFixosMes: roundTo(jurosFixosBRL, 2),
       jurosVariaveisMes: roundTo(jurosVariaveisBRL, 2),
       jurosAcruados: roundTo(jurosAcruados || 0, 2),
       jurosCapitalizados: roundTo(jurosCapitalizados, 2),
+      capitalizedPaidOut: roundTo(capitalizedPaidOut || 0, 2),
+      capitalizedPaidOutBRL: capitalizedPaidOutBRL,
+      indexerCorrectionCapitalized: roundTo(indexerCorrectionCapitalized, 2),
+      indexerCorrectionCapitalizedBRL: roundTo(isUSD ? indexerCorrectionCapitalized * currentPtaxRate : indexerCorrectionCapitalized, 2),
       jurosPagos: roundTo(jurosPagos, 2),
       sdAtualizado: roundTo(sdAtualizadoBRL, 2),
       amortizacao: roundTo(amortizacaoBRL, 2),
@@ -1295,14 +1516,26 @@ export async function calculateAmortizationSchedule(params) {
       if (!Number.isFinite(f)) throw new Error(`[FINANCIAL_INTEGRITY_ERROR] Parcela ${i + 1}: Campo inválido`);
     });
     totalAmortization += (row.amortizacao || 0);
-    totalCapitalizado += (row.jurosCapitalizadosBRL || 0);
+    // CAPITALIZAR_PERIODICO: o que capitalizou (jurosCapitalizadosBRL) e já
+    // foi liquidado numa parcela seguinte (capitalizedPaidOutBRL) não conta
+    // pra validação — foi pago como juro, não precisa virar amortização.
+    // Sem isso, a soma abaixo (principalValidacao) continuaria exigindo
+    // amortizar um valor que já saiu como juro pago, e o fechamento do
+    // contrato nunca bateria.
+    totalCapitalizado += (row.jurosCapitalizadosBRL || 0) + (row.indexerCorrectionCapitalizedBRL || 0) - (row.capitalizedPaidOutBRL || 0);
     if (isUSD && row.amortizacao_USD !== null) {
       totalAmortizationUSD += (row.amortizacao_USD || 0);
-      totalCapitalizadoUSD += (row.jurosCapitalizados || 0);
+      totalCapitalizadoUSD += (row.jurosCapitalizados || 0) + (row.indexerCorrectionCapitalized || 0) - (row.capitalizedPaidOut || 0);
     }
     if (row.sdFinal < 0) maxNegativeValue = Math.min(maxNegativeValue, row.sdFinal);
-    if (i < schedule.length - 1 && isUSD && Math.abs(row.sdFinal_USD - schedule[i + 1].sdInicial_USD) > 0.01) {
-      throw new Error(`[FINANCIAL_INTEGRITY_ERROR] Quebra continuidade USD: Parcela ${row.parcela} → ${schedule[i + 1].parcela}`);
+    if (i < schedule.length - 1 && isUSD) {
+      // Liberação parcelada injeta capital diretamente na linha seguinte —
+      // o saldo final desta linha + a tranche injetada na próxima deve
+      // bater com o saldo inicial dela (em vez de exigir igualdade direta).
+      const injectedNext = schedule[i + 1].liberacaoInjetada_USD || 0;
+      if (Math.abs((row.sdFinal_USD + injectedNext) - schedule[i + 1].sdInicial_USD) > 0.01) {
+        throw new Error(`[FINANCIAL_INTEGRITY_ERROR] Quebra continuidade USD: Parcela ${row.parcela} → ${schedule[i + 1].parcela}`);
+      }
     }
   }
 
@@ -1694,12 +1927,12 @@ export async function calculateAmortizationSchedule(params) {
   // 3C. Risk Flags (determinístico, somente leitura)
   const riskFlags = [];
   
-  // ANATOCISM: carência com juros capitalizados
-  if (effectiveGraceInterestBehavior === "CAPITALIZAR" && interestGraceMonths > 0) {
+  // ANATOCISM: carência ou parcelas com juros capitalizados
+  if (effectiveGraceInterestBehavior === "CAPITALIZAR_PERIODICO" || (effectiveGraceInterestBehavior === "CAPITALIZAR" && interestGraceMonths > 0)) {
     riskFlags.push({
       flag: "ANATOCISM",
       severity: "MEDIUM",
-      message: "Operação com juros capitalizados na carência. Verificar conformidade regulatória."
+      message: "Operação com juros capitalizados na carência e/ou entre parcelas. Verificar conformidade regulatória."
     });
   }
   

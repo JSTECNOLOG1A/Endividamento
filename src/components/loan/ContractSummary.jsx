@@ -111,8 +111,18 @@ function SummarySection({ icon: Icon, title, children }) {
   );
 }
 
-export default function ContractSummary({ contract, groups, entities, banks, currencies }) {
+export default function ContractSummary({ contract, groups, entities, banks, currencies, allContracts }) {
   if (!contract) return null;
+
+  // Renegociação: link cruzado nos dois sentidos — o contrato ANTIGO acha o
+  // NOVO buscando quem tem renegotiated_from_id === este id; o NOVO já tem
+  // o id do antigo direto no próprio campo. `allContracts` é opcional (a
+  // lista já carregada em Contracts.jsx) — sem ela, só o payoff_date/status
+  // aparece, sem o link clicável.
+  const previousContract = contract.renegotiated_from_id
+    ? allContracts?.find((c) => c.id === contract.renegotiated_from_id)
+    : null;
+  const successorContract = allContracts?.find((c) => c.renegotiated_from_id === contract.id) || null;
 
   const groupName = groups?.find((g) => g.id === contract.group_id)?.group_name;
   const entityName = entities?.find((e) => e.id === contract.entity_id)?.entity_name;
@@ -157,6 +167,22 @@ export default function ContractSummary({ contract, groups, entities, banks, cur
 
   return (
     <div className="space-y-6">
+      {(contract.status === "renegociado" || contract.status === "quitado" || previousContract || successorContract) && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 space-y-1">
+          {contract.status === "renegociado" && (
+            <p><span className="font-semibold">Renegociado</span>{contract.payoff_date ? ` em ${formatDate(contract.payoff_date)}` : ""} — este contrato virou histórico, sem saldo em aberto.</p>
+          )}
+          {contract.status === "quitado" && (
+            <p><span className="font-semibold">Quitado antecipadamente</span>{contract.payoff_date ? ` em ${formatDate(contract.payoff_date)}` : ""}{contract.settlement_discount_amount > 0 ? ` — desconto de ${formatCurrency(contract.settlement_discount_amount)}` : ""}.</p>
+          )}
+          {previousContract && (
+            <p>Renegociado a partir do contrato <span className="font-semibold">{previousContract.contract_number}</span>.</p>
+          )}
+          {successorContract && (
+            <p>Renegociado para o contrato <span className="font-semibold">{successorContract.contract_number}</span>.</p>
+          )}
+        </div>
+      )}
       {/* Identificação */}
       <SummarySection icon={Building2} title="Identificação">
         <Field label="Grupo Econômico" value={groupName} />

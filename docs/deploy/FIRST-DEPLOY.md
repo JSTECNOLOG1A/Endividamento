@@ -1,5 +1,8 @@
 # Primeiro deploy — AllDebt
 
+> **Nota:** o AllDebt já está em produção no VPS Clarity. Para atualizar o ambiente existente, use [`UPDATE.md`](./UPDATE.md). Este checklist permanece para provisionamento do zero (novo servidor / staging).
+
+
 Checklist operacional para o **primeiro** ambiente de produção (ou staging público).
 
 ## Produção no VPS Clarity (Traefik)
