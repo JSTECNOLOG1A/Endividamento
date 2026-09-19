@@ -62,6 +62,18 @@ export const EVENT_TYPE_LABELS = {
 const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const EPS = 0.01;
 
+// payoff_date vem do pg como Date (coluna DATE, sem type parser) ou string —
+// normaliza pra "YYYY-MM-DD".
+function isoDateOnly(value) {
+  if (!value) return "";
+  if (value instanceof Date) {
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
+    return `${value.getFullYear()}-${m}-${d}`;
+  }
+  return String(value).slice(0, 10);
+}
+
 export function reconcileContractForCompetencia(contract, year, month, settlements = []) {
   const yearNum = parseInt(year, 10);
   const monthNum = parseInt(month, 10);
@@ -79,6 +91,15 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     settlementsUsed: [],
     pendingRecalculation: [],
   };
+
+  // Contrato renegociado/quitado antecipadamente antes desta competência —
+  // nada mais a conciliar a partir daí (payoff_date, gravado em
+  // renegotiateContract()/settleContractEarly()). Mesma regra do fechamento
+  // manual (src/lib/accountingClosing.js).
+  const payoffIso = isoDateOnly(contract.payoff_date);
+  if (payoffIso && new Date(payoffIso + "T12:00:00") < monthStart) {
+    return result;
+  }
 
   if (!contract.schedule_data) return result;
 
@@ -112,7 +133,9 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     const isWithinMonth = rowDate >= monthStart && rowDate <= monthEnd;
     const settlement = settlementsByParcela.get(String(row.parcela));
 
-    const newPrincipalRow = idx === 0 ? (row.sdInicial || 0) : 0;
+    // Liberação parcelada: o motor expõe em cada linha quanto foi injetado ali
+    // (`liberacaoInjetada`) — 0 exceto quando uma tranche caiu naquele mês.
+    const newPrincipalRow = idx === 0 ? (row.sdInicial || 0) : (row.liberacaoInjetada || 0);
     const interestAccruedRow = (row.jurosFixosMes || 0) + (row.jurosVariaveisMes || 0);
     const fxAccruedRow = row.varCambial || 0;
 
@@ -195,6 +218,10 @@ function addMonths(dateStr, delta) {
 
 export function splitCirculanteNaoCirculante(contract, cutoffDate) {
   const result = { principalShort: 0, principalLong: 0, jurosShort: 0, jurosLong: 0 };
+  // Contrato já renegociado/quitado antecipadamente no corte (ou antes) — sem
+  // saldo a classificar em circulante/não circulante.
+  const payoffCut = isoDateOnly(contract.payoff_date);
+  if (payoffCut && payoffCut <= isoDateOnly(cutoffDate)) return result;
   if (!contract.schedule_data) return result;
 
   let schedule;

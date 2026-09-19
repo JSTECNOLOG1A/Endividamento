@@ -532,6 +532,19 @@ async function applyLoanContractRules(previous, data) {
       data.level1_approved_by = null;
       data.level1_approved_at = null;
     }
+    // Quitação antecipada pendente que foi rejeitada: o contrato não está
+    // "devolvido" — segue aprovado, como antes do pedido (os títulos nunca
+    // foram mexidos). Limpa o registro do pedido; a baixa extraordinária
+    // criada por settleContractEarly() é removida depois da gravação.
+    if (nextStatus === "devolvido" && previous.status === "pendente_aprovacao" && previous.settlement_discount_mode) {
+      data.status = "aprovado";
+      data.level1_approved_by = previous.level1_approved_by;
+      data.level1_approved_at = previous.level1_approved_at;
+      data.payoff_date = null;
+      data.settlement_discount_amount = null;
+      data.settlement_discount_mode = null;
+      data.__revert_settlement = true;
+    }
     if (nextStatus === "pendente_aprovacao" && previous.status !== "pendente_aprovacao") {
       data.level1_approved_by = null;
       data.level1_approved_at = null;
@@ -583,6 +596,8 @@ export async function update(name, id, data) {
     }
     data = await applyLoanContractRules(previous, incoming);
   }
+  const revertSettlement = Boolean(data?.__revert_settlement);
+  if (data) delete data.__revert_settlement;
   const row = splitPayload(entity, data);
   delete row.group_id;
   delete row.id;
@@ -599,10 +614,18 @@ export async function update(name, id, data) {
     && data?.status
     && data.status !== "aprovado"
   ) {
-    const { reverseTitlesForContractReopen } = await import("../contracts/reverseOnReopen.js");
-    await reverseTitlesForContractReopen(id);
-    row.exported_to_payables = false;
-    row.exported_to_receivables = false;
+    const { reverseTitlesForContractReopen, closeTitlesAfterCutoff } = await import("../contracts/reverseOnReopen.js");
+    if (row.status === "renegociado") {
+      // Renegociação encerra o cronograma na data de corte, sem reabrir: mantém
+      // o histórico pago e remove só os títulos futuros em aberto.
+      await closeTitlesAfterCutoff(id, row.payoff_date || previous.payoff_date);
+    } else if (row.status === "pendente_aprovacao" && row.settlement_discount_mode) {
+      // Pedido de quitação antecipada: os títulos seguem valendo até a aprovação.
+    } else {
+      await reverseTitlesForContractReopen(id);
+      row.exported_to_payables = false;
+      row.exported_to_receivables = false;
+    }
   }
   row.updated_date = new Date().toISOString();
   const keys = Object.keys(row);
@@ -629,6 +652,21 @@ export async function update(name, id, data) {
     return saved;
   }
   const saved = await getById(name, id);
+  if (name === "LoanContract" && previous.status === "pendente_aprovacao" && previous.settlement_discount_mode) {
+    if (saved.status === "quitado") {
+      // Quitação aprovada: encerra o cronograma — remove só os títulos futuros em aberto.
+      const { closeTitlesAfterCutoff } = await import("../contracts/reverseOnReopen.js");
+      await closeTitlesAfterCutoff(id, saved.payoff_date || previous.payoff_date);
+    } else if (revertSettlement) {
+      // Quitação rejeitada: descarta a baixa extraordinária criada no pedido.
+      await pool.query(
+        `DELETE FROM contract_settlements
+          WHERE contract_id = $1 AND extraordinary_amortization = true
+            AND closing_id IS NULL AND observacao LIKE 'Quitação antecipada%'`,
+        [id]
+      );
+    }
+  }
   if (name === "LoanContract" && saved.status === "aprovado" && previous.status !== "aprovado") {
     try {
       const { generatePayableTitlesForContract } = await import("../payables/generate.js");

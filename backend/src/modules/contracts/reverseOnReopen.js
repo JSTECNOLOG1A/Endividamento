@@ -121,3 +121,70 @@ export async function reverseTitlesForContractReopen(contractId) {
 
   return deleted;
 }
+
+function dueIso(row) {
+  const v = row.vencimento;
+  if (!v) return "";
+  if (v instanceof Date) {
+    return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
+  }
+  return String(v).slice(0, 10);
+}
+
+// Renegociação e quitação antecipada encerram o cronograma numa data de corte,
+// mas NÃO reabrem o contrato: o histórico do que já foi pago precisa ficar.
+// Remove só os títulos ABERTOS com vencimento depois do corte (estornando no
+// ERP os que já foram integrados). Títulos baixados, cancelados, ou vencidos
+// até o corte, continuam intactos. Título futuro com movimentação parcial não
+// pode ser removido — bloqueia com 409 em vez de perder o registro.
+export async function closeTitlesAfterCutoff(contractId, cutoffDate) {
+  await assertContractInTenant(contractId);
+  const groupId = groupIdOrThrow();
+  const cutoff = dueIso({ vencimento: cutoffDate });
+  if (!cutoff) return { payables: 0, receivables: 0 };
+
+  const [payables, receivables] = await Promise.all([
+    pool.query(`SELECT * FROM payable_titles WHERE contract_id = $1 AND group_id = $2`, [contractId, groupId]),
+    pool.query(`SELECT * FROM receivable_titles WHERE contract_id = $1 AND group_id = $2`, [contractId, groupId]),
+  ]);
+  const future = (row) => row.status === "aberto" && dueIso(row) > cutoff;
+  const payableTargets = payables.rows.filter(future);
+  const receivableTargets = receivables.rows.filter(future);
+  if (!payableTargets.length && !receivableTargets.length) return { payables: 0, receivables: 0 };
+
+  const blockers = [
+    ...payableTargets.map((row) => blockerFor("pagar", row)),
+    ...receivableTargets.map((row) => blockerFor("receber", row)),
+  ].filter(Boolean);
+  if (blockers.length) {
+    throw httpError(
+      409,
+      `Não é possível encerrar o cronograma enquanto houver títulos futuros com movimentação. ${blockers.slice(0, 3).join(" ")}`
+    );
+  }
+
+  const payableErp = payableTargets.filter(inErp).map((row) => row.id);
+  const receivableErp = receivableTargets.filter(inErp).map((row) => row.id);
+  try {
+    if (payableErp.length) assertReverseOk("pagar", await reversePayableTitles({ ids: payableErp }));
+    if (receivableErp.length) assertReverseOk("receber", await reverseReceivableTitles({ ids: receivableErp }));
+  } catch (error) {
+    if (error.status === 409) throw error;
+    throw httpError(
+      error.status === 400 ? 409 : (error.status || 502),
+      `Não foi possível encerrar o cronograma: os títulos futuros precisam ser estornados no ERP. ${error.message || ""}`.trim()
+    );
+  }
+
+  const removedPayables = payableTargets.length
+    ? await pool.query(`DELETE FROM payable_titles WHERE id = ANY($1::text[]) AND group_id = $2`, [payableTargets.map((r) => r.id), groupId])
+    : { rowCount: 0 };
+  const removedReceivables = receivableTargets.length
+    ? await pool.query(`DELETE FROM receivable_titles WHERE id = ANY($1::text[]) AND group_id = $2`, [receivableTargets.map((r) => r.id), groupId])
+    : { rowCount: 0 };
+  logger.info(
+    { contractId, cutoff, payables: removedPayables.rowCount, receivables: removedReceivables.rowCount },
+    "títulos futuros removidos no encerramento do cronograma (renegociação/quitação)"
+  );
+  return { payables: removedPayables.rowCount || 0, receivables: removedReceivables.rowCount || 0 };
+}
