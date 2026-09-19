@@ -15,6 +15,8 @@ function httpError(status, message, details) {
 }
 
 const TAREFA_ENUM = [
+  "integrar_titulos_pagar",
+  "integrar_titulos_receber",
   "consultar_titulos_pagar",
   "consultar_titulos_receber",
   "converter_titulos_pr_tx",

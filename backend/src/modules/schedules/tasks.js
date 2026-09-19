@@ -1,10 +1,38 @@
 import { refreshPayableTitlesFromErp } from "../payables/erpIntegrate.js";
 import { convertPayablePrToTx } from "../payables/convertPrToTx.js";
+import { autoIntegratePayableTitles } from "../payables/autoIntegrate.js";
 import { refreshReceivableTitlesFromErp } from "../receivables/erpIntegrate.js";
+import { autoIntegrateReceivableTitles } from "../receivables/autoIntegrate.js";
 import { syncPtaxToCurrencies, syncRatesToCdiRates } from "../functions/bacen.js";
 import { runAutomaticClosingForGroup } from "../accounting/automaticClosing.js";
 
 export const TASKS = {
+  integrar_titulos_pagar: {
+    key: "integrar_titulos_pagar",
+    label: "Integrar títulos a pagar no ERP",
+    rotina: "Contas a pagar",
+    descricao:
+      "Integra no Protheus títulos a pagar abertos já classificados (natureza + fornecedor). Ignora incompletos.",
+    defaultNome: "Integrar títulos a pagar",
+    defaultModo: "intervalo",
+    defaultIntervaloMinutos: 60,
+    async run() {
+      return autoIntegratePayableTitles();
+    },
+  },
+  integrar_titulos_receber: {
+    key: "integrar_titulos_receber",
+    label: "Integrar títulos a receber no ERP",
+    rotina: "Contas a receber",
+    descricao:
+      "Integra no Protheus títulos a receber abertos já classificados (natureza + cliente). Ignora incompletos.",
+    defaultNome: "Integrar títulos a receber",
+    defaultModo: "intervalo",
+    defaultIntervaloMinutos: 60,
+    async run() {
+      return autoIntegrateReceivableTitles();
+    },
+  },
   consultar_titulos_pagar: {
     key: "consultar_titulos_pagar",
     label: "Consultar títulos a pagar no ERP",
