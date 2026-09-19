@@ -10,12 +10,14 @@ export function layoutCacheKey(groupId) {
   return groupId ? `alldebt:layout:${groupId}` : "alldebt:layout:anonymous";
 }
 
-export function readLayoutCache(groupId) {
+// `fallback` é o que devolver quando não há cache pra esse grupo (default
+// "classic"); a troca de tenant passa o modo atual pra não piscar "classic".
+export function readLayoutCache(groupId, fallback = "classic") {
   try {
     const value = localStorage.getItem(layoutCacheKey(groupId));
-    return resolveLayoutMode(value);
+    return value ? resolveLayoutMode(value) : fallback;
   } catch {
-    return "classic";
+    return fallback;
   }
 }
 

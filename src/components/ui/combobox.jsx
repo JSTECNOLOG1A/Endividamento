@@ -31,6 +31,7 @@ export function Combobox({
   emptyText = "Nenhum resultado encontrado.",
   disabled = false,
   className,
+  wideList = false,
 }) {
   const [open, setOpen] = React.useState(false);
   const selected = options?.find((o) => o.value === value);
@@ -55,7 +56,15 @@ export function Combobox({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent
+        className={cn(
+          "w-[--radix-popover-trigger-width] p-0",
+          // wideList: a lista cresce até o texto da maior opção (sem quebra de
+          // linha), nunca menor que o campo — pra ler o nome completo da conta.
+          wideList && "w-auto min-w-[--radix-popover-trigger-width] max-w-[90vw]"
+        )}
+        align="start"
+      >
         <Command
           filter={(itemValue, search) => {
             // itemValue é o `value` do CommandItem (setamos como o label, não

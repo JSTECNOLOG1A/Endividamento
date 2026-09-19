@@ -686,7 +686,7 @@ export function canApproveClosing({ journalResult, reconciliation, previousClosi
     const labels = journalResult.missingMappings.map(
       (m) => `${EVENT_TYPE_LABELS[m.type] || m.type} (${OPERATION_CATEGORY_LABELS[m.operationCategory] || m.operationCategory})`
     );
-    reasons.push(`Matriz contábil incompleta para: ${labels.join(", ")}.`);
+    reasons.push(`Matriz contábil incompleta para: ${labels.join(", ")}. Complete em Configurações → Lógica Contábil.`);
   }
   if (reconciliation.hasBlockingDivergence) {
     reasons.push("Existem baixas que exigem recálculo do contrato antes de aprovar (reabra o contrato na Calculadora).");

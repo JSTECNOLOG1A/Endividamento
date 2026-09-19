@@ -36,16 +36,19 @@ export function PlatformProvider({ children }) {
     return () => { cancelled = true; };
   }, [isAuthenticated, isMaster, user?.email]);
 
-  const selectTenant = useCallback(async (nextId) => {
+  const selectTenant = useCallback((nextId) => {
     const normalized = !nextId || nextId === "all" ? "" : nextId;
+    if (normalized === getPlatformTenantId()) return;
+    // O header X-Tenant-Id passa a valer na hora (localStorage). Cancela o que
+    // estava em voo do tenant anterior e zera o cache — senão a tela continua
+    // mostrando dados do tenant antigo até alguém refazer a consulta. Só o
+    // usuário logado não é escopado por tenant: esse apenas revalida.
+    queryClientInstance.cancelQueries();
     setPlatformTenantId(normalized);
+    queryClientInstance.resetQueries({ predicate: (q) => q.queryKey[0] !== "current-user" });
     setTenantId(normalized);
-    try {
-      await platformApi.setContext(normalized || null);
-    } catch {
-      // o log LGPD não deve bloquear a troca de contexto
-    }
-    queryClientInstance.invalidateQueries();
+    // O registro de acesso (LGPD) é só auditoria: não bloqueia a troca.
+    platformApi.setContext(normalized || null).catch(() => {});
   }, []);
 
   const currentTenant = useMemo(

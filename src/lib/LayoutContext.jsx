@@ -35,8 +35,9 @@ export function LayoutProvider({ children }) {
       return;
     }
 
-    const cached = groupId ? readLayoutCache(groupId) : "classic";
-    setLayoutMode(cached);
+    // Sem cache do grupo, mantém o modo atual até o servidor responder — senão
+    // trocar de tenant vira classic→moderno e remonta a tela duas vezes.
+    setLayoutMode((current) => (groupId ? readLayoutCache(groupId, current) : "classic"));
     if (!bootedRef.current) setLoading(true);
 
     try {

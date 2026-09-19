@@ -141,7 +141,13 @@ function EventMappingTable({ entityId, category, accountOptions, mappings, onSav
   };
 
   return (
-    <table className="w-full text-[11px]">
+    <table className="w-full min-w-[900px] table-fixed text-[11px]">
+      <colgroup>
+        <col className="w-[27%]" />
+        <col className="w-[31%]" />
+        <col className="w-[31%]" />
+        <col className="w-[11%]" />
+      </colgroup>
       <thead>
         {/* Sem reordenação por clique: é um formulário de configuração
             (cada linha é um tipo de evento contábil com Selects de
@@ -179,7 +185,8 @@ function EventMappingTable({ entityId, category, accountOptions, mappings, onSav
                   onChange={(v) => setDraft(type, { debit_account_id: v })}
                   placeholder="Selecione"
                   searchPlaceholder="Buscar conta..."
-                  className="h-8 w-56 text-xs"
+                  className="h-8 w-full text-xs"
+                  wideList
                 />
               </td>
               <td className="px-2 py-1.5">
@@ -189,7 +196,8 @@ function EventMappingTable({ entityId, category, accountOptions, mappings, onSav
                   onChange={(v) => setDraft(type, { credit_account_id: v })}
                   placeholder="Selecione"
                   searchPlaceholder="Buscar conta..."
-                  className="h-8 w-56 text-xs"
+                  className="h-8 w-full text-xs"
+                  wideList
                 />
               </td>
               <td className="px-2 py-1.5">
@@ -216,7 +224,7 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
 
   const { data: chartOfAccounts = [] } = useQuery({
     queryKey: ["chart-of-accounts"],
-    queryFn: () => base44.entities.ChartOfAccount.list("account_code", 2000),
+    queryFn: () => base44.entities.ChartOfAccount.list("account_code", 20000),
     initialData: [],
   });
 
@@ -382,7 +390,7 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
 export default function AccountingMatrixConfig({ entityId, open, onOpenChange }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-6xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Settings2 className="w-4 h-4" /> Matriz contábil desta empresa</DialogTitle>
         </DialogHeader>
