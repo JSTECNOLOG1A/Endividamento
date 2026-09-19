@@ -14,7 +14,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Settings2, Copy, Info } from "lucide-react";
+import { Settings2, Copy, Info, CheckCircle2, CircleDashed } from "lucide-react";
 import { SETTLEMENT_EVENT_TYPES, EVENT_TYPE_LABELS } from "@/lib/accountingClosing";
 import { OPERATION_CATEGORIES } from "@/lib/contractOptions";
 import { SORT_HEAD_CLASS } from "@/components/ui/sortable-table";
@@ -187,6 +187,10 @@ function EventMappingTable({ entityId, category, accountOptions, mappings, onSav
           const draft = draftFor(type);
           const configured = !!(draft.debit_account_id && draft.credit_account_id);
           const partial = !configured && !!(draft.debit_account_id || draft.credit_account_id);
+          // Conta(s) já gravadas no banco (o rascunho pode estar à frente por instantes).
+          const persisted = mappingByType.get(type);
+          const saved = !!(persisted?.debit_account_id && persisted?.credit_account_id);
+          const savedPartial = !saved && !!(persisted?.debit_account_id || persisted?.credit_account_id);
           return (
             <tr key={type} className="border-b border-slate-100">
               <td className="px-2 py-1.5 text-slate-700">
@@ -223,9 +227,19 @@ function EventMappingTable({ entityId, category, accountOptions, mappings, onSav
                 />
               </td>
               <td className="px-2 py-1.5 text-[11px] whitespace-nowrap">
-                {rowState[type] === "saving" && <span className="text-slate-500">Salvando...</span>}
-                {rowState[type] === "saved" && <span className="text-emerald-600">Salvo</span>}
-                {rowState[type] === "error" && <span className="text-red-600">Erro ao salvar</span>}
+                {rowState[type] === "saving" ? (
+                  <span className="text-slate-500">Salvando...</span>
+                ) : rowState[type] === "error" ? (
+                  <span className="text-red-600">Erro ao salvar</span>
+                ) : saved ? (
+                  <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                    <CheckCircle2 className="w-4 h-4" /> Salvo
+                  </span>
+                ) : savedPartial ? (
+                  <span className="inline-flex items-center gap-1 text-amber-600">
+                    <CircleDashed className="w-4 h-4" /> Falta uma conta
+                  </span>
+                ) : null}
               </td>
             </tr>
           );
@@ -367,6 +381,7 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
                 </div>
                 <div className="overflow-x-auto">
                   <EventMappingTable
+                    key={c.value}
                     entityId={entityId}
                     category={c.value}
                     accountOptions={accountOptions}
@@ -391,7 +406,11 @@ export function AccountingMatrixFields({ entityId, stacked = false }) {
             </TabsList>
           </Tabs>
           <div className="max-h-[70vh] overflow-y-auto pr-1">
+            {/* key={category}: cada categoria tem a sua própria tabela (rascunhos e
+                autosave isolados) — sem isso o estado da primeira aba vazava para as
+                demais ao trocar de aba. */}
             <EventMappingTable
+              key={category}
               entityId={entityId}
               category={category}
               accountOptions={accountOptions}
