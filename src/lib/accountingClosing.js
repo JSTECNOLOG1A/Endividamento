@@ -603,7 +603,7 @@ function mappingKey(eventType, operationCategory) {
 export function buildJournalEntries(reconciliation, eventMappings, entryDate, bankAccountsById = new Map()) {
   const mappingByType = new Map(
     eventMappings
-      .filter((m) => m.status !== "inativo")
+      .filter((m) => m.status !== "inativo" && m.debit_account_id && m.credit_account_id)
       .map((m) => [mappingKey(m.event_type, m.operation_category), m])
   );
   const entries = [];
