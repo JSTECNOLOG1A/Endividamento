@@ -13,6 +13,7 @@ import {
   PERCENTAGE_BASES,
   combineGuaranteeLabel,
 } from "@/lib/contractOptions";
+import { formatCnpj } from "@/api/signup";
 
 // Visão somente-leitura de TODOS os dados cadastrados no contrato
 // (Identificação, Composição/Remuneração da Dívida e Prazos/Periodicidades),
@@ -188,6 +189,7 @@ export default function ContractSummary({ contract, groups, entities, banks, cur
         <Field label="Grupo Econômico" value={groupName} />
         <Field label="Entidade Componente" value={entityName} />
         <Field label="Banco Credor" value={bankName} />
+        <Field label="CNPJ da Instituição Financeira do contrato" value={contract.creditor_cnpj ? formatCnpj(contract.creditor_cnpj) : null} mono />
         <Field label="Nº Contrato" value={contract.contract_number} mono />
         <Field label="Categoria da Operação" value={categoryLabel} />
         <Field label="Tipo Específico" value={typeLabel} />

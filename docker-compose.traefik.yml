@@ -52,10 +52,17 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: "${SMTP_FROM:-AllDebt <noreply@clarityib.com.br>}"
+      # emails-api — envio do convite de usuário. O hostname `emails-api` só
+      # resolve porque a api participa da rede `pagamentos-net` abaixo, onde o
+      # compose central da Clarity declara o serviço. Opcional: sem as duas a
+      # API sobe normal e o convite apenas não é enviado.
+      EMAIL_SERVICE_URL: ${EMAIL_SERVICE_URL:-}
+      EMAIL_SERVICE_API_KEY: ${EMAIL_SERVICE_API_KEY:-}
     volumes:
       - alldebt_uploads:/app/uploads
     networks:
       - alldebt-net
+      - pagamentos-net
 
   web:
     build:
@@ -69,10 +76,15 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-net
-      - traefik.http.routers.alldebt-web.rule=Host(`alldebt.clarityib.com.br`) || Host(`endividamento.clarityib.com.br`) || Host(`staging-alldebt.clarityib.com.br`)
+      - traefik.http.routers.alldebt-web.rule=Host(`alldebt.clarityib.com.br`)
       - traefik.http.routers.alldebt-web.entrypoints=websecure
+      - traefik.http.routers.alldebt-web.tls=true
       - traefik.http.routers.alldebt-web.tls.certresolver=myresolver
       - traefik.http.services.alldebt-web.loadbalancer.server.port=80
+      - traefik.http.routers.alldebt-web-http.rule=Host(`alldebt.clarityib.com.br`)
+      - traefik.http.routers.alldebt-web-http.entrypoints=web
+      - traefik.http.routers.alldebt-web-http.middlewares=alldebt-https-redirect
+      - traefik.http.middlewares.alldebt-https-redirect.redirectscheme.scheme=https
     networks:
       - alldebt-net
       - traefik-net
@@ -85,4 +97,8 @@ networks:
   alldebt-net:
     name: alldebt-net
   traefik-net:
+    external: true
+  # Rede do compose central da Clarity, onde vive o emails-api. Já existe no
+  # VPS; este compose só se junta a ela.
+  pagamentos-net:
     external: true

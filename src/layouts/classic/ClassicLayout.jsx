@@ -5,7 +5,6 @@ import {
   Menu,
   X,
   ChevronDown,
-  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
@@ -16,16 +15,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useAuth } from "@/lib/AuthContext";
 import { usePlatform } from "@/lib/PlatformContext";
 import AllDebtLogo from "@/components/shared/AllDebtLogo";
+import MasterTenantAccessSelect from "@/components/platform/MasterTenantAccessSelect";
 import { getNavItemsForLayout, getNavGroupForPage } from "@/config/navigation";
 
 function navClass(active) {
@@ -38,7 +31,7 @@ function navClass(active) {
 
 export default function ClassicLayout({ children, currentPageName }) {
   const { user, logout } = useAuth();
-  const { isMaster, tenants, tenantId, selectTenant } = usePlatform();
+  const { isMaster } = usePlatform();
   const navItems = React.useMemo(() => getNavItemsForLayout("classic", user), [user]);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [mobileOpenGroups, setMobileOpenGroups] = React.useState(() => {
@@ -129,21 +122,8 @@ export default function ClassicLayout({ children, currentPageName }) {
 
             <div className="flex items-center gap-2">
               {isMaster ? (
-                <div className="hidden sm:flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-amber-600" />
-                  <Select value={tenantId || "all"} onValueChange={(value) => selectTenant(value)}>
-                    <SelectTrigger className="h-8 w-[200px] text-xs">
-                      <SelectValue placeholder="Cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os clientes</SelectItem>
-                      {tenants.map((tenant) => (
-                        <SelectItem key={tenant.id} value={tenant.id}>
-                          {tenant.tenant_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="hidden sm:block w-[220px]">
+                  <MasterTenantAccessSelect variant="light" />
                 </div>
               ) : null}
               {user?.email ? (
@@ -225,20 +205,7 @@ export default function ClassicLayout({ children, currentPageName }) {
             })}
             {isMaster ? (
               <div className="px-3 py-2">
-                <p className="text-[11px] text-slate-400 mb-1">Cliente</p>
-                <Select value={tenantId || "all"} onValueChange={(value) => selectTenant(value)}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os clientes</SelectItem>
-                    {tenants.map((tenant) => (
-                      <SelectItem key={tenant.id} value={tenant.id}>
-                        {tenant.tenant_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MasterTenantAccessSelect variant="light" />
               </div>
             ) : null}
             <button

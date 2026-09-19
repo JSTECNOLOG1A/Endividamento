@@ -6,7 +6,7 @@ import { config } from "../../config.js";
 import { getTenantScope, groupIdOrThrow, isPlatformAdmin, scopedGroupSql } from "../tenants/access.js";
 import { assertCanCreateUser, assertCanWrite, assertTenantAdmin } from "../tenants/policy.js";
 import { issueAccountToken } from "../account/tokens.js";
-import { inviteEmail, sendMail } from "../signup/mailer.js";
+import { sendUserInvite } from "../../services/emailsApiClient.js";
 
 export function publicInvitePayload(sent, inviteUrl) {
   const payload = { email_sent: Boolean(sent), invite_pending: true };
@@ -215,12 +215,34 @@ export async function create(data, createdBy) {
   return { ...user, ...(await sendInvite({ userId: id, email, fullName: data.full_name, createdBy })) };
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Prazo que o e-mail anuncia, derivado do token que acabou de ser emitido — e
+// não de um número paralelo. Assim o texto não tem como divergir do prazo real
+// se o TTL de `invite` mudar em account/tokens.js. Arredonda pra cima porque o
+// token ainda vale durante o último dia, e limita a 1..30: o emails-api recusa
+// fora dessa faixa, e recusa dele significa convite não enviado.
+export function inviteExpiresInDays(expiresAt) {
+  const days = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / DAY_MS);
+  if (!Number.isFinite(days)) return 1;
+  return Math.min(30, Math.max(1, days));
+}
+
+// O texto do convite é do emails-api (serviço central de e-mail da Clarity);
+// aqui só vão os dados. Nunca lança: o usuário já foi criado quando chegamos
+// aqui, e falha de envio só reflete em email_sent: false — a tela usa isso pra
+// mostrar o link ao admin fora de produção.
 async function sendInvite({ userId, email, fullName, createdBy }) {
   const token = await issueAccountToken({ kind: "invite", userId, createdBy });
   const inviteUrl = `${config.appPublicUrl.replace(/\/$/, "")}/aceitar-convite?token=${token.raw}`;
-  const mail = inviteEmail({ fullName, inviteUrl, invitedBy: createdBy });
-  const sent = await sendMail({ to: email, ...mail });
-  return publicInvitePayload(sent.sent, inviteUrl);
+  const result = await sendUserInvite({
+    to: email,
+    nome: fullName,
+    convidadoPor: createdBy,
+    inviteUrl,
+    expiraEmDias: inviteExpiresInDays(token.expiresAt),
+  });
+  return publicInvitePayload(result.sent, inviteUrl);
 }
 
 export async function resendInvite(id, createdBy) {

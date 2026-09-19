@@ -58,24 +58,6 @@ export function resetPasswordEmail({ fullName, resetUrl }) {
   return { subject, text, html };
 }
 
-export function inviteEmail({ fullName, inviteUrl, invitedBy }) {
-  const subject = "Convite para o AllDebt";
-  const text = [
-    `Olá, ${fullName}.`,
-    "",
-    `${invitedBy || "Um administrador"} convidou você para acessar o AllDebt.`,
-    "Defina sua senha neste link (válido por 7 dias):",
-    inviteUrl,
-  ].join("\n");
-  const html = `
-    <p>Olá, ${escapeHtml(fullName)}.</p>
-    <p>${escapeHtml(invitedBy || "Um administrador")} convidou você para acessar o AllDebt.</p>
-    <p><a href="${escapeHtml(inviteUrl)}" style="display:inline-block;background:#155EEF;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Definir senha</a></p>
-    <p>O link vale por 7 dias.</p>
-  `;
-  return { subject, text, html };
-}
-
 /** E-mail enviado na criação do tenant pelo PLATFORM MASTER. */
 export function tenantOwnerWelcomeEmail({ fullName, companyName, inviteUrl }) {
   const subject = `Bem-vindo ao AllDebt — defina a senha de ${companyName}`;

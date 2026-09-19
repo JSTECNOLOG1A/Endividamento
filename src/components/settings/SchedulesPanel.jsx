@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { Download, Pencil, Play, Plus, Power, Trash2, Upload } from "lucide-react";
 import { toast } from "@/lib/notify";
 import { useProcessing } from "@/lib/ProcessingContext";
+import { usePlatform } from "@/lib/PlatformContext";
+import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -99,23 +102,35 @@ export default function SchedulesPanel() {
   const [editor, setEditor] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const fileInputRef = useRef(null);
+  const { viewingAll, inSupportMode, isMaster } = usePlatform();
+  const needsSupportSession = Boolean(isMaster && viewingAll && !inSupportMode);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      if (needsSupportSession) {
+        setItems([]);
+        setTasks([]);
+        return;
+      }
       const [jobs, catalog] = await Promise.all([schedulesApi.list(), schedulesApi.tasks()]);
       setItems(Array.isArray(jobs) ? jobs : []);
       setTasks(Array.isArray(catalog) ? catalog : []);
     } catch (error) {
-      toast.error(error.message || "Não foi possível carregar os agendamentos");
+      const message = error.message || "Não foi possível carregar os agendamentos";
+      if (/sessão de suporte/i.test(message) || error.code === "SUPPORT_SESSION_REQUIRED") {
+        setItems([]);
+        setTasks([]);
+      }
+      toast.error(message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [needsSupportSession]);
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, inSupportMode]);
 
   const jobByTask = useMemo(() => {
     const map = new Map();
@@ -306,6 +321,27 @@ export default function SchedulesPanel() {
 
   return (
     <div className="space-y-4">
+      {needsSupportSession ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-semibold">Sessão de suporte necessária</p>
+          <p className="mt-1 text-amber-900/90">
+            Você está como PLATFORM MASTER. <strong>Trocar empresa</strong> no menu não libera Agendamento.
+            É preciso iniciar uma sessão de suporte auditada no tenant do cliente.
+          </p>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-amber-900/90">
+            <li>Abra <strong>Administração da plataforma → Tenants</strong></li>
+            <li>No cliente (ex.: Comjala), menu ⋮ → <strong>Acessar para suporte</strong></li>
+            <li>Informe o motivo, confirme e aguarde o banner amarelo de sessão ativa</li>
+            <li>Volte em Configurações → Agendamento</li>
+          </ol>
+          <div className="mt-3">
+            <Button type="button" size="sm" asChild>
+              <Link to={createPageUrl("PlatformTenants")}>Ir para Tenants</Link>
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-600">
           Escolha a tarefa, crie o agendamento e defina o dia ou o intervalo. A conversão PR→JUR consulta o Protheus, estorna o PR e integra de novo como JUR.
@@ -316,7 +352,7 @@ export default function SchedulesPanel() {
             size="sm"
             variant="outline"
             className="h-8 gap-1.5"
-            disabled={exporting || importing}
+            disabled={exporting || importing || needsSupportSession}
             title="Exportar agendamentos em JSON"
             onClick={handleExport}
           >
@@ -328,7 +364,7 @@ export default function SchedulesPanel() {
             size="sm"
             variant="outline"
             className="h-8 gap-1.5"
-            disabled={exporting || importing}
+            disabled={exporting || importing || needsSupportSession}
             title="Importar agendamentos de um JSON (cria ou atualiza por tarefa)"
             onClick={() => fileInputRef.current?.click()}
           >
@@ -343,12 +379,12 @@ export default function SchedulesPanel() {
             onChange={handleImportFile}
           />
           {missingTasks.length > 0 && (
-            <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" disabled={creatingMissing} onClick={createMissing}>
+            <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" disabled={creatingMissing || needsSupportSession} onClick={createMissing}>
               <Plus className="w-3.5 h-3.5" />
               {creatingMissing ? "Criando..." : `Criar tarefas (${missingTasks.length})`}
             </Button>
           )}
-          <Button type="button" size="sm" className="h-8 gap-1.5" onClick={() => openCreate()}>
+          <Button type="button" size="sm" className="h-8 gap-1.5" disabled={needsSupportSession} onClick={() => openCreate()}>
             <Plus className="w-3.5 h-3.5" />
             Novo agendamento
           </Button>
@@ -357,6 +393,10 @@ export default function SchedulesPanel() {
 
       {loading ? (
         <p className="text-sm text-slate-600">Carregando agendamentos...</p>
+      ) : needsSupportSession ? (
+        <p className="text-sm text-slate-600 rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center">
+          Inicie a sessão de suporte para listar e criar os agendamentos deste cliente.
+        </p>
       ) : rows.length === 0 ? (
         <p className="text-sm text-slate-600 rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center">
           Nenhuma tarefa disponível.

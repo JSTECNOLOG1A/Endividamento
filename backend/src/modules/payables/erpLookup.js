@@ -452,3 +452,32 @@ export async function lookupPayableErp(payload = {}) {
     items: items.slice(0, limit),
   };
 }
+
+/**
+ * Localiza fornecedor SA2 pelo CNPJ (A2_CGC) e devolve código/loja/nome
+ * no formato usado em payable_titles.
+ */
+export async function resolveSupplierByCnpj(cnpj) {
+  const digits = String(cnpj || "").replace(/\D/g, "");
+  if (digits.length !== 14) return null;
+
+  let result;
+  try {
+    result = await lookupPayableErp({ kind: "fornecedores", search: digits, limit: 20 });
+  } catch (error) {
+    logger.warn({ err: error, cnpj: digits }, "lookup SA2 por CNPJ falhou");
+    return null;
+  }
+
+  const items = Array.isArray(result?.items) ? result.items : [];
+  const exact = items.find((item) => String(item.cnpj || "").replace(/\D/g, "") === digits) || null;
+  if (!exact?.codigo) return null;
+
+  return {
+    fornecedor: padCode(exact.codigo, 6),
+    fornecedor_loja: padCode(exact.loja || "01", 2) || "01",
+    fornecedor_nome: String(exact.nome || exact.razao || "").trim(),
+    cnpj: digits,
+    origem: result?.origem || "erp",
+  };
+}
