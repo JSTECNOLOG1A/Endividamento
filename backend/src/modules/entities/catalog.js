@@ -168,6 +168,16 @@ export const ENTITIES = {
     booleans: [],
     numbers: [],
   },
+  BalanceDeploymentConfig: {
+    table: "balance_deployment_configs",
+    columns: [
+      "group_id", "entity_id", "data_base", "data_virada",
+      "principal_cp_account_id", "principal_lp_account_id", "juros_cp_account_id", "juros_lp_account_id",
+      "transitoria_account_id", "status", "approved_by", "approved_at", "applied_at", "position_snapshot",
+    ],
+    booleans: [],
+    numbers: [],
+  },
   AccountingJournalEntry: {
     table: "accounting_journal_entries",
     columns: [

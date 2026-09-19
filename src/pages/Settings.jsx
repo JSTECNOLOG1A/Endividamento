@@ -21,6 +21,7 @@ import UsersPanel from "@/components/settings/UsersPanel";
 import PlanPanel from "@/components/settings/PlanPanel";
 import ParametersPanel from "@/components/settings/ParametersPanel";
 import AccountingLogicPanel from "@/components/settings/AccountingLogicPanel";
+import BalanceDeploymentPanel from "@/components/settings/BalanceDeploymentPanel";
 import PrivacyDataPanel from "@/components/settings/PrivacyDataPanel";
 
 const ROLE_LABELS = {
@@ -43,6 +44,9 @@ const SECTION_COPY = {
   "logica-contabil": {
     description: "Referência de manutenção do motor de fechamento contábil e matriz de contas por empresa.",
     info: "Cada evento é amarrado à conta de débito/crédito do plano de contas do cliente, separado por categoria de operação (empréstimos, financiamentos, mútuos com partes relacionadas e com terceiros). É obrigatório separar mútuos com partes relacionadas e com terceiros entre si e das demais operações para o balancete. Escolha a empresa e edite direto aqui, sem precisar abrir um fechamento primeiro.",
+  },
+  "implantacao-saldos": {
+    description: "Carga dos empréstimos existentes: data-base, contas do lançamento de abertura e posição de cada contrato.",
   },
   usuarios: {
     description: "Convide por e-mail. A pessoa define a própria senha no link (válido por 7 dias).",
@@ -152,6 +156,9 @@ function SettingsPanel({ section, isTenantAdmin, isOwner, viewingAll, user, logo
   }
   if (section === "logica-contabil" && isTenantAdmin) {
     return <AccountingLogicPanel />;
+  }
+  if (section === "implantacao-saldos" && isTenantAdmin) {
+    return <BalanceDeploymentPanel />;
   }
   if (section === "usuarios" && isTenantAdmin) {
     return (

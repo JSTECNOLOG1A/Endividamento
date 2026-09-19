@@ -11,6 +11,7 @@ import { classifyPayableTitles } from "../payables/classify.js";
 import { integratePayableTitles, reversePayableTitles, refreshPayableTitlesFromErp } from "../payables/erpIntegrate.js";
 import { settlePayableTitleManually, undoManualPayableSettlement } from "../payables/manualSettlement.js";
 import { markContractForDeployment, releaseDeploymentTitles } from "../payables/implantacao.js";
+import { previewBalanceDeployment, approveBalanceDeployment, reopenBalanceDeployment, applyBalanceDeployment } from "../accounting/balanceDeployment.js";
 import { convertPayablePrToTx } from "../payables/convertPrToTx.js";
 import { lookupPayableErp } from "../payables/erpLookup.js";
 import { syncReceivableTitlesFromApprovedContracts } from "../receivables/generate.js";
@@ -95,6 +96,10 @@ const FUNCTION_AUDIT = {
   syncPayableTitles: { action: "CREATE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Gerar títulos a pagar" },
   syncReceivableTitles: { action: "CREATE", rotina: "Contas a receber", resourceType: "ReceivableTitle", registro: "Gerar títulos a receber" },
   classifyPayableTitles: { action: "CLASSIFY", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Classificar títulos a pagar" },
+  previewBalanceDeployment: { action: "CALCULATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Prévia da posição de abertura" },
+  approveBalanceDeployment: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Aprovar implantação de saldos" },
+  reopenBalanceDeployment: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Reabrir implantação de saldos" },
+  applyBalanceDeployment: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Aplicar implantação de saldos aos contratos" },
   settlePayableTitleManually: { action: "UPDATE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Baixa manual de título a pagar" },
   undoManualPayableSettlement: { action: "UPDATE", rotina: "Contas a pagar", resourceType: "PayableTitle", registro: "Desfazer baixa manual de título a pagar" },
   markContractForDeployment: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "LoanContract", registro: "Marcar contrato para implantação de saldos" },
@@ -142,6 +147,10 @@ const handlers = {
   syncReceivableTitles: () => syncReceivableTitlesFromApprovedContracts(),
   classifyPayableTitles: (payload) => classifyPayableTitles(payload || {}),
   integratePayableTitles: (payload) => integratePayableTitles(payload || {}),
+  previewBalanceDeployment: (payload) => previewBalanceDeployment(payload || {}),
+  approveBalanceDeployment: (payload) => approveBalanceDeployment(payload || {}),
+  reopenBalanceDeployment: (payload) => reopenBalanceDeployment(payload || {}),
+  applyBalanceDeployment: (payload) => applyBalanceDeployment(payload || {}),
   settlePayableTitleManually: (payload) => settlePayableTitleManually(payload || {}),
   undoManualPayableSettlement: (payload) => undoManualPayableSettlement(payload || {}),
   markContractForDeployment: (payload) => markContractForDeployment(payload || {}),
@@ -175,6 +184,9 @@ const OWNER_FUNCTIONS = new Set([
   "integrateChartAccounts",
   "integratePayableTitles",
   "markContractForDeployment",
+  "approveBalanceDeployment",
+  "reopenBalanceDeployment",
+  "applyBalanceDeployment",
   "releaseDeploymentTitles",
   "reversePayableTitles",
   "integrateReceivableTitles",

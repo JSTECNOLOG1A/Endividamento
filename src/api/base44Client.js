@@ -115,6 +115,7 @@ export const base44 = {
     AccountingClosing: entityApi("AccountingClosing"),
     ContractSettlement: entityApi("ContractSettlement"),
     AccountingEventMapping: entityApi("AccountingEventMapping"),
+    BalanceDeploymentConfig: entityApi("BalanceDeploymentConfig"),
     AccountingJournalEntry: entityApi("AccountingJournalEntry"),
     NotificationLog: entityApi("NotificationLog"),
     Tenant: entityApi("Tenant"),

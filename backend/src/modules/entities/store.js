@@ -104,10 +104,13 @@ function mapDbError(error) {
   return error;
 }
 
+// Campos do fluxo da Implantação de Saldos: só as funções aprovar/reabrir/aplicar mudam.
+const DEPLOYMENT_WORKFLOW_FIELDS = ["status", "approved_by", "approved_at", "applied_at", "position_snapshot"];
+
 const DATE_FIELDS = new Set([
   "operation_date", "first_payment_date", "final_maturity_date", "rate_date",
   "holiday_date", "trial_ends_at", "emissao", "vencimento", "approved_date",
-  "integrado_erp_em", "erp_consultado_em", "payoff_date", "deployment_cutoff", "baixa_data",
+  "integrado_erp_em", "erp_consultado_em", "payoff_date", "deployment_cutoff", "baixa_data", "data_base", "data_virada",
 ]);
 
 function toDbValue(entity, key, value) {
@@ -422,6 +425,10 @@ export async function create(name, data, createdBy) {
   else await assertCanWrite();
   const entity = getEntity(name);
   const row = splitPayload(entity, data);
+  if (name === "BalanceDeploymentConfig") {
+    for (const key of DEPLOYMENT_WORKFLOW_FIELDS) delete row[key];
+    row.status = "rascunho";
+  }
   const spec = ENTITY_SCOPE[name];
   stampGroupId(row, { shared: spec?.type === "shared" });
   if (name === "LoanContract") {
@@ -585,6 +592,13 @@ export async function update(name, id, data) {
   const previous = await getById(name, id);
   if (ENTITY_SCOPE[name]?.type === "shared" && !previous.group_id) {
     throw httpError(403, "O catálogo compartilhado não pode ser alterado");
+  }
+  if (name === "BalanceDeploymentConfig") {
+    if (previous.status !== "rascunho") {
+      throw httpError(409, "Implantação aprovada ou aplicada não pode ser editada — reabra a configuração antes.");
+    }
+    data = { ...(data || {}) };
+    for (const key of DEPLOYMENT_WORKFLOW_FIELDS) delete data[key];
   }
   if (name === "AccountingClosing" && previous.status === "aprovado" && data?.status !== "reaberto") {
     throw httpError(409, "Fechamento aprovado — reabra o período (admin, com justificativa) antes de alterar.");

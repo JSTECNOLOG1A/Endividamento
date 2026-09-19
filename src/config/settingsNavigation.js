@@ -1,5 +1,6 @@
 import {
   BookOpenCheck,
+  Landmark,
   CalendarClock,
   Plug,
   ScrollText,
@@ -15,6 +16,7 @@ export const SETTINGS_SECTIONS = [
   { section: "agendamento", name: "Agendamento", page: "SettingsSchedules", icon: CalendarClock },
   { section: "parametros", name: "Parâmetros", page: "SettingsParameters", icon: SlidersHorizontal, adminOnly: true },
   { section: "logica-contabil", name: "Lógica Contábil", page: "SettingsAccountingLogic", icon: BookOpenCheck, adminOnly: true },
+  { section: "implantacao-saldos", name: "Implantação de Saldos", page: "SettingsBalanceDeployment", icon: Landmark, adminOnly: true },
   { section: "usuarios", name: "Usuários", page: "SettingsUsers", icon: Users, adminOnly: true },
   { section: "log", name: "Log", page: "SettingsLog", icon: ScrollText, adminOnly: true },
   { section: "privacidade", name: "Privacidade e Dados", page: "SettingsPrivacy", icon: Shield },

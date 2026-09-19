@@ -22,3 +22,11 @@ Nada disso muda o comportamento de contratos e clientes existentes até ser ativ
 
 - Contratos em moeda estrangeira: o saldo de principal do fechamento não incorpora a variação cambial acumulada (já era assim); o teste de saldo zerado no fim do contrato não cobre USD.
 - Juros por competência usam rateio linear por dias corridos dentro de cada período do cronograma.
+
+## T7 — Tela de Implantação de Saldos (Configurações → Implantação de Saldos)
+
+- Por entidade: data-base (validada como último dia do mês), início da competência no AllDebt (virada), cinco contas (passivo de principal circulante e não circulante, juros a pagar circulante e não circulante, transitória) e prévia da posição de cada contrato, com marcação das parcelas vencidas em aberto.
+- Fluxo: **rascunho → aprovada → aplicada**. Aprovar congela a **fotografia da posição** (contas, datas, parcelas em aberto, valores e parâmetros) e trava a edição; reabrir descarta a fotografia; aplicar marca os contratos (T3) sem excluir, recriar nem lançar nada.
+- Posição (`deploymentPosition.js`): principal total = movimentos efetivos (parcela até a data-base conta como paga, exceto as marcadas em aberto), com vencido no circulante; circulante = vence até a data-base + 12 meses; juros apropriados pro rata até a data-base. Testes: `npm run test:deployment`.
+- Prévia do lançamento de abertura: Débito na transitória; Crédito nas quatro contas de passivo. **O lançamento em si é a T8**; a troca no Protheus é a T9.
+- Limitação: contratos em moeda estrangeira mostram posição indicativa (aviso na tela).

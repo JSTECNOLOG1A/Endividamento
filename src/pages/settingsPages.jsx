@@ -16,6 +16,10 @@ export function SettingsAccountingLogic() {
   return <SettingsView section="logica-contabil" />;
 }
 
+export function SettingsBalanceDeployment() {
+  return <SettingsView section="implantacao-saldos" />;
+}
+
 export function SettingsUsers() {
   return <SettingsView section="usuarios" />;
 }

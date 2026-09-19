@@ -9,6 +9,7 @@
     "migrate": "node src/db/migrate.js",
     "test:engine": "node src/engine/smoke.test.js",
     "test:closing": "node src/modules/accounting/closing.test.js",
+    "test:deployment": "node src/modules/accounting/deploymentPosition.test.js",
     "test:isolation": "node src/modules/tenants/isolation.test.js",
     "test:secrets": "node src/config/validateSecrets.test.js",
     "test:p0": "node src/modules/security/p0.test.js",
