@@ -447,6 +447,7 @@ export function splitCirculanteNaoCirculante(contract, cutoffDate) {
   }
 
   const cutoff = new Date(cutoffDate + "T00:00:00");
+  const shortLimit = new Date(addMonths(cutoffDate, 12) + "T00:00:00");
   let jurosLedger = 0;
   let nextInterestPayment = null;
 
@@ -460,9 +461,9 @@ export function splitCirculanteNaoCirculante(contract, cutoffDate) {
       return;
     }
 
-    const daysToMaturity = Math.ceil((rowDate - cutoff) / (1000 * 60 * 60 * 24));
-    const monthsToMaturity = Math.floor(daysToMaturity / 30.44);
-    const isShort = monthsToMaturity <= 12;
+    // CPC 26: circulante = vence em até 12 meses da data-base (data a data, não
+    // por média de dias — 12,9 meses já é não circulante).
+    const isShort = rowDate <= shortLimit;
 
     if (row.amortizacao > 0) {
       if (isShort) result.principalShort += row.amortizacao;
@@ -517,8 +518,19 @@ export function calculateClosingReconciliation(contracts, settlementsByContract,
   contracts.forEach((contract) => {
     const curr = splitCirculanteNaoCirculante(contract, cutoff);
     const prev = splitCirculanteNaoCirculante(contract, previousCutoff);
-    const principalDelta = r2(curr.principalShort - prev.principalShort);
-    const jurosDelta = r2(curr.jurosShort - prev.jurosShort);
+    // Reclassificação é só o que MIGROU de balde com a passagem do tempo. O
+    // saldo de longo prazo só diminui por migração (parcela que entrou na janela
+    // de 12 meses) — já o de curto prazo também diminui quando uma parcela é
+    // PAGA, e isso não é reclassificação. Por isso a base é o balde longo:
+    // contrato inteiramente de curto prazo nunca gera reclassificação.
+    // principalDelta > 0: saiu do não circulante para o circulante.
+    const principalDelta = r2(prev.principalLong - curr.principalLong);
+    // Juros: o saldo apropriado vai inteiro para um balde só (o da próxima
+    // liquidação). Migra quando esse balde muda; acréscimo por apropriação
+    // dentro do mesmo balde não é reclassificação.
+    let jurosDelta = 0;
+    if (prev.jurosLong > EPS && curr.jurosLong <= EPS) jurosDelta = r2(prev.jurosLong);
+    else if (prev.jurosLong <= EPS && curr.jurosLong > EPS) jurosDelta = -r2(Math.min(Math.max(prev.jurosShort, 0), curr.jurosLong));
 
     const operationCategory = contract.operation_category || "emprestimos";
     if (Math.abs(principalDelta) > EPS) {
