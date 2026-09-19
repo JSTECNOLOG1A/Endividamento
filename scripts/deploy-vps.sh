@@ -75,9 +75,21 @@ STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 info "Gravando DEPLOYED_COMMIT"
 remote "printf '%s\n%s\n' '${COMMIT}' '${STAMP}' > '${REMOTE_PATH}/DEPLOYED_COMMIT'"
 
-info "Rebuild + force-recreate: ${SERVICES}"
+info "Force-recreate: ${SERVICES} (tenta build; se Docker Hub falhar, sobe com imagem local)"
+# 1) Sempre recria com o que já existe no VPS — restaura Traefik mesmo sem registry.
 # shellcheck disable=SC2086
-remote "cd '${REMOTE_PATH}' && test -f .env.production && docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --build --force-recreate ${SERVICES}"
+remote "cd '${REMOTE_PATH}' && test -f .env.production && docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --no-build --force-recreate ${SERVICES}"
+
+# 2) Tenta rebuild (opcional). Falha de TLS/registry NÃO derruba o site.
+if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
+  info "Tentando rebuild (pode falhar se Docker Hub estiver lento)"
+  # shellcheck disable=SC2086
+  if remote "cd '${REMOTE_PATH}' && docker compose -f docker-compose.traefik.yml --env-file .env.production build ${SERVICES} && docker compose -f docker-compose.traefik.yml --env-file .env.production up -d --no-build --force-recreate ${SERVICES}"; then
+    info "Rebuild OK"
+  else
+    echo "AVISO: rebuild falhou (ex.: timeout Docker Hub). Mantendo containers com imagem local."
+  fi
+fi
 
 info "Aguardando healthy"
 remote bash -s <<'REMOTE_WAIT'
