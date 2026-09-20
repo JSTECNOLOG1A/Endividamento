@@ -1,7 +1,7 @@
 // Invariantes do fechamento contábil (sem banco): juros por competência, liberação/IOF/custo na data
 // da operação, capitalização e regra de baixa efetiva. Rodar: npm run test:closing
 import { calculateAmortizationSchedule } from "../../engine/CalculationEngine.js";
-import { reconcileContractForCompetencia, buildOpeningEntries } from "./closingEngine.js";
+import { reconcileContractForCompetencia, buildOpeningEntries, calculateClosingReconciliation, fxRateOn, buildJournalEntries } from "./closingEngine.js";
 import { computeDeploymentPosition } from "./deploymentPosition.js";
 
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -175,6 +175,157 @@ console.log("== T8: pagamento no mês da data real; parcelas em aberto da implan
   check("abertura: débitos = créditos", Math.abs(deb - cred) < 0.01);
   check("abertura: data da virada e chave por linha, sem repetição", entries.every((e) => e.entry_date === "2026-09-01" && e.event_key) && new Set(entries.map((e) => e.event_key + e.side)).size === entries.length);
   check("abertura: sem snapshot não gera nada", buildOpeningEntries(config, null).length === 0);
+}
+
+// ---------------------------------------------------------------------------------------------
+console.log("== Moeda estrangeira: remensuração do passivo pela PTAX de fechamento (CPC 02)");
+{
+  // Cronograma calculado com a PTAX projetada/antiga (a tabela "variavel"); o fechamento usa OUTRA série (a real de cada data).
+  const sched = (await calculateAmortizationSchedule({ ...usdBase, exchangeRates: ptaxTable("variavel") })).schedule;
+  const mkU = (extra = {}) => ({ id: "u", contract_number: "USD", operation_category: "emprestimos", operation_date: usdBase.operationDate,
+    amount_foreign: usdBase.amount_foreign, schedule_data: JSON.stringify({ schedule: sched }), currency_id: "cur_usd", ...extra });
+  // PTAX real de fechamento: série diária diferente da usada no cronograma
+  const fxList = [];
+  for (let t = new Date(Date.UTC(2023, 0, 2)); t < new Date(Date.UTC(2032, 11, 31)); t = new Date(t.getTime() + 86400000)) {
+    const i = Math.round((t - new Date(Date.UTC(2023, 0, 2))) / 86400000);
+    if (t.getUTCDay() === 0 || t.getUTCDay() === 6) continue;
+    fxList.push({ rate_date: t.toISOString().slice(0, 10), rate: r2(4.9 + 0.9 * Math.sin(i / 31) + 0.0003 * i) });
+  }
+  const fxRates = { cur_usd: fxList };
+  const opts = { fxRates, today: "2040-01-01" };
+  const start = new Date(usdBase.operationDate + "T12:00:00");
+  const last = new Date(sched.at(-1).dataVencimento + "T12:00:00");
+  const months = (last.getFullYear() - start.getFullYear()) * 12 + last.getMonth() - start.getMonth() + 2;
+
+  // razão do passivo (principal + juros) mês a mês: abertura + movimentos = saldo em moeda × PTAX de fechamento
+  let ledger = 0, chain = true, maxGap = 0, allFxRemeasured = true, prevClose = null, tail = null, fxEvents = 0;
+  for (let i = 0; i < months; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+    const rec = reconcileContractForCompetencia(mkU(), d.getFullYear(), d.getMonth() + 1, [], opts);
+    const sum = (types) => rec.events.filter((e) => types.includes(e.type)).reduce((t, e) => t + e.amount, 0);
+    ledger += sum(["liberacao", "juros_apropriados", "variacao_cambial_passiva"]) - sum(["pagamento_principal", "pagamento_juros", "variacao_cambial_ativa"]);
+    const closeTotal = rec.closing.principal + rec.closing.interest;
+    maxGap = Math.max(maxGap, Math.abs(ledger - closeTotal));
+    if (prevClose !== null && Math.abs(prevClose - (rec.opening.principal + rec.opening.interest)) > 0.05) chain = false;
+    const fx = rec.events.filter((e) => e.type.startsWith("variacao_cambial"));
+    fxEvents += fx.length;
+    if (fx.some((e) => !e.remeasurement)) allFxRemeasured = false;
+    prevClose = closeTotal;
+    tail = rec;
+  }
+  check("USD: razão do passivo (abertura + movimentos + variação cambial) = saldo em moeda × PTAX, todos os meses", maxGap < 0.1, "maior diferença " + maxGap.toFixed(4));
+  check("USD: abertura de cada mês = fechamento do mês anterior", chain);
+  check("USD: só há variação cambial de remensuração (a projetada e a realizada do cronograma saem)", allFxRemeasured && fxEvents > 0, "eventos " + fxEvents);
+  check("USD: no fim do contrato o passivo zera", Math.abs(tail.closing.principal) < 0.2 && Math.abs(tail.closing.interest) < 0.2, JSON.stringify(tail.closing));
+
+  // o saldo de fechamento é o saldo em moeda da linha × a PTAX do último dia do mês (não a do cronograma)
+  const row = sched.filter((r) => r.dataVencimento <= "2026-03-31").at(-1);
+  const rec = reconcileContractForCompetencia(mkU(), 2026, 3, [], opts);
+  const ptax = fxRateOn(fxList, "2026-03-31");
+  check("USD: principal de fechamento = saldo em USD × PTAX de 31/03", Math.abs(rec.closing.principal - r2(row.sdFinal_USD * ptax.rate)) < 0.5, `${rec.closing.principal} x ${r2(row.sdFinal_USD * ptax.rate)}`);
+  check("USD: registra a PTAX e a data usadas", rec.remeasurement && rec.remeasurement.ptax === ptax.rate && rec.remeasurement.ptaxDate === ptax.date);
+  const fxEv = rec.events.find((e) => e.type.startsWith("variacao_cambial"));
+  check("USD: evento de câmbio datado no fim do mês, com PTAX no evento", !fxEv || (fxEv.date === "2026-03-31" && fxEv.ptax === ptax.rate));
+
+  // fim de semana: vale a última cotação publicada; sem cotação recente: avisa e não usa taxa antiga
+  check("PTAX de fim de semana usa a última publicada", fxRateOn(fxList, "2026-05-31").date === "2026-05-29");
+  check("PTAX sem cotação nos 7 dias anteriores não é usada", fxRateOn([{ rate_date: "2026-01-02", rate: 5 }], "2026-03-31") === null);
+  const semPtax = reconcileContractForCompetencia(mkU(), 2026, 3, [], { fxRates: { cur_usd: [{ rate_date: "2020-01-02", rate: 5 }] }, today: "2040-01-01" });
+  check("sem PTAX de fechamento: avisa (ptax_ausente) e mantém o cronograma", semPtax.fxIssues.some((f) => f.type === "ptax_ausente") && !semPtax.remeasurement);
+  const antiga = reconcileContractForCompetencia(mkU(), 2026, 3);
+  check("sem cotações informadas, o comportamento anterior é o mesmo", antiga.events.every((e) => !e.remeasurement) && antiga.fxIssues.length === 0);
+
+  // mês em andamento: usa a última cotação disponível e sinaliza como provisório
+  const prov = reconcileContractForCompetencia(mkU(), 2026, 3, [], { fxRates, today: "2026-03-15" });
+  check("mês em andamento: PTAX provisória (última publicada) e aviso", prov.remeasurement?.provisional === true && prov.remeasurement.ptaxDate <= "2026-03-15" && prov.fxIssues.some((f) => f.type === "ptax_provisoria"));
+
+  // 1º mês sob a regra: o saldo anterior é o que já estava lançado (cronograma), não a PTAX
+  const legacy = reconcileContractForCompetencia(mkU(), 2026, 3, [], { ...opts, fxRemeasureFrom: "2026-03-01" });
+  const noFx = reconcileContractForCompetencia(mkU(), 2026, 3);
+  check("1º mês sob a regra parte do saldo já lançado", Math.abs(legacy.opening.principal - noFx.opening.principal) < 0.01 && Math.abs(legacy.opening.interest - noFx.opening.interest) < 0.01);
+  const before = reconcileContractForCompetencia(mkU(), 2026, 2, [], { ...opts, fxRemeasureFrom: "2026-03-01" });
+  check("mês anterior à regra segue o cronograma (não remensura)", before.events.every((e) => !e.remeasurement) && !before.remeasurement);
+
+  // implantação: saldo anterior = posição da implantação; a remensuração parte dele
+  const CUT = "2026-02-28";
+  const dep = mkU({ deployment_mode: true, deployment_cutoff: CUT, deployment_open_parcelas: [] });
+  const ptaxCut = fxRateOn(fxList, CUT);
+  const posUSD = computeDeploymentPosition(mkU(), CUT, [], { ptax: ptaxCut.rate, ptaxDate: ptaxCut.date }).position;
+  const opening = { principal: posUSD.principalTotal, interest: posUSD.jurosTotal };
+  const depRec = reconcileContractForCompetencia(dep, 2026, 3, [], { ...opts, deploymentOpening: { u: opening } });
+  const dsum = (types) => depRec.events.filter((e) => types.includes(e.type)).reduce((t, e) => t + e.amount, 0);
+  const depLedger = opening.principal + opening.interest + dsum(["liberacao", "juros_apropriados", "variacao_cambial_passiva"]) - dsum(["pagamento_principal", "pagamento_juros", "variacao_cambial_ativa"]);
+  check("implantação USD: saldo anterior = posição da implantação", Math.abs(depRec.opening.principal - opening.principal) < 0.01 && Math.abs(depRec.opening.interest - opening.interest) < 0.01);
+  check("implantação USD: posição + movimentos + câmbio = saldo em moeda × PTAX de fechamento", Math.abs(depLedger - (depRec.closing.principal + depRec.closing.interest)) < 0.1, `${r2(depLedger)} x ${r2(depRec.closing.principal + depRec.closing.interest)}`);
+
+  // reclassificação: a migração para o circulante é medida pela PTAX de fechamento
+  const recon = calculateClosingReconciliation([mkU()], new Map(), 2026, 3, "2026-03-31", opts);
+  const reclass = recon.aggregatedEvents.find((e) => e.type === "reclassificacao_circulante_principal");
+  const semFx = calculateClosingReconciliation([mkU()], new Map(), 2026, 3, "2026-03-31", {});
+  const reclassOld = semFx.aggregatedEvents.find((e) => e.type === "reclassificacao_circulante_principal");
+  check("reclassificação em USD segue a PTAX de fechamento (não a do cronograma)", !reclass || !reclassOld || Math.abs(reclass.amount - reclassOld.amount) > 0.5 || Math.abs(ptax.rate - 5) < 0.05, reclass ? `${reclass.amount} x ${reclassOld?.amount}` : "sem reclassificação no mês");
+}
+
+// ---------------------------------------------------------------------------------------------
+console.log("== Ajuste de provisão de juros: cronograma recalculado com as taxas publicadas");
+{
+  const sacParams = (rate) => ({ ...base, operationValue: 1200000, fixedRate: rate, operationDate: "2026-01-05", firstPaymentDate: "2026-02-05", first_payment_date: "2026-02-05",
+    principalInstallments: 24, interestInstallments: 24, principalFrequency: 1, interestFrequency: 1, calculationSystem: "SAC", totalTermMonths: 24, finalMaturityDate: "2028-01-05", graceInterestBehavior: "PAGAR" });
+  const schedOf = async (rate) => (await calculateAmortizationSchedule(sacParams(rate))).schedule;
+  const mkC = (schedule, extra = {}) => ({ id: "ix", contract_number: "INDEXADO", operation_category: "emprestimos", operation_date: "2026-01-05", schedule_data: JSON.stringify({ schedule }), ...extra });
+  const projected = await schedOf(12);   // fotografia: última taxa conhecida repetida
+  const real = await schedOf(15);        // taxa publicada depois: mais alta
+  const sumEv = (rec, types) => rec.events.filter((e) => types.includes(e.type)).reduce((t, e) => t + e.amount, 0);
+
+  // maio fechado com a projeção; junho recalculado com a taxa real
+  const may = reconcileContractForCompetencia(mkC(projected), 2026, 5);
+  const ledgerPrev = { ix: { principal: may.closing.principal, interest: may.closing.interest } };
+  const junUp = reconcileContractForCompetencia(mkC(real), 2026, 6, [], { trueUpContracts: { ix: true }, ledgerPrev });
+  const adj = junUp.events.find((e) => e.type === "ajuste_provisao_juros");
+  const engineOpen = reconcileContractForCompetencia(mkC(real), 2026, 6).opening;
+  check("indexado: taxa real maior gera ajuste de provisão (aumento) no mês corrente", adj && adj.direction === "aumento" && adj.date === "2026-06-30", JSON.stringify(adj));
+  check("indexado: ajuste = provisão pelas taxas publicadas − provisão já lançada", adj && Math.abs(adj.amount - r2(engineOpen.interest - ledgerPrev.ix.interest)) < 0.02, adj ? `${adj.amount} x ${r2(engineOpen.interest - ledgerPrev.ix.interest)}` : "sem ajuste");
+  const ledgerInterestEnd = ledgerPrev.ix.interest + sumEv(junUp, ["juros_apropriados", "ajuste_provisao_juros"]) - sumEv(junUp, ["pagamento_juros"]);
+  check("indexado: juros a pagar lançados (anterior + provisão + ajuste − pagamentos) = juros do cronograma recalculado", Math.abs(ledgerInterestEnd - junUp.closing.interest) < 0.05, `${r2(ledgerInterestEnd)} x ${junUp.closing.interest}`);
+  check("indexado: saldo anterior do fechamento é o saldo lançado", Math.abs(junUp.opening.interest - ledgerPrev.ix.interest) < 0.01);
+  check("indexado SAC: sem diferença de principal, nada a sinalizar", !junUp.fxIssues.some((f) => f.type === "principal_recalculado"));
+
+  // taxa real menor: reduz a provisão (o lançamento inverte débito e crédito)
+  const mayHigh = reconcileContractForCompetencia(mkC(real), 2026, 5);
+  const junDown = reconcileContractForCompetencia(mkC(projected), 2026, 6, [], { trueUpContracts: { ix: true }, ledgerPrev: { ix: { principal: mayHigh.closing.principal, interest: mayHigh.closing.interest } } });
+  const adjDown = junDown.events.find((e) => e.type === "ajuste_provisao_juros");
+  check("indexado: taxa real menor reduz a provisão", adjDown && adjDown.direction === "reducao");
+  const mappings = ["juros_apropriados", "ajuste_provisao_juros", "pagamento_juros", "pagamento_principal", "reclassificacao_circulante_principal"].map((event_type) => ({ event_type, operation_category: "emprestimos", debit_account_id: "DESPESA", credit_account_id: "PROVISAO", status: "ativo" }));
+  const recon = calculateClosingReconciliation([mkC(projected)], new Map(), 2026, 6, "2026-06-30", { trueUpContracts: { ix: true }, ledgerPrev: { ix: { principal: mayHigh.closing.principal, interest: mayHigh.closing.interest } } });
+  const journal = buildJournalEntries(recon, mappings, "2026-06-30");
+  const adjEntries = journal.entries.filter((e) => e.event_type === "ajuste_provisao_juros");
+  check("redução da provisão: débito na provisão e crédito na despesa (invertido)", adjEntries.length === 2 && adjEntries.find((e) => e.side === "debito")?.account_id === "PROVISAO" && adjEntries.find((e) => e.side === "credito")?.account_id === "DESPESA");
+  const recon2 = calculateClosingReconciliation([mkC(real)], new Map(), 2026, 6, "2026-06-30", { trueUpContracts: { ix: true }, ledgerPrev });
+  const adjUp = buildJournalEntries(recon2, mappings, "2026-06-30").entries.filter((e) => e.event_type === "ajuste_provisao_juros");
+  check("aumento da provisão: débito na despesa e crédito na provisão", adjUp.find((e) => e.side === "debito")?.account_id === "DESPESA" && adjUp.find((e) => e.side === "credito")?.account_id === "PROVISAO");
+
+  // sem saldo lançado anterior (início do acompanhamento) ou contrato não indexado: nada muda
+  const semPrev = reconcileContractForCompetencia(mkC(real), 2026, 6, [], { trueUpContracts: { ix: true } });
+  check("sem saldo lançado anterior não há ajuste", !semPrev.events.some((e) => e.type === "ajuste_provisao_juros"));
+  const naoIndexado = reconcileContractForCompetencia(mkC(real), 2026, 6, [], { ledgerPrev });
+  check("contrato fora da lista de ajuste não gera o evento", !naoIndexado.events.some((e) => e.type === "ajuste_provisao_juros"));
+  const igual = reconcileContractForCompetencia(mkC(projected), 2026, 6, [], { trueUpContracts: { ix: true }, ledgerPrev });
+  check("taxa real igual à projetada: sem ajuste", !igual.events.some((e) => e.type === "ajuste_provisao_juros"));
+  check("reprocessar mantém a chave do evento (idempotência)", JSON.stringify(reconcileContractForCompetencia(mkC(real), 2026, 6, [], { trueUpContracts: { ix: true }, ledgerPrev }).events.map((e) => e.key)) === JSON.stringify(junUp.events.map((e) => e.key)));
+
+  // implantação: a posição aprovada é o saldo lançado; o ajuste parte dela
+  const CUT = "2026-05-31";
+  const posInterest = may.closing.interest;
+  const dep = mkC(real, { deployment_mode: true, deployment_cutoff: CUT, deployment_open_parcelas: [] });
+  const depRec = reconcileContractForCompetencia(dep, 2026, 6, [], { trueUpContracts: { ix: true }, deploymentOpening: { ix: { principal: may.closing.principal, interest: posInterest } } });
+  const depAdj = depRec.events.find((e) => e.type === "ajuste_provisao_juros");
+  check("implantação indexada: saldo anterior = posição e o ajuste parte dela", Math.abs(depRec.opening.interest - posInterest) < 0.01 && depAdj && depAdj.direction === "aumento");
+
+  // PRICE: a parcela muda com a taxa, então o principal recalculado difere do lançado — sinaliza sem lançar
+  const priceOf = async (rate) => (await calculateAmortizationSchedule({ ...sacParams(rate), calculationSystem: "PRICE" })).schedule;
+  const pMay = reconcileContractForCompetencia(mkC(await priceOf(12)), 2026, 5);
+  const pJun = reconcileContractForCompetencia(mkC(await priceOf(15)), 2026, 6, [], { trueUpContracts: { ix: true }, ledgerPrev: { ix: { principal: pMay.closing.principal, interest: pMay.closing.interest } } });
+  check("PRICE indexado: diferença de principal recalculado é sinalizada", pJun.fxIssues.some((f) => f.type === "principal_recalculado"));
 }
 
 if (failures) {

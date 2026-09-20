@@ -5,7 +5,7 @@
 // parcelas informadas como vencidas em aberto. O cronograma serve de base de comparação.
 //
 // Não grava nada e não altera o cronograma.
-import { reconcileContractForCompetencia } from "./closingEngine.js";
+import { reconcileContractForCompetencia, toForeignView } from "./closingEngine.js";
 
 const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
@@ -36,32 +36,6 @@ function capitalizedExtra(row, contract) {
   if (row.liberacaoInjetada || contract.currency_id) return 0;
   const gap = r2((row.sdInicial || 0) + (row.jurosCapitalizados || 0) - (row.sdFinal || 0) - (row.amortizacao || 0));
   return gap > 0.05 ? gap : 0;
-}
-
-// Visão em moeda estrangeira do contrato: o cronograma em USD (saldos, amortização, juros) sem o bloco
-// contábil em reais, para reaproveitar a mesma apuração de posição. O resultado é convertido depois pela PTAX
-// da data-base — o passivo em moeda estrangeira é remensurado na data de fechamento.
-function toForeignView(contract, schedule) {
-  const rows = schedule.map((r) => {
-    const { blocoContabil, ...rest } = r;
-    return {
-      ...rest,
-      sdInicial: r.sdInicial_USD ?? 0,
-      sdFinal: r.sdFinal_USD ?? 0,
-      amortizacao: r.amortizacao_USD ?? 0,
-      jurosFixosMes: r.jurosFixosMes_USD ?? 0,
-      jurosVariaveisMes: r.jurosVariaveisMes_USD ?? 0,
-      liberacaoInjetada: r.liberacaoInjetada_USD ?? 0,
-      varCambial: 0,
-      ajusteCambialMes: 0,
-    };
-  });
-  return {
-    ...contract,
-    currency_id: null,
-    operation_value: contract.amount_foreign ?? contract.operation_value,
-    schedule_data: { schedule: rows },
-  };
 }
 
 export function isLastDayOfMonthIso(iso) {

@@ -31,6 +31,7 @@ export const SETTLEMENT_EVENT_TYPES = {
   CUSTO_TRANSACAO_INICIAL: "custo_transacao_inicial",
   CUSTO_TRANSACAO_APROPRIACAO: "custo_transacao_apropriacao",
   CAPITALIZACAO_JUROS: "capitalizacao_juros",
+  AJUSTE_PROVISAO_JUROS: "ajuste_provisao_juros",
   RECLASSIFICACAO_CIRCULANTE_PRINCIPAL: "reclassificacao_circulante_principal",
   RECLASSIFICACAO_CIRCULANTE_JUROS: "reclassificacao_circulante_juros",
   MULTA_MORA: "multa_mora",
@@ -53,6 +54,7 @@ export const EVENT_TYPE_LABELS = {
   custo_transacao_inicial: "Custo de transação inicial",
   custo_transacao_apropriacao: "Apropriação de custo de transação (fee de estruturação)",
   capitalizacao_juros: "Capitalização de juros (juros a pagar → principal)",
+  ajuste_provisao_juros: "Ajuste de provisão de juros (taxas publicadas)",
   abertura_implantacao: "Abertura — implantação de saldos",
   reclassificacao_circulante_principal: "Reclassificação de principal para circulante",
   reclassificacao_circulante_juros: "Reclassificação de juros para circulante",
@@ -142,6 +144,7 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     settlementsUsed: [],
     pendingRecalculation: [],
     pendingUnsettled: [],
+    fxIssues: [],
   };
 
   // Contrato renegociado/quitado antecipadamente antes desta competência —
@@ -295,7 +298,8 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     };
   };
 
-  result.opening = snapshotAt(prevMonthEnd);
+  const engineOpening = snapshotAt(prevMonthEnd);
+  result.opening = engineOpening;
   // Competência da virada: o "saldo anterior" é a posição aprovada da implantação (o que a abertura lançou),
   // não o saldo que o cronograma projeta — os ajustes do mês partem dela.
   const deploymentStart = options.deploymentOpening && options.deploymentOpening[contract.id];
@@ -405,6 +409,29 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
     }
   });
 
+  // Contrato indexado com cronograma recalculado pelas taxas publicadas: a provisão de juros já lançada (saldo de juros
+  // a pagar do fechamento anterior, ou a posição da implantação) é ajustada para a estimativa atual, no mês corrente.
+  // Mês fechado não é reaberto; o principal recalculado que difere do lançado é apenas sinalizado.
+  const trueUp = options.trueUpContracts && options.trueUpContracts[contract.id] && !contract.currency_id;
+  if (trueUp) {
+    const ledger = cutoffIso && deploymentStart ? deploymentStart : options.ledgerPrev && options.ledgerPrev[contract.id];
+    if (ledger) {
+      const adjInterest = r2(engineOpening.interest - ledger.interest);
+      const adjPrincipal = r2(engineOpening.principal - ledger.principal);
+      if (Math.abs(adjInterest) >= 0.01) {
+        const dir = adjInterest > 0 ? "aumento" : "reducao";
+        push(SETTLEMENT_EVENT_TYPES.AJUSTE_PROVISAO_JUROS, r2(Math.abs(adjInterest)), monthEndIso, "ajuste-" + dir, { direction: dir });
+      }
+      result.opening = { principal: r2(ledger.principal), interest: r2(ledger.interest), fx: engineOpening.fx };
+      if (Math.abs(adjPrincipal) >= 0.01) result.fxIssues.push({ type: "principal_recalculado", contractNumber: contract.contract_number, diferenca: adjPrincipal });
+    }
+  }
+
+  // Moeda estrangeira: remensuração pela PTAX de fechamento (só quando as cotações são informadas).
+  if (contract.currency_id && options.fxRates && options.fxRates[contract.currency_id]?.length) {
+    applyForeignRemeasurement({ contract, schedule, settlements, options, result, yearNum, monthNum, monthStart, monthEndIso, engineOpening, deploymentStart });
+  }
+
   return result;
 }
 
@@ -412,6 +439,142 @@ function addMonths(dateStr, delta) {
   const [y, m, d] = dateStr.split("-").map(Number);
   const dt = new Date(y, m - 1 + delta, d);
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Moeda estrangeira: remensuração do passivo pela PTAX de fechamento (CPC 02 (R2), item 23 e 28).
+//
+// Os itens monetários em moeda estrangeira são convertidos pela taxa de fechamento — a taxa à vista vigente ao
+// término do período — e a variação cambial vai para o resultado do período. Aqui: PTAX de venda do BACEN da data
+// de fechamento (último dia útil do mês; sem cotação no dia, a última publicada, no máximo 7 dias antes).
+// O passivo em reais do mês é o saldo em moeda × PTAX de fechamento; a variação cambial do mês é a diferença
+// entre esse saldo e (saldo anterior lançado + movimentos do mês em reais), e substitui a variação projetada
+// pelo cronograma (que repete a última cotação) e a "realizada" (já embutida na diferença).
+// ---------------------------------------------------------------------------------------------------
+const FX_EVENT_TYPES = new Set([
+  SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA,
+  SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA,
+  SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA_REALIZADA,
+  SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA_REALIZADA,
+]);
+
+function scheduleRowsOf(contract) {
+  try {
+    const parsed = typeof contract.schedule_data === "string" ? JSON.parse(contract.schedule_data) : contract.schedule_data;
+    return parsed?.schedule || [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Visão em moeda estrangeira do contrato: cronograma em USD (saldos, amortização, juros) sem o bloco contábil em
+ * reais, para reaproveitar a mesma apuração. O resultado é convertido depois pela PTAX de fechamento.
+ */
+export function toForeignView(contract, scheduleRows) {
+  const schedule = scheduleRows || scheduleRowsOf(contract);
+  const rows = schedule.map((r) => {
+    const { blocoContabil, ...rest } = r;
+    return {
+      ...rest,
+      sdInicial: r.sdInicial_USD ?? 0,
+      sdFinal: r.sdFinal_USD ?? 0,
+      amortizacao: r.amortizacao_USD ?? 0,
+      jurosFixosMes: r.jurosFixosMes_USD ?? 0,
+      jurosVariaveisMes: r.jurosVariaveisMes_USD ?? 0,
+      liberacaoInjetada: r.liberacaoInjetada_USD ?? 0,
+      varCambial: 0,
+      ajusteCambialMes: 0,
+    };
+  });
+  return {
+    ...contract,
+    currency_id: null,
+    operation_value: contract.amount_foreign ?? contract.operation_value,
+    schedule_data: { schedule: rows },
+  };
+}
+
+/** Cotação vigente na data: a mais recente até ela, no máximo maxAgeDays antes. list = [{rate_date, rate}] em ordem crescente. */
+export function fxRateOn(list, iso, maxAgeDays = 7) {
+  if (!Array.isArray(list) || !list.length || !iso) return null;
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i].rate_date <= iso) {
+      const age = (new Date(iso + "T12:00:00") - new Date(list[i].rate_date + "T12:00:00")) / 86400000;
+      return age <= maxAgeDays && Number(list[i].rate) > 0 ? { rate: Number(list[i].rate), date: list[i].rate_date } : null;
+    }
+  }
+  return null;
+}
+
+// Baixa em reais -> baixa em moeda: a mesma fração da parcela que foi paga (baixa parcial reduz proporcionalmente).
+function foreignSettlement(settlement, scheduleRows) {
+  const row = scheduleRows.find((r) => parcelaKey(r.parcela) === parcelaKey(settlement.parcela));
+  if (!row) return settlement;
+  const bloco = row.blocoContabil || {};
+  const schedP = bloco.amortizacaoPagaBRL ?? 0;
+  const schedI = bloco.jurosPagosBRL ?? 0;
+  const rp = schedP > 0 ? Math.min(1, (settlement.principal_paid || 0) / schedP) : 1;
+  const ri = schedI > 0 ? Math.min(1, (settlement.interest_paid || 0) / schedI) : 1;
+  return { ...settlement, principal_paid: r2((row.amortizacao_USD || 0) * rp), interest_paid: r2((row.jurosPagos || 0) * ri) };
+}
+
+function applyForeignRemeasurement({ contract, schedule, settlements, options, result, yearNum, monthNum, monthStart, monthEndIso, engineOpening, deploymentStart }) {
+  const list = options.fxRates[contract.currency_id];
+  const monthStartIso = isoOf(monthStart);
+  const from = isoDateOnly(options.fxRemeasureFrom || "");
+  // Fechamentos anteriores à regra seguem o cronograma (não mudam o que já foi fechado).
+  if (from && monthStartIso < from) return;
+
+  const todayIso = isoDateOnly(options.today) || isoOf(new Date());
+  const provisional = monthEndIso > todayIso;
+  const endRef = provisional ? todayIso : monthEndIso;
+  const ptaxEnd = fxRateOn(list, endRef);
+  if (!ptaxEnd) {
+    result.fxIssues.push({ type: "ptax_ausente", contractNumber: contract.contract_number, date: endRef });
+    return;
+  }
+
+  const view = toForeignView(contract, schedule);
+  const usdSettlements = settlements.filter((s) => s.status !== "estornado").map((s) => foreignSettlement(s, schedule));
+  const recU = reconcileContractForCompetencia(view, yearNum, monthNum, usdSettlements, { requireSettlementFrom: options.requireSettlementFrom });
+  const openUSD = recU.opening.principal + recU.opening.interest;
+
+  // Saldo lançado no início do mês: a posição da implantação, o saldo do cronograma no 1º mês sob a regra
+  // (o que já estava lançado antes) ou o saldo em moeda × PTAX do fim do mês anterior.
+  let prev;
+  const legacyStart = Boolean(from) && monthStartIso === from && !deploymentStart;
+  if (deploymentStart) prev = { principal: deploymentStart.principal, interest: deploymentStart.interest };
+  else if (legacyStart) prev = { principal: engineOpening.principal, interest: engineOpening.interest };
+  else if (Math.abs(openUSD) < EPS) prev = { principal: 0, interest: 0 };
+  else {
+    const prevEndIso = isoOf(new Date(yearNum, monthNum - 1, 0));
+    const ptaxPrev = fxRateOn(list, prevEndIso);
+    if (!ptaxPrev) {
+      result.fxIssues.push({ type: "ptax_ausente", contractNumber: contract.contract_number, date: prevEndIso });
+      return;
+    }
+    prev = { principal: r2(recU.opening.principal * ptaxPrev.rate), interest: r2(recU.opening.interest * ptaxPrev.rate) };
+  }
+
+  const endPrincipal = r2(recU.closing.principal * ptaxEnd.rate);
+  const endInterest = r2(recU.closing.interest * ptaxEnd.rate);
+  // Movimentos do mês em reais (liberação, juros, pagamentos...), sem a variação cambial do cronograma.
+  const flowsExFx = (result.closing.principal + result.closing.interest) - (engineOpening.principal + engineOpening.interest) - (result.closing.fx - engineOpening.fx);
+  const adjustment = r2(endPrincipal + endInterest - (prev.principal + prev.interest) - flowsExFx);
+
+  result.events = result.events.filter((e) => !FX_EVENT_TYPES.has(e.type));
+  if (Math.abs(adjustment) >= 0.01) {
+    const type = adjustment > 0 ? SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA : SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA;
+    result.events.push({
+      type, amount: r2(Math.abs(adjustment)), date: monthEndIso, key: eventKey(contract.id, type, monthEndIso, "remensuracao"),
+      remeasurement: true, ptax: ptaxEnd.rate, ptaxDate: ptaxEnd.date,
+    });
+  }
+  result.opening = { principal: r2(prev.principal), interest: r2(prev.interest), fx: engineOpening.fx };
+  result.closing = { principal: endPrincipal, interest: endInterest, fx: result.closing.fx };
+  result.remeasurement = { ptax: ptaxEnd.rate, ptaxDate: ptaxEnd.date, provisional, adjustment, saldoMoeda: r2(recU.closing.principal + recU.closing.interest) };
+  if (provisional) result.fxIssues.push({ type: "ptax_provisoria", contractNumber: contract.contract_number, date: ptaxEnd.date });
 }
 
 export function splitCirculanteNaoCirculante(contract, cutoffDate) {
@@ -486,8 +649,21 @@ export function calculateClosingReconciliation(contracts, settlementsByContract,
   const cutoff = dataBase || `${year}-${String(month).padStart(2, "0")}-${new Date(Number(year), Number(month), 0).getDate()}`;
   const previousCutoff = addMonths(cutoff, -1);
   contracts.forEach((contract) => {
-    const curr = splitCirculanteNaoCirculante(contract, cutoff);
-    const prev = splitCirculanteNaoCirculante(contract, previousCutoff);
+    let curr = splitCirculanteNaoCirculante(contract, cutoff);
+    let prev = splitCirculanteNaoCirculante(contract, previousCutoff);
+    // Moeda estrangeira: os baldes são calculados em moeda e convertidos pela PTAX de fechamento (mesma taxa nos dois
+    // pontos: só a migração entre circulante e não circulante conta; a variação cambial fica na remensuração).
+    const fxList = contract.currency_id && options.fxRates ? options.fxRates[contract.currency_id] : null;
+    if (fxList && fxList.length) {
+      const todayIso = isoDateOnly(options.today) || isoOf(new Date());
+      const ptaxClose = fxRateOn(fxList, cutoff > todayIso ? todayIso : cutoff);
+      if (ptaxClose) {
+        const view = toForeignView(contract);
+        const scale = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, r2(v * ptaxClose.rate)]));
+        curr = scale(splitCirculanteNaoCirculante(view, cutoff));
+        prev = scale(splitCirculanteNaoCirculante(view, previousCutoff));
+      }
+    }
     // Reclassificação é só o que MIGROU de balde com a passagem do tempo. O
     // saldo de longo prazo só diminui por migração (parcela que entrou na janela
     // de 12 meses) — já o de curto prazo também diminui quando uma parcela é
@@ -549,6 +725,7 @@ export function calculateClosingReconciliation(contracts, settlementsByContract,
     closing: { ...closing, principal: r2(closing.principal), interest: r2(closing.interest), fx: r2(closing.fx) },
     pendingRecalculation,
     pendingUnsettled,
+    fxIssues: perContract.flatMap((c) => c.fxIssues || []),
     hasBlockingDivergence: pendingRecalculation.length > 0,
   };
 }
@@ -647,10 +824,13 @@ export function buildJournalEntries(reconciliation, eventMappings, entryDate, ba
       missingMappingsMap.set(key, { type: evt.type, operationCategory: evt.operationCategory || "emprestimos" });
       return;
     }
-    const historico = `${EVENT_TYPE_LABELS[evt.type] || evt.type} — ${evt.date || entryDate}`;
+    const historico = evt.remeasurement
+      ? `${EVENT_TYPE_LABELS[evt.type] || evt.type} — remensuração pela PTAX de ${evt.ptaxDate} (${Number(evt.ptax).toFixed(4)}) — ${evt.date || entryDate}`
+      : `${EVENT_TYPE_LABELS[evt.type] || evt.type} — ${evt.date || entryDate}`;
     let debitAccountId = mapping.debit_account_id;
     let creditAccountId = mapping.credit_account_id;
-    if (RECLASSIFICATION_EVENT_TYPES.has(evt.type) && evt.direction === "to_nao_circulante") {
+    if ((RECLASSIFICATION_EVENT_TYPES.has(evt.type) && evt.direction === "to_nao_circulante")
+      || (evt.type === SETTLEMENT_EVENT_TYPES.AJUSTE_PROVISAO_JUROS && evt.direction === "reducao")) {
       debitAccountId = mapping.credit_account_id;
       creditAccountId = mapping.debit_account_id;
     }

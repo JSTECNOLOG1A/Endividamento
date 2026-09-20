@@ -13,7 +13,9 @@ import { settlePayableTitleManually, undoManualPayableSettlement } from "../paya
 import { markContractForDeployment, releaseDeploymentTitles } from "../payables/implantacao.js";
 import { previewBalanceDeployment, approveBalanceDeployment, reopenBalanceDeployment, applyBalanceDeployment, releaseBalanceDeploymentTitles } from "../accounting/balanceDeployment.js";
 import { recordDeploymentMirror, getDeploymentReconciliation } from "../accounting/deploymentReconciliation.js";
-import { syncClosingSettlements } from "../accounting/automaticClosing.js";
+import { groupIdOrThrow } from "../tenants/access.js";
+import { syncClosingSettlements, saveClosingBalances } from "../accounting/automaticClosing.js";
+import { getDeploymentReadiness } from "../accounting/deploymentReadiness.js";
 import { convertPayablePrToTx } from "../payables/convertPrToTx.js";
 import { lookupPayableErp } from "../payables/erpLookup.js";
 import { syncReceivableTitlesFromApprovedContracts } from "../receivables/generate.js";
@@ -102,6 +104,8 @@ const FUNCTION_AUDIT = {
   approveBalanceDeployment: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Aprovar implantação de saldos" },
   reopenBalanceDeployment: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Reabrir implantação de saldos" },
   recordDeploymentMirror: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Registrar lançamento espelho da implantação" },
+  saveClosingBalances: { action: "UPDATE", rotina: "Fechamento contábil", resourceType: "AccountingClosing", registro: "Saldos do fechamento (base do ajuste de provisão)" },
+  getDeploymentReadiness: { action: "CALCULATE", rotina: "Implantação de saldos", resourceType: "AccountingEventMapping", registro: "Prontidão da Lógica Contábil" },
   syncClosingSettlements: { action: "CALCULATE", rotina: "Fechamento contábil", resourceType: "AccountingClosing", registro: "Baixas do Contas a Pagar para o fechamento" },
   getDeploymentReconciliation: { action: "CALCULATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Conciliação da conta transitória" },
   releaseBalanceDeploymentTitles: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "PayableTitle", registro: "Liberar títulos da implantação para integração" },
@@ -161,6 +165,13 @@ const handlers = {
   recordDeploymentMirror: (payload) => recordDeploymentMirror(payload || {}),
   getDeploymentReconciliation: (payload) => getDeploymentReconciliation(payload || {}),
   syncClosingSettlements: (payload) => syncClosingSettlements(payload || {}),
+  getDeploymentReadiness: (payload) => getDeploymentReadiness(payload || {}),
+  saveClosingBalances: async (payload) => {
+    const p = payload || {};
+    if (!p.closingId || typeof p.balances !== "object") throw Object.assign(new Error("closingId e balances são obrigatórios"), { status: 400 });
+    await saveClosingBalances(p.closingId, groupIdOrThrow(), p.balances);
+    return { ok: true };
+  },
   settlePayableTitleManually: (payload) => settlePayableTitleManually(payload || {}),
   undoManualPayableSettlement: (payload) => undoManualPayableSettlement(payload || {}),
   markContractForDeployment: (payload) => markContractForDeployment(payload || {}),

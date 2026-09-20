@@ -4,6 +4,7 @@ import { groupIdOrThrow } from "../tenants/access.js";
 import { actorEmail } from "../tenants/policy.js";
 import { computeDeploymentPosition, isLastDayOfMonthIso } from "./deploymentPosition.js";
 import { OPERATION_CATEGORY_LABELS, resolveOpeningAccounts } from "./closingEngine.js";
+import { getDeploymentReadiness, readinessMessage } from "./deploymentReadiness.js";
 import { markContractForDeployment, releaseDeploymentTitles } from "../payables/implantacao.js";
 
 function httpError(status, message) {
@@ -146,6 +147,11 @@ export async function approveBalanceDeployment(payload = {}) {
   if (!preview.contracts.length) throw httpError(400, "Nenhum contrato aprovado entra na posição desta data-base");
   const blocking = preview.contracts.filter((c) => c.warnings.some((w) => w.startsWith("Saldo negativo")));
   if (blocking.length) throw httpError(400, `Revise antes de aprovar: saldo negativo em ${blocking.map((c) => c.contractNumber).join(", ")}`);
+  // A Lógica Contábil precisa estar preenchida para a contabilização dos títulos novos (senão o fechamento
+  // acusaria matriz incompleta logo na virada).
+  const readiness = await getDeploymentReadiness({ entityId: cfg.entity_id });
+  if (!readiness.ready) throw httpError(400, readinessMessage(readiness));
+
   // Contas: transitória única + quatro contas de passivo por categoria presente nos contratos.
   if (!cfg.transitoria_account_id) throw httpError(400, "Defina a conta transitória antes de aprovar");
   const usedAccounts = new Set([cfg.transitoria_account_id]);

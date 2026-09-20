@@ -16,6 +16,7 @@ import { logger } from "../../logger.js";
 import * as store from "../entities/store.js";
 import { groupIdOrThrow } from "../tenants/access.js";
 import { resolveSettlementRule, findContractsWithoutTitles } from "./settlementRule.js";
+import { loadLiveSchedules } from "./liveSchedule.js";
 import {
   calculateClosingReconciliation,
   buildOpeningEntries,
@@ -129,6 +130,63 @@ export async function deriveSettlementsFromErp(entityId, groupId, competencia, c
   return { created };
 }
 
+// Cotações (PTAX de venda do BACEN, tabela de Moedas) de cada moeda dos contratos, em ordem crescente de data:
+// { [currency_id]: [{rate_date, rate}] }. Cotação do grupo vale sobre a global da mesma data.
+export async function loadFxRates(contracts, groupId) {
+  const ids = [...new Set(contracts.map((c) => c.currency_id).filter(Boolean))];
+  if (!ids.length) return {};
+  const rows = (await pool.query(
+    `SELECT c.id AS currency_id, r.rate_date, r.exchange_rate, (r.group_id IS NOT NULL) AS own
+       FROM currencies c
+       JOIN currencies r ON r.currency_code = c.currency_code AND (r.group_id = $1 OR r.group_id IS NULL)
+      WHERE c.id = ANY($2::text[]) AND r.exchange_rate IS NOT NULL
+      ORDER BY r.rate_date ASC`,
+    [groupId, ids]
+  )).rows;
+  const byCurrency = {};
+  for (const r of rows) {
+    const key = r.currency_id;
+    const date = dateOnly(r.rate_date);
+    const list = (byCurrency[key] = byCurrency[key] || []);
+    const last = list[list.length - 1];
+    if (last && last.rate_date === date) { if (r.own) last.rate = Number(r.exchange_rate); continue; }
+    list.push({ rate_date: date, rate: Number(r.exchange_rate) });
+  }
+  return byCurrency;
+}
+
+// Saldos lançados no fechamento anterior (principal e juros a pagar por contrato): base do ajuste de provisão de
+// juros dos contratos indexados. Gravados em accounting_closings.extra_json.balances a cada cálculo.
+export async function loadLedgerPrev(entityId, groupId, competenciaStart) {
+  const prev = (await pool.query(
+    `SELECT extra_json FROM accounting_closings
+      WHERE entity_id = $1 AND group_id = $2 AND competencia < $3::date
+      ORDER BY competencia DESC LIMIT 1`,
+    [entityId, groupId, competenciaStart]
+  )).rows[0];
+  const extra = typeof prev?.extra_json === "string" ? JSON.parse(prev.extra_json) : prev?.extra_json;
+  return extra?.balances || {};
+}
+
+export async function saveClosingBalances(closingId, groupId, balances) {
+  await pool.query(
+    `UPDATE accounting_closings SET extra_json = COALESCE(extra_json, '{}'::jsonb) || $3::jsonb WHERE id = $1 AND group_id = $2`,
+    [closingId, groupId, JSON.stringify({ balances })]
+  );
+}
+
+// Contratos com o cronograma recalculado pelas taxas publicadas (indexados) e as entradas do ajuste de provisão.
+async function prepareLiveInputs(entityId, groupId, contracts, competencia) {
+  // Taxas conhecidas na data de fechamento: até o fim da competência (ou hoje, se ela ainda está em andamento).
+  const todayIso = dateOnly(new Date());
+  const asOf = competencia.end < todayIso ? competencia.end : todayIso;
+  const { schedules, failed } = await loadLiveSchedules(contracts, groupId, asOf);
+  const liveContracts = contracts.map((c) => (schedules[c.id] ? { ...c, schedule_data: JSON.stringify({ schedule: schedules[c.id] }) } : c));
+  const trueUpContracts = Object.fromEntries(Object.keys(schedules).map((id) => [id, true]));
+  const ledgerPrev = Object.keys(schedules).length ? await loadLedgerPrev(entityId, groupId, competencia.start) : {};
+  return { schedules, failed, liveContracts, trueUpContracts, ledgerPrev };
+}
+
 // Baixas (não estornadas) dos contratos, de todos os fechamentos. Na mesma parcela vale a mais recente.
 export async function loadEntitySettlements(contractIds, groupId) {
   if (!contractIds.length) return { rows: [] };
@@ -181,7 +239,14 @@ export async function syncClosingSettlements(payload = {}) {
   )).rows;
   const settlements = (await loadEntitySettlements(contracts.map((c) => c.id), groupId)).rows;
   const contratosSemTitulos = await findContractsWithoutTitles({ entityId, groupId, from: rule.from, endIso: competencia.end });
-  return { rule, created: derived.created, settlements, contratosSemTitulos };
+  // Contratos indexados: cronograma recalculado com as taxas publicadas e o saldo lançado no fechamento anterior.
+  const fullContracts = (await pool.query(
+    `SELECT * FROM loan_contracts WHERE entity_id = $1 AND group_id = $2 AND status = 'aprovado'`,
+    [entityId, groupId]
+  )).rows;
+  // O recálculo (motor por contrato) só roda quando pedido: ao calcular o fechamento, não a cada abertura da tela.
+  const live = payload.withLive ? await prepareLiveInputs(entityId, groupId, fullContracts, competencia) : { schedules: {}, failed: [], ledgerPrev: {} };
+  return { rule, created: derived.created, settlements, contratosSemTitulos, liveSchedules: live.schedules, liveFailed: live.failed, ledgerPrev: live.ledgerPrev };
 }
 
 async function ensureClosing(entity, competencia) {
@@ -244,9 +309,16 @@ async function closeEntityForCompetencia(entity, competencia) {
       WHERE entity_id = $1 AND group_id = $2 AND status = 'aplicada' AND data_virada >= $3::date AND data_virada <= $4::date`,
     [entity.id, groupId, competencia.start, competencia.end]
   );
+  // Moeda estrangeira: o passivo é remensurado pela PTAX de fechamento a partir da mesma data da regra de baixa efetiva.
+  const fxRates = await loadFxRates(contracts, groupId);
+  // Contratos indexados: cronograma recalculado com as taxas publicadas; a diferença da provisão entra no mês corrente.
+  const live = await prepareLiveInputs(entity.id, groupId, contracts, competencia);
   const reconciliation = calculateClosingReconciliation(
-    contracts, settlementsByContract, competencia.year, competencia.month, competencia.end,
-    { requireSettlementFrom, deploymentOpening: deploymentOpeningFromConfigs(deployResult.rows) }
+    live.liveContracts, settlementsByContract, competencia.year, competencia.month, competencia.end,
+    {
+      requireSettlementFrom, deploymentOpening: deploymentOpeningFromConfigs(deployResult.rows), fxRates, fxRemeasureFrom: rule.from,
+      trueUpContracts: live.trueUpContracts, ledgerPrev: live.ledgerPrev,
+    }
   );
 
   // Avisos (não bloqueiam): parcelas vencidas sem baixa e contratos sem títulos no Contas a Pagar.
@@ -254,11 +326,13 @@ async function closeEntityForCompetencia(entity, competencia) {
   const avisos = {
     regraBaixa: rule,
     parcelasSemBaixa: (reconciliation.pendingUnsettled || []).length,
+    cambio: (reconciliation.fxIssues || []).filter((f) => f.type.startsWith("ptax")),
+    cronogramaVivo: { recalculados: Object.keys(live.schedules).length, falhas: live.failed, principalRecalculado: (reconciliation.fxIssues || []).filter((f) => f.type === "principal_recalculado") },
     contratosSemTitulos,
   };
   await pool.query(
     `UPDATE accounting_closings SET extra_json = COALESCE(extra_json, '{}'::jsonb) || $2::jsonb WHERE id = $1`,
-    [closing.id, JSON.stringify({ avisos })]
+    [closing.id, JSON.stringify({ avisos, balances: Object.fromEntries(reconciliation.perContract.map((c) => [c.contractId, { principal: c.closing.principal, interest: c.closing.interest }])) })]
   );
 
   const mappingsResult = await pool.query(

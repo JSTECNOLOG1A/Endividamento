@@ -70,6 +70,7 @@ const EVENT_TYPE_HINTS = {
   tarifa_bancaria: "Conta de despesa pra tarifas cobradas pelo banco, informadas manualmente na baixa da parcela.",
   iof: "Conta de despesa pro IOF da operação — lançado integral na data da operação (não é amortizado).",
   custo_transacao_inicial: "Taxas e custos de contratação (\"Outras taxas\" do contrato) — reconhecidos na data da operação, cada verba na sua conta (o IOF tem a conta própria abaixo). Política única da ferramenta: sem apropriação mensal.",
+  ajuste_provisao_juros: "Contratos indexados (CDI, SELIC, IPCA...): quando a taxa real é publicada, o fechamento recalcula o cronograma e a diferença da provisão de juros entra no mês corrente. Débito = despesa financeira de juros; Crédito = provisão de juros (o sistema inverte o lado quando a provisão diminui). Use as mesmas contas de \"Provisão de juros (competência)\".",
   capitalizacao_juros: "Juros que o contrato incorpora ao principal (carência com capitalização). Débito = juros a pagar; Crédito = principal (passivo). Sem esse lançamento, juros a pagar e principal deixam de fechar em zero no fim do contrato.",
   reclassificacao_circulante_principal: "Contas de passivo (as mesmas de Circulante/Não circulante acima) movimentadas quando o prazo restante do principal migra entre um balde e outro.",
   reclassificacao_circulante_juros: "Contas de passivo movimentadas quando o prazo restante dos juros a pagar migra entre circulante e não circulante.",

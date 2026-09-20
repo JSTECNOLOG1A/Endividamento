@@ -648,7 +648,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
     try {
       const activeClosing = closing || (await ensureClosing());
       // Baixas atuais do Contas a Pagar e a regra de baixa efetiva vigente, direto do servidor.
-      const { data: fresh } = await base44.functions.invoke("syncClosingSettlements", { closingId: activeClosing.id });
+      const { data: fresh } = await base44.functions.invoke("syncClosingSettlements", { closingId: activeClosing.id, withLive: true });
       const settlementsByContract = new Map();
       (fresh.settlements || []).forEach((s) => {
         if (!settlementsByContract.has(s.contract_id)) settlementsByContract.set(s.contract_id, []);
@@ -656,10 +656,33 @@ export default function FechamentoContabil({ entityId, entityName }) {
       });
       const requireSettlementFrom = fresh.rule?.from || "";
       await refetchSettlements();
+      // Moeda estrangeira: cotações (PTAX de venda do BACEN) de cada moeda dos contratos, em ordem de data.
+      const currencyRows = await base44.entities.Currency.list("rate_date", 20000);
+      const fxRates = {};
+      contracts.filter((c) => c.currency_id).forEach((c) => {
+        if (fxRates[c.currency_id]) return;
+        const code = currencyRows.find((r) => r.id === c.currency_id)?.currency_code;
+        if (!code) return;
+        const byDate = new Map();
+        currencyRows.filter((r) => r.currency_code === code && r.exchange_rate).forEach((r) => byDate.set(String(r.rate_date).slice(0, 10), Number(r.exchange_rate)));
+        fxRates[c.currency_id] = [...byDate.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([rate_date, rate]) => ({ rate_date, rate }));
+      });
       const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
       const deploymentOpening = deploymentOpeningFromConfigs(deploymentConfigs.filter((cfg) => String(cfg.data_virada || "").slice(0, 7) === monthPrefix));
-      const reconciliation = calculateClosingReconciliation(contracts, settlementsByContract, year, month, dataBase, { requireSettlementFrom, deploymentOpening });
+      // Contratos indexados: cronograma recalculado com as taxas publicadas (o salvo fica como registro).
+      const liveSchedules = fresh.liveSchedules || {};
+      const liveContracts = contracts.map((c) => (liveSchedules[c.id] ? { ...c, schedule_data: JSON.stringify({ schedule: liveSchedules[c.id] }) } : c));
+      const trueUpContracts = Object.fromEntries(Object.keys(liveSchedules).map((id) => [id, true]));
+      const reconciliation = calculateClosingReconciliation(liveContracts, settlementsByContract, year, month, dataBase, {
+        trueUpContracts, ledgerPrev: fresh.ledgerPrev || {}, requireSettlementFrom, deploymentOpening, fxRates, fxRemeasureFrom: fresh.rule?.from || "" });
       setCalcResult(reconciliation);
+      // Saldos deste fechamento: base do ajuste de provisão de juros do mês seguinte.
+      try {
+        await base44.functions.invoke("saveClosingBalances", {
+          closingId: activeClosing.id,
+          balances: Object.fromEntries(reconciliation.perContract.map((c) => [c.contractId, { principal: c.closing.principal, interest: c.closing.interest }])),
+        });
+      } catch { /* o cálculo segue; os saldos são regravados no próximo cálculo */ }
       const nextStatus = reconciliation.hasBlockingDivergence ? "divergencia" : "calculado";
       await base44.entities.AccountingClosing.update(activeClosing.id, {
         status: nextStatus,
@@ -1038,6 +1061,19 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 {calcResult.pendingRecalculation.length} baixa(s) exigem recálculo do contrato antes de seguir
                 para aprovação — reabra {calcResult.pendingRecalculation.map((p) => p.contractNumber).join(", ")} na Calculadora.
+              </div>
+            )}
+            {(calcResult.fxIssues || []).length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  {calcResult.fxIssues.some((f) => f.type === "ptax_ausente")
+                    ? "Sem PTAX de fechamento publicada para: " + [...new Set(calcResult.fxIssues.filter((f) => f.type === "ptax_ausente").map((f) => f.contractNumber))].join(", ") + ". A variação cambial seguiu o cronograma; atualize as cotações em Moedas e calcule de novo. "
+                    : ""}
+                  {calcResult.fxIssues.some((f) => f.type === "ptax_provisoria")
+                    ? "Competência em andamento: o passivo em moeda estrangeira foi remensurado pela última PTAX publicada (provisória) e será refeito com a do último dia útil."
+                    : ""}
+                </span>
               </div>
             )}
             {(calcResult.pendingUnsettled || []).length > 0 && (

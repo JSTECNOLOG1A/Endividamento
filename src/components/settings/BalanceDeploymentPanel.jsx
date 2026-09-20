@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Combobox } from "@/components/ui/combobox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronDown, ChevronRight, AlertTriangle, Lock } from "lucide-react";
+import { Link } from "react-router-dom";
 import { OPERATION_CATEGORY_LABELS } from "@/lib/accountingClosing";
 
 const brl = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -21,11 +22,20 @@ const ACCOUNT_FIELDS = [
 
 // Contas de passivo da abertura: quatro por categoria de operação (empréstimos, financiamentos...).
 const CATEGORY_PARTS = [
-  { key: "principal_cp", label: "Principal — circulante" },
-  { key: "principal_lp", label: "Principal — não circulante" },
-  { key: "juros_cp", label: "Provisão de juros — circulante" },
-  { key: "juros_lp", label: "Provisão de juros — não circulante" },
+  { key: "principal_cp", posKey: "principalCP", label: "Principal — circulante" },
+  { key: "principal_lp", posKey: "principalLP", label: "Principal — não circulante" },
+  { key: "juros_cp", posKey: "jurosCP", label: "Provisão de juros — circulante" },
+  { key: "juros_lp", posKey: "jurosLP", label: "Provisão de juros — não circulante" },
 ];
+
+// Débito ou crédito do lançamento de abertura, sempre explícito ao lado da conta.
+function DcBadge({ kind }) {
+  return kind === "D" ? (
+    <span className="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-blue-700">DÉBITO</span>
+  ) : (
+    <span className="inline-flex items-center rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-700">CRÉDITO</span>
+  );
+}
 
 function parseJson(value) {
   if (typeof value === "string") { try { return JSON.parse(value); } catch { return null; } }
@@ -96,9 +106,16 @@ export default function BalanceDeploymentPanel() {
     enabled: !!entityId,
     initialData: [],
   });
+  // A tela só abre quando a Lógica Contábil tem as contas necessárias para contabilizar os títulos novos.
+  const { data: readiness, refetch: refetchReadiness } = useQuery({
+    queryKey: ["deployment-readiness", entityId],
+    queryFn: async () => (await base44.functions.invoke("getDeploymentReadiness", { entityId })).data,
+    enabled: !!entityId,
+  });
   const cfg = configs[0] || null;
   const status = cfg?.status || "rascunho";
   const locked = status !== "rascunho";
+  const gateBlocked = Boolean(entityId) && !locked && Boolean(readiness) && !readiness.ready;
 
   const accountOptions = useMemo(
     () => chart.filter((a) => a.account_type !== "sintetica").map((a) => ({ value: a.id, label: `${a.account_code} — ${a.account_name}` })),
@@ -299,167 +316,216 @@ export default function BalanceDeploymentPanel() {
   const totals = view?.totals;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Card className="border-slate-200 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base text-slate-900">Implantação de Saldos</CardTitle>
-          <CardDescription>
-            Define a data-base (sempre o último dia de um mês), as contas do lançamento de abertura e a posição de cada contrato. Nada é lançado
-            aqui: a aprovação congela a posição e a aplicação marca os contratos. O lançamento de abertura e a troca no Protheus são etapas seguintes.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-1">
-          <label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Empresa</label>
-          <Select value={entityId || undefined} onValueChange={setEntityId}>
-            <SelectTrigger className="h-9 w-72"><SelectValue placeholder="Selecione a empresa" /></SelectTrigger>
-            <SelectContent>{entities.map((e) => (<SelectItem key={e.id} value={e.id}>{e.entity_name}</SelectItem>))}</SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
-      <Card className="border-cyan-200 bg-cyan-50/40 shadow-sm">
-        <CardContent className="py-4 text-xs text-slate-700 space-y-2">
-          <p className="font-medium text-slate-900">Como a data-base afeta os títulos do Contas a Pagar</p>
-          <ul className="list-disc pl-4 space-y-1">
-            <li>
-              <strong>Só passa a valer ao aplicar aos contratos.</strong> Informar a data, salvar o rascunho ou aprovar a posição não altera nenhum título.
-            </li>
-            <li>
-              <strong>Depois de aplicada, a data-base é o corte dos títulos.</strong> Parcelas com vencimento até a data-base não geram título; os que já existiam
-              ficam como "ignorados pela implantação" (ocultos, fora do ERP, da baixa e do fechamento). Exceção: as parcelas que você marcar como vencidas em aberto.
-            </li>
-            <li>
-              <strong>Parcelas depois da data-base</strong> geram títulos normalmente, mas ficam <strong>retidas</strong> até você usar "Liberar títulos" (depois de
-              excluir os títulos antigos no Protheus). Só então seguem para o ERP.
-            </li>
-            <li>
-              <strong>Sem implantação, nada é cortado ou retido:</strong> todas as parcelas do contrato geram título (inclusive as de datas passadas) e podem ser
-              integradas ao ERP, desde que classificadas (natureza e fornecedor).
-            </li>
-            <li>
-              O corte vale por contrato: contratos fora da implantação (por exemplo, operação posterior à data-base) continuam gerando títulos normalmente.
-              O lançamento do pagamento na contabilidade depende da baixa no Contas a Pagar, com ou sem implantação.
-            </li>
-          </ul>
-        </CardContent>
-      </Card>
-
-      {entityId && (
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <div>
-              <CardTitle className="text-base text-slate-900">Datas e contas</CardTitle>
-              {cfg?.approved_by && (
-                <CardDescription>Aprovada por {cfg.approved_by}{cfg.approved_at ? ` em ${dmy(String(cfg.approved_at).slice(0, 10))}` : ""}.</CardDescription>
-              )}
-            </div>
-            <Badge className={`${STATUS[status].cls} border-0 font-medium gap-1`}>
-              {locked ? <Lock className="w-3 h-3" /> : null}{STATUS[status].label}
-            </Badge>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Data-base (último dia do mês)</label>
-                <Input type="date" value={form.data_base} disabled={locked} onChange={(e) => setField("data_base", e.target.value)} />
-                {baseError ? <p className="text-xs text-rose-600">{baseError}</p> : null}
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Início da competência no AllDebt (virada)</label>
-                <Input type="date" value={form.data_virada} disabled={locked} onChange={(e) => setField("data_virada", e.target.value)} />
-                {viradaError ? <p className="text-xs text-rose-600">{viradaError}</p> : null}
-              </div>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {ACCOUNT_FIELDS.map((f) => (
-                <div key={f.key} className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">{f.label}</label>
-                  <Combobox
-                    options={accountOptions}
-                    value={form[f.key] || ""}
-                    onChange={(v) => setField(f.key, v)}
-                    placeholder="Selecione a conta"
-                    searchPlaceholder="Buscar conta..."
-                    className="h-9 w-full text-xs"
-                    disabled={locked}
-                    wideList
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="space-y-3">
+        <CardContent className="py-3 space-y-2">
+          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
               <div>
-                <p className="text-xs font-medium text-slate-600 uppercase tracking-wider">Contas de passivo por categoria</p>
-                <p className="text-xs text-slate-500">
-                  Cada contrato entra na conta da sua categoria (empréstimo ou financiamento), separada em circulante e não circulante.
-                  Por padrão vêm da Lógica Contábil; ajuste se precisar.
-                </p>
+                <CardTitle className="text-base text-slate-900">Implantação de Saldos</CardTitle>
+                <p className="text-xs text-slate-500">Data-base, contas do lançamento de abertura e posição de cada contrato. Nada é lançado aqui.</p>
               </div>
-              {!categories.length ? (
-                <p className="text-xs text-amber-700">Informe a data-base para listar as categorias dos contratos desta empresa.</p>
-              ) : categories.map((c) => (
-                <div key={c.category} className="rounded-md border border-slate-200 p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-slate-800">
-                      {c.label} <span className="text-xs font-normal text-slate-500">· {c.contracts} contrato(s)</span>
-                      {categoryComplete(c.category) ? null : <span className="ml-2 text-xs font-normal text-amber-700">contas incompletas</span>}
-                    </p>
-                    {!locked && (
-                      <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => fillFromMatrix(c.category, true)}>
-                        Preencher pela Lógica Contábil
-                      </Button>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                    {CATEGORY_PARTS.map((p) => (
-                      <div key={p.key} className="space-y-1">
-                        <label className="text-xs font-medium text-slate-600">{p.label}</label>
-                        <Combobox
-                          options={accountOptions}
-                          value={form.category_accounts?.[c.category]?.[p.key] || ""}
-                          onChange={(v) => setCategoryAccount(c.category, p.key, v)}
-                          placeholder="Selecione a conta"
-                          searchPlaceholder="Buscar conta..."
-                          className="h-9 w-full text-xs"
-                          disabled={locked}
-                          wideList
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Empresa</label>
+                <Select value={entityId || undefined} onValueChange={setEntityId}>
+                  <SelectTrigger className="h-9 w-72"><SelectValue placeholder="Selecione a empresa" /></SelectTrigger>
+                  <SelectContent>{entities.map((e) => (<SelectItem key={e.id} value={e.id}>{e.entity_name}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            {entityId && !gateBlocked && (
+              <Badge className={`${STATUS[status].cls} border-0 font-medium gap-1`}>
+                {locked ? <Lock className="w-3 h-3" /> : null}{STATUS[status].label}
+              </Badge>
+            )}
+          </div>
+          <details className="rounded-md border border-cyan-200 bg-cyan-50/40 px-3 py-1.5 text-xs text-slate-700">
+            <summary className="cursor-pointer font-medium text-slate-900">Como a data-base afeta os títulos do Contas a Pagar</summary>
+            <ul className="list-disc pl-4 space-y-1 mt-2 pb-1">
+              <li>
+                <strong>Só passa a valer ao aplicar aos contratos.</strong> Informar a data, salvar o rascunho ou aprovar a posição não altera nenhum título.
+              </li>
+              <li>
+                <strong>Depois de aplicada, a data-base é o corte dos títulos.</strong> Parcelas com vencimento até a data-base não geram título; os que já existiam
+                ficam como "ignorados pela implantação" (ocultos, fora do ERP, da baixa e do fechamento). Exceção: as parcelas que você marcar como vencidas em aberto.
+              </li>
+              <li>
+                <strong>Parcelas depois da data-base</strong> geram títulos normalmente, mas ficam <strong>retidas</strong> até você usar "Liberar títulos" (depois de
+                excluir os títulos antigos no Protheus). Só então seguem para o ERP.
+              </li>
+              <li>
+                <strong>Sem implantação, nada é cortado ou retido:</strong> todas as parcelas do contrato geram título (inclusive as de datas passadas) e podem ser
+                integradas ao ERP, desde que classificadas (natureza e fornecedor).
+              </li>
+              <li>
+                O corte vale por contrato: contratos fora da implantação (por exemplo, operação posterior à data-base) continuam gerando títulos normalmente.
+                O lançamento do pagamento na contabilidade depende da baixa no Contas a Pagar, com ou sem implantação.
+              </li>
+            </ul>
+          </details>
+        </CardContent>
+      </Card>
+
+      {entityId && gateBlocked && (
+        <Card className="border-amber-300 bg-amber-50/60 shadow-sm">
+          <CardContent className="py-4 space-y-2 text-xs text-amber-900">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <AlertTriangle className="w-4 h-4" /> A Lógica Contábil ainda não está preenchida para esta empresa
+            </p>
+            <p>
+              A implantação lança a abertura e, depois dela, o fechamento contabiliza os títulos e as parcelas novos. Para isso a Lógica Contábil precisa ter,
+              em cada categoria, as contas dos eventos abaixo. Preencha e volte a esta tela.
+            </p>
+            <ul className="list-disc pl-5 space-y-0.5">
+              {readiness.categories.filter((c) => c.missing.length).map((c) => (
+                <li key={c.category}><strong>{c.label}:</strong> {c.missing.map((m) => m.label).join(", ")}</li>
               ))}
+            </ul>
+            <div className="flex gap-2 pt-1">
+              <Link to="/SettingsAccountingLogic">
+                <Button size="sm" className="h-8 text-xs">Abrir a Lógica Contábil</Button>
+              </Link>
+              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => refetchReadiness()}>Já preenchi, verificar de novo</Button>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {!locked && (
-                <Button size="sm" onClick={save} disabled={busy || !form.data_base || !form.data_virada || !!baseError || !!viradaError}>
-                  Salvar rascunho
-                </Button>
-              )}
-              {!locked && (
-                <Button size="sm" variant="outline" onClick={() => runPreview()} disabled={loadingPreview || !form.data_base || !!baseError}>
-                  {loadingPreview ? "Calculando..." : "Atualizar prévia"}
-                </Button>
-              )}
-              {!locked && (
-                <Button size="sm" onClick={approve} disabled={busy || !canApprove} title={!cfg ? "Salve o rascunho antes" : !accountsComplete ? "Defina a conta transitória e as quatro contas de passivo de cada categoria" : ""}>
-                  Aprovar posição
-                </Button>
-              )}
-              {status === "aprovada" && (
-                <>
-                  <Button size="sm" onClick={apply} disabled={busy}>Aplicar aos contratos</Button>
-                  <Button size="sm" variant="outline" onClick={reopen} disabled={busy}>Reabrir</Button>
-                </>
-              )}
-              {status === "aplicada" && <p className="text-xs text-slate-500 self-center">Contratos marcados. Para alterar, ajuste a marca de cada contrato pelo suporte.</p>}
-            </div>
-            {!cfg && form.data_base ? <p className="text-xs text-amber-700">Salve o rascunho para poder aprovar.</p> : null}
           </CardContent>
         </Card>
       )}
 
-      {entityId && view && (
+      {entityId && !gateBlocked && (
+        <Card className="border-slate-200 shadow-sm">
+          <CardContent className="py-3 space-y-3">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Data-base (último dia do mês)</label>
+                  <Input type="date" className="h-9 w-40" value={form.data_base} disabled={locked} onChange={(e) => setField("data_base", e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Virada (início no AllDebt)</label>
+                  <Input type="date" className="h-9 w-40" value={form.data_virada} disabled={locked} onChange={(e) => setField("data_virada", e.target.value)} />
+                </div>
+                {cfg?.approved_by && (
+                  <p className="text-xs text-slate-500 pb-2">Aprovada por {cfg.approved_by}{cfg.approved_at ? ` em ${dmy(String(cfg.approved_at).slice(0, 10))}` : ""}.</p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {!locked && (
+                  <Button size="sm" onClick={save} disabled={busy || !form.data_base || !form.data_virada || !!baseError || !!viradaError}>
+                    Salvar rascunho
+                  </Button>
+                )}
+                {!locked && (
+                  <Button size="sm" variant="outline" onClick={() => runPreview()} disabled={loadingPreview || !form.data_base || !!baseError}>
+                    {loadingPreview ? "Calculando..." : "Atualizar prévia"}
+                  </Button>
+                )}
+                {!locked && (
+                  <Button size="sm" onClick={approve} disabled={busy || !canApprove} title={!cfg ? "Salve o rascunho antes" : !accountsComplete ? "Defina a conta transitória e as quatro contas de passivo de cada categoria" : ""}>
+                    Aprovar posição
+                  </Button>
+                )}
+                {status === "aprovada" && (
+                  <>
+                    <Button size="sm" onClick={apply} disabled={busy}>Aplicar aos contratos</Button>
+                    <Button size="sm" variant="outline" onClick={reopen} disabled={busy}>Reabrir</Button>
+                  </>
+                )}
+                {status === "aplicada" && <p className="text-xs text-slate-500 self-center">Contratos marcados. Para alterar, ajuste a marca de cada contrato pelo suporte.</p>}
+              </div>
+            </div>
+            {baseError ? <p className="text-xs text-rose-600 -mt-1">{baseError}</p> : null}
+            {viradaError ? <p className="text-xs text-rose-600 -mt-1">{viradaError}</p> : null}
+            {!cfg && form.data_base ? <p className="text-xs text-amber-700 -mt-1">Salve o rascunho para poder aprovar.</p> : null}
+
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left w-24">Lançamento</th>
+                    <th className="px-2 py-1.5 text-left w-52">Conta de</th>
+                    <th className="px-2 py-1.5 text-left">Conta contábil</th>
+                    <th className="px-2 py-1.5 text-right w-36">Valor previsto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t border-slate-100">
+                    <td className="px-2 py-1"><DcBadge kind="D" /></td>
+                    <td className="px-2 py-1 text-slate-700">Transitória (contrapartida da abertura)</td>
+                    <td className="px-2 py-1">
+                      <Combobox
+                        options={accountOptions}
+                        value={form.transitoria_account_id || ""}
+                        onChange={(v) => setField("transitoria_account_id", v)}
+                        placeholder="Selecione a conta"
+                        searchPlaceholder="Buscar conta..."
+                        className="h-8 w-full text-xs"
+                        disabled={locked}
+                        wideList
+                      />
+                    </td>
+                    <td className="px-2 py-1 text-right font-medium text-slate-900">{totals ? brl(totals.total) : "—"}</td>
+                  </tr>
+                  {!categories.length ? (
+                    <tr className="border-t border-slate-100">
+                      <td colSpan={4} className="px-2 py-2 text-amber-700">Informe a data-base para listar as categorias dos contratos desta empresa.</td>
+                    </tr>
+                  ) : categories.map((cat) => {
+                    const rows = (view?.contracts || []).filter((c) => (c.operationCategory || "emprestimos") === cat.category);
+                    const sum = (k) => rows.reduce((s, c) => s + (c.position?.[k] || 0), 0);
+                    return (
+                      <React.Fragment key={cat.category}>
+                        <tr className="border-t border-slate-200 bg-slate-50/80">
+                          <td colSpan={3} className="px-2 py-1 text-slate-800">
+                            <span className="font-medium">{cat.label}</span>
+                            <span className="ml-2 text-slate-500">{cat.contracts} contrato(s)</span>
+                            {categoryComplete(cat.category) ? null : <span className="ml-2 text-amber-700">contas incompletas</span>}
+                          </td>
+                          <td className="px-2 py-1 text-right">
+                            {!locked && (
+                              <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={() => fillFromMatrix(cat.category, true)}>
+                                Preencher pela Lógica Contábil
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                        {CATEGORY_PARTS.map((p) => (
+                          <tr key={p.key} className="border-t border-slate-100">
+                            <td className="px-2 py-1"><DcBadge kind="C" /></td>
+                            <td className="px-2 py-1 text-slate-700">{p.label}</td>
+                            <td className="px-2 py-1">
+                              <Combobox
+                                options={accountOptions}
+                                value={form.category_accounts?.[cat.category]?.[p.key] || ""}
+                                onChange={(v) => setCategoryAccount(cat.category, p.key, v)}
+                                placeholder="Selecione a conta"
+                                searchPlaceholder="Buscar conta..."
+                                className="h-8 w-full text-xs"
+                                disabled={locked}
+                                wideList
+                              />
+                            </td>
+                            <td className="px-2 py-1 text-right text-slate-700">{view ? brl(sum(p.posKey)) : "—"}</td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+                {totals && categories.length > 0 && (
+                  <tfoot className="border-t border-slate-200 bg-slate-50 text-slate-600">
+                    <tr>
+                      <td colSpan={3} className="px-2 py-1.5">Débito = soma dos créditos. A transitória deve fechar em zero depois do lançamento espelho no sistema antigo.</td>
+                      <td className="px-2 py-1.5 text-right font-medium text-slate-900">{brl(totals.total)}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {entityId && !gateBlocked && view && (
         <Card className="border-slate-200 shadow-sm">
           <CardHeader>
             <CardTitle className="text-base text-slate-900">
@@ -555,27 +621,6 @@ export default function BalanceDeploymentPanel() {
               </table>
             </div>
 
-            {totals && (
-              <div className="rounded-lg border border-cyan-200 bg-cyan-50/40 p-3 text-xs text-slate-700 space-y-1">
-                <p className="font-medium text-slate-900">Lançamento de abertura previsto (executado na etapa seguinte)</p>
-                <p>Débito — {accountLabel(form.transitoria_account_id)}: <strong>{brl(totals.total)}</strong></p>
-                {categories.map((cat) => {
-                  const rows = (view?.contracts || []).filter((c) => (c.operationCategory || "emprestimos") === cat.category);
-                  const sum = (k) => rows.reduce((s, c) => s + (c.position?.[k] || 0), 0);
-                  const accs = form.category_accounts?.[cat.category] || {};
-                  return (
-                    <div key={cat.category} className="pt-1">
-                      <p className="font-medium text-slate-800">{cat.label}</p>
-                      <p>Crédito — {accountLabel(accs.principal_cp)}: {brl(sum("principalCP"))}</p>
-                      <p>Crédito — {accountLabel(accs.principal_lp)}: {brl(sum("principalLP"))}</p>
-                      <p>Crédito — {accountLabel(accs.juros_cp)}: {brl(sum("jurosCP"))}</p>
-                      <p>Crédito — {accountLabel(accs.juros_lp)}: {brl(sum("jurosLP"))}</p>
-                    </div>
-                  );
-                })}
-                <p className="text-slate-500">A conta transitória deve fechar em zero depois do lançamento espelho no sistema antigo.</p>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}

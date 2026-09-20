@@ -90,3 +90,21 @@ Ao aplicar a implantação, os títulos do contrato com vencimento até a data-b
 - Sugestão dos juros: reclassificação de juros da matriz; sem ela, o crédito de "juros apropriados" (circulante) e a conta de principal não circulante (não circulante).
 - Nome na tela e no histórico da abertura: "Provisão de juros" (circulante / não circulante), o mesmo vocabulário da Lógica Contábil, em vez de "juros a pagar".
 - O evento `juros_apropriados` passou a se chamar "Provisão de juros (competência)" na Lógica Contábil e no histórico dos lançamentos mensais (só o rótulo; o comportamento e as contas não mudam).
+
+## Moeda estrangeira: remensuração pela PTAX de fechamento (CPC 02 (R2))
+
+Fontes conferidas: Estudo Especial do BACEN sobre a Ptax e Circular 3.506/2010 (quatro consultas por dia; taxa de compra e taxa de venda separadas, cada uma a média simples das quatro janelas, excluídas as duas maiores e as duas menores; o boletim de fechamento é a média dos quatro) e CPC 02 (R2), item 8 (taxa de fechamento = taxa à vista vigente ao término do período de reporte) e itens 23 e 28 (itens monetários pela taxa de fechamento; variação cambial no resultado do período). O CPC não define compra ou venda: a política adotada é a **PTAX de venda do BACEN** (a série que o sistema já guarda), a ser validada com o contador/auditor.
+- **Cotação:** a da data de fechamento (último dia útil do mês), sem defasagem D-1 (a defasagem do contrato vale só para calcular as parcelas). Sem cotação no dia, vale a última publicada até 7 dias antes; sem nenhuma, o fechamento avisa (`ptax_ausente`) e segue o cronograma — nunca usa taxa antiga em silêncio. Competência em andamento usa a última publicada e é marcada como provisória.
+- **Passivo em reais do mês = saldo em moeda (principal + juros) × PTAX de fechamento.** A variação cambial do mês é a diferença entre esse saldo e (saldo lançado no início do mês + movimentos do mês em reais); ela substitui a variação projetada pelo cronograma (que repete a última cotação) e a "realizada" (já embutida). O saldo anterior é a posição da implantação, o saldo do cronograma no primeiro mês sob a regra, ou o saldo em moeda × PTAX do mês anterior. Mês anterior à regra não muda.
+- **Reclassificação circulante/não circulante:** a migração é medida em moeda e convertida pela PTAX de fechamento. A variação cambial do não circulante fica na conta da variação (limite conhecido: a matriz tem uma conta de passivo por evento).
+
+## Contratos indexados: cronograma recalculado e "Ajuste de provisão de juros"
+
+O cronograma salvo é uma fotografia (para o que ainda não foi publicado, o motor repete a última taxa). A cada fechamento, o cronograma dos contratos indexados (CDI, SELIC, IPCA, TR, TJLP, INPC, IGPM, em reais) é recalculado com as taxas de referência até a data de fechamento; o cronograma salvo não é alterado. O recálculo usa os mesmos parâmetros da Calculadora (validado: reproduz o cronograma salvo com diferença zero em SAC, PRICE, com taxa fixa, com carência e IPCA).
+- **Ajuste de provisão de juros** (evento novo, migration 071): saldo de juros a pagar do cronograma recalculado no início do mês menos o saldo lançado no fechamento anterior (ou a posição da implantação). Entra no mês corrente; mês fechado não é reaberto (mudança de estimativa). Débito = despesa financeira de juros, crédito = provisão de juros; quando a provisão diminui o sistema inverte os lados. Sem saldo anterior gravado (primeiro mês acompanhado), não há ajuste.
+- Os saldos de cada fechamento (principal e juros por contrato) ficam em `accounting_closings.extra_json.balances`. O fechamento manual grava pelo `saveClosingBalances` e recebe o cronograma recalculado pelo `syncClosingSettlements` (com `withLive`).
+- Diferença de **principal** recalculado (por exemplo PRICE, cuja parcela muda com a taxa) é sinalizada (`principal_recalculado`), não lançada.
+- O evento entra na exigência da Lógica Contábil da implantação quando há contrato indexado na categoria.
+
+## Fica para a sequência
+Ajuste no pagamento (valor pago × provisão restante: juros, multa, desconto, câmbio realizado pela cotação da liquidação) e atualização do valor dos títulos ainda não integrados ao ERP quando a taxa real sair; nos já integrados, aviso de "valor divergente da projeção".
