@@ -94,6 +94,21 @@ console.log("\n== USD: o passivo lançado na virada fecha no saldo apurado (ajus
   check("USD: com a abertura há evento de ajuste cambial da virada", rec.events.some((e) => String(e.key).includes("implantacao-cambial")));
 }
 
+console.log("\n== Mês da virada: o saldo anterior é a posição da implantação (regra de baixa efetiva desde sempre)");
+for (const openParcelas of [[], [String(lastBefore.parcela)]]) {
+  const pos = computeDeploymentPosition(contract, CUT, openParcelas).position;
+  const opening = { principal: pos.principalTotal, interest: pos.jurosTotal };
+  const dep = { ...contract, deployment_mode: true, deployment_cutoff: CUT, deployment_open_parcelas: openParcelas };
+  const rec = reconcileContractForCompetencia(dep, 2026, 9, [], { requireSettlementFrom: "1900-01-01", deploymentOpening: { [contract.id]: opening } });
+  const label = openParcelas.length ? "com parcela vencida em aberto" : "sem parcela em aberto";
+  check(`BRL ${label}: saldo anterior do fechamento = posição da implantação`, Math.abs(rec.opening.principal - opening.principal) < 0.01 && Math.abs(rec.opening.interest - opening.interest) < 0.01, `${rec.opening.principal}/${rec.opening.interest} x ${opening.principal}/${opening.interest}`);
+  const sum = (types) => rec.events.filter((e) => types.includes(e.type)).reduce((t, e) => t + e.amount, 0);
+  const flows = sum(["juros_apropriados", "variacao_cambial_passiva"]) - sum(["pagamento_principal", "pagamento_juros", "variacao_cambial_ativa"]);
+  const closingTotal = rec.closing.principal + rec.closing.interest;
+  check(`BRL ${label}: saldo anterior + eventos do mês = saldo final`, Math.abs(opening.principal + opening.interest + flows - closingTotal) < 0.05, `${r2(opening.principal + opening.interest + flows)} x ${r2(closingTotal)}`);
+  check(`BRL ${label}: parcelas até a data-base (já na posição) não voltam como pendência`, rec.pendingUnsettled.every((p) => p.dataVencimento > CUT || openParcelas.map(String).includes(String(Number(p.parcela)))));
+}
+
 console.log("\n== Sem duplicidade e sem efeito colateral");
 const again = computeDeploymentPosition(contract, CUT, []);
 check("mesma entrada, mesma posição (reprodutível)", JSON.stringify(again.position) === JSON.stringify(a.position));

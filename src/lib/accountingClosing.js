@@ -367,7 +367,8 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
   const rows = schedule.map((row, idx) => {
     const settlement = settlementsByParcela.get(parcelaKey(row.parcela));
     const unpaidByDeployment = Boolean(cutoffIso) && row.dataVencimento <= cutoffIso && deployOpen.has(String(Number(row.parcela))) && !settlement;
-    const unpaidByRule = unpaidByDeployment || (Boolean(requireFrom) && row.dataVencimento >= requireFrom && !settlement);
+    const coveredByDeployment = Boolean(cutoffIso) && row.dataVencimento <= cutoffIso;
+    const unpaidByRule = unpaidByDeployment || (Boolean(requireFrom) && row.dataVencimento >= requireFrom && !settlement && !coveredByDeployment);
     const payIso = settlement && settlement.actual_payment_date ? isoDateOnly(settlement.actual_payment_date) : "";
 
     // Moeda estrangeira: os campos de topo misturam USD e BRL (jurosPagos e jurosCapitalizados vêm em
@@ -476,6 +477,12 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
   };
 
   result.opening = snapshotAt(prevMonthEnd);
+  // Competência da virada: o "saldo anterior" é a posição aprovada da implantação (o que a abertura lançou),
+  // não o saldo que o cronograma projeta — os ajustes do mês partem dela.
+  const deploymentStart = options.deploymentOpening && options.deploymentOpening[contract.id];
+  if (cutoffIso && deploymentStart) {
+    result.opening = { principal: r2(deploymentStart.principal), interest: r2(deploymentStart.interest), fx: result.opening.fx };
+  }
   result.closing = snapshotAt(monthEnd);
 
   const push = (type, amount, date, origin, extra = {}) => {
