@@ -302,6 +302,11 @@ export async function integratePayableTitles(payload = {}) {
       results.push({ id: title.id, ok: false, skipped: true, message: "Já integrado" });
       continue;
     }
+    if (title.status === "ignorado_implantacao") {
+      skipped += 1;
+      results.push({ id: title.id, ok: false, skipped: true, message: "Título tratado na implantação de saldos: não é integrado ao ERP" });
+      continue;
+    }
     if (title.status !== "aberto") {
       skipped += 1;
       results.push({ id: title.id, ok: false, skipped: true, message: "Somente títulos abertos podem ser integrados" });
@@ -904,12 +909,12 @@ export async function refreshPayableTitlesFromErp(payload = {}) {
   const params = [];
   let sql;
   if (ids.length && regardlessOfStatus) {
-    sql = `SELECT * FROM payable_titles WHERE id = ANY($1::text[]) AND group_id = $2`;
+    sql = `SELECT * FROM payable_titles WHERE id = ANY($1::text[]) AND group_id = $2 AND status <> 'ignorado_implantacao'`;
     params.push(ids, groupIdOrThrow());
   } else {
     params.push(groupIdOrThrow());
     sql = `SELECT * FROM payable_titles
-     WHERE group_id = $1 AND (integrado_erp IS TRUE OR erp_status IN ('integrado', 'baixado'))`;
+     WHERE group_id = $1 AND status <> 'ignorado_implantacao' AND (integrado_erp IS TRUE OR erp_status IN ('integrado', 'baixado'))`;
     if (ids.length) {
       params.push(ids);
       sql += ` AND id = ANY($2::text[])`;

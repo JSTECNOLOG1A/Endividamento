@@ -61,6 +61,7 @@ export async function deriveSettlementsFromErp(entityId, groupId, competencia, c
     `SELECT * FROM payable_titles
      WHERE contract_id = ANY($1::text[])
        AND group_id = $2
+       AND status <> 'ignorado_implantacao'
        AND (erp_status = 'baixado' OR baixa_origem = 'manual')
        -- Parcela paga em atraso (vencimento em mês anterior) também entra; quem já virou baixa não repete
        -- (a checagem por contrato+parcela abaixo). A data da baixa decide o mês do pagamento.

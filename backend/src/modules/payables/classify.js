@@ -84,7 +84,7 @@ export async function classifyPayableTitles(payload = {}) {
     sets.push(`fornecedor_nome = $${params.length}`);
   }
 
-  let where = `entity_id = $2 AND group_id = $${params.length + 1} AND upper(tipo) = $3 AND integrado_erp IS NOT TRUE AND COALESCE(erp_status, 'pendente') NOT IN ('integrado', 'baixado') AND status = 'aberto'`;
+  let where = `entity_id = $2 AND group_id = $${params.length + 1} AND upper(tipo) = $3 AND status <> 'ignorado_implantacao' AND integrado_erp IS NOT TRUE AND COALESCE(erp_status, 'pendente') NOT IN ('integrado', 'baixado') AND status = 'aberto'`;
   params.push(groupIdOrThrow());
   if (!applyByType) {
     params.push(ids);

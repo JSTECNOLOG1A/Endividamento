@@ -33,6 +33,7 @@ export async function settlePayableTitleManually(payload = {}) {
   const title = await loadTitle(id);
   if (title.erp_status === "baixado") throw httpError(409, "Título já baixado no ERP");
   if (title.status === "cancelado") throw httpError(409, "Título cancelado não pode ser baixado");
+  if (title.status === "ignorado_implantacao") throw httpError(409, "Título tratado na implantação de saldos: não recebe baixa");
   const valor = r2(title.valor);
   const saldoAtual = r2(title.saldo);
   if (saldoAtual <= 0.009) throw httpError(409, "Título sem saldo em aberto");

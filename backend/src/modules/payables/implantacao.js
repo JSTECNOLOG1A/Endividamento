@@ -67,6 +67,17 @@ export async function markContractForDeployment(payload = {}) {
       WHERE id = $3 AND group_id = $4`,
     [cutoffDate, JSON.stringify(openParcelas.map((p) => String(p))), contractId, groupId]
   );
+  // Parcelas com vencimento até a data de corte, exceto as informadas como vencidas em aberto, já foram tratadas
+  // pela implantação: os títulos delas ficam com status próprio (nem abertos nem pagos), fora de integração,
+  // baixa, consulta ao ERP, fechamento e lista do Contas a Pagar. Nada é apagado.
+  const openInts = openParcelas.map((p) => Number(p)).filter((n) => Number.isInteger(n));
+  const ignored = await pool.query(
+    `UPDATE payable_titles
+        SET status_antes_implantacao = status, status = 'ignorado_implantacao', retido_implantacao = false, updated_date = now()
+      WHERE contract_id = $1 AND group_id = $2 AND vencimento <= $3::date AND status IN ('aberto', 'baixado')
+        AND NOT (parcela ~ '^[0-9]+$' AND parcela::int = ANY($4::int[]))`,
+    [contractId, groupId, cutoffDate, openInts]
+  );
   // Títulos já gerados e ainda não integrados ficam retidos até a liberação explícita.
   const held = await pool.query(
     `UPDATE payable_titles SET retido_implantacao = true, updated_date = now()
@@ -74,8 +85,8 @@ export async function markContractForDeployment(payload = {}) {
         AND COALESCE(erp_status, '') NOT IN ('integrado', 'baixado') AND status = 'aberto'`,
     [contractId, groupId]
   );
-  logger.info({ contractId, cutoffDate, retidos: held.rowCount }, "contrato marcado para implantação de saldos");
-  return { contractId, cutoffDate, openParcelas, titulosRetidos: held.rowCount || 0 };
+  logger.info({ contractId, cutoffDate, retidos: held.rowCount, ignorados: ignored.rowCount }, "contrato marcado para implantação de saldos");
+  return { contractId, cutoffDate, openParcelas, titulosRetidos: held.rowCount || 0, titulosIgnorados: ignored.rowCount || 0 };
 }
 
 /** Libera a retenção dos títulos do contrato para a integração (feito só na janela de troca). */

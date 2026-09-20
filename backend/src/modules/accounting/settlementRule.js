@@ -59,7 +59,7 @@ export async function findContractsWithoutTitles({ entityId, groupId, from, endI
   if (!contracts.length) return [];
 
   const withTitles = new Set((await pool.query(
-    `SELECT DISTINCT contract_id FROM payable_titles WHERE group_id = $1 AND contract_id = ANY($2::text[])`,
+    `SELECT DISTINCT contract_id FROM payable_titles WHERE group_id = $1 AND contract_id = ANY($2::text[]) AND status <> 'ignorado_implantacao'`,
     [groupId, contracts.map((c) => c.id)]
   )).rows.map((r) => r.contract_id));
 

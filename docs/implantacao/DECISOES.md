@@ -77,3 +77,12 @@ O pagamento de principal e juros só gera lançamento quando a parcela foi realm
 - **Avisos (não bloqueiam a aprovação)**: parcelas vencidas sem baixa e contratos sem título no Contas a Pagar (sem título não há baixa). Ficam em `accounting_closings.extra_json.avisos` e aparecem na tela.
 - **Baixa atrasada em mês já fechado**: continua entrando no primeiro dia da competência aberta, com a data real na observação (decisão contábil pendente: manter ou reabrir o mês).
 - **Fica para a sequência (item 5)**: baixa manual com divisão principal/juros, multa, desconto, tarifa e PTAX do dia do pagamento; baixa parcial em vários meses (hoje a baixa da parcela é uma só).
+
+## Títulos ignorados pela implantação (status `ignorado_implantacao`)
+
+Ao aplicar a implantação, os títulos do contrato com vencimento até a data-base — exceto as parcelas informadas como vencidas em aberto — recebem o status próprio `ignorado_implantacao`. Vale para aberto, integrado ao ERP ou já baixado (o status anterior fica em `status_antes_implantacao`; nada é apagado).
+- Fora da integração automática e manual com o ERP, da baixa manual, da consulta ao ERP, da classificação, das baixas derivadas do fechamento e do aviso de "contrato sem títulos"; a liberação dos títulos retidos não os toca.
+- Ocultos por padrão no Contas a Pagar e fora dos totais; o filtro "Mostrar ignorados pela implantação" só consulta (sem ações).
+- As parcelas informadas como vencidas em aberto e as futuras seguem normais (retidas até a liberação).
+- Cenário previsto: a implantação é feita do zero, em etapa única, com a exclusão dos títulos antigos no Protheus na virada.
+- Correção junto: a geração de títulos só considerava "existente" o título aberto — a parcela já baixada voltava como novo título em aberto na sincronização seguinte. Agora aberto, baixado e ignorado contam como existentes (só o cancelado/estornado pode ser gerado de novo). Migration 070.

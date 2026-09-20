@@ -70,7 +70,10 @@ function natureLabel(codigo, natures = []) {
   return code;
 }
 
+const isIgnored = (item) => item?.status === "ignorado_implantacao";
+
 function canIntegrate(item) {
+  if (isIgnored(item)) return false;
   const status = erpStatusOf(item);
   return status !== "integrado" && status !== "baixado";
 }
@@ -82,6 +85,7 @@ function canReverse(item) {
 }
 
 function canConsult(item) {
+  if (isIgnored(item)) return false;
   const status = erpStatusOf(item);
   return status === "integrado" || status === "baixado";
 }
@@ -118,6 +122,8 @@ export default function AccountsPayable() {
   const [entityFilter, setEntityFilter] = useState("__all__");
   const [tipoFilter, setTipoFilter] = useState("__all__");
   const [erpFilter, setErpFilter] = useState("todas");
+  // Títulos de parcelas que a implantação de saldos já tratou ficam ocultos; o filtro só serve para consulta.
+  const [showIgnored, setShowIgnored] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [classifyOpen, setClassifyOpen] = useState(false);
   const [classifyTitles, setClassifyTitles] = useState([]);
@@ -169,6 +175,7 @@ export default function AccountsPayable() {
         if (entityFilter !== "__all__" && item.entity_id !== entityFilter) return false;
         if (tipoFilter !== "__all__" && String(item.tipo || "").toUpperCase() !== tipoFilter) return false;
         if (erpFilter !== "todas" && erpStatusOf(item) !== erpFilter) return false;
+        if (isIgnored(item) && !showIgnored) return false;
         if (!term) return true;
         const haystack = [
           item.entity_name,
@@ -186,7 +193,7 @@ export default function AccountsPayable() {
         ].join(" ").toLowerCase();
         return haystack.includes(term);
       });
-  }, [titles, natures, entityById, search, entityFilter, tipoFilter, erpFilter]);
+  }, [titles, natures, entityById, search, entityFilter, tipoFilter, erpFilter, showIgnored]);
 
   const tipos = useMemo(
     () => [...new Set((titles || []).map((item) => String(item.tipo || "").toUpperCase()).filter(Boolean))].sort(),
@@ -528,6 +535,12 @@ export default function AccountsPayable() {
             </SelectContent>
           </Select>
         </div>
+        {(titles || []).some(isIgnored) && (
+          <label className="flex items-end gap-2 pb-2 text-xs text-slate-600 cursor-pointer" title="Títulos de parcelas que a implantação de saldos já tratou (vencimento até a data-base). Não são integrados, nem baixados, nem entram nos totais.">
+            <Checkbox checked={showIgnored} onCheckedChange={(v) => setShowIgnored(v === true)} />
+            Mostrar ignorados pela implantação
+          </label>
+        )}
       </div>
 
       {selectedRows.length > 0 && (
@@ -635,7 +648,13 @@ export default function AccountsPayable() {
                         />
                       </td>
                       <td className="px-2 py-1.5 align-middle">
-                        <ErpStatusBadge item={item} />
+                        {isIgnored(item) ? (
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600" title="Parcela com vencimento até a data de implantação de saldos: já tratada na implantação. Não é integrada, baixada nem contabilizada.">
+                            Ignorado — implantação
+                          </span>
+                        ) : (
+                          <ErpStatusBadge item={item} />
+                        )}
                         {item.retido_implantacao ? (
                           <span className="ml-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700" title="Retido pela implantação de saldos: não é integrado ao ERP até a liberação (Configurações → Implantação de Saldos).">Retido</span>
                         ) : null}

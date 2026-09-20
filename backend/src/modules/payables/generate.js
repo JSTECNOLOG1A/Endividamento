@@ -622,7 +622,9 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
     `SELECT * FROM payable_titles WHERE contract_id = $1 AND group_id = $2`,
     [contract.id, groupId]
   );
-  const active = existing.rows.filter((row) => row.status === "aberto");
+  // Título aberto, já baixado ou ignorado pela implantação conta como existente: só o cancelado (estornado) pode ser
+  // gerado de novo. Sem isso, a parcela paga voltava como um novo título em aberto na sincronização seguinte.
+  const active = existing.rows.filter((row) => ["aberto", "baixado", "ignorado_implantacao"].includes(row.status));
   const existingKeys = new Set(
     active.map((row) => `${String(row.prefixo || "")}::${String(row.parcela || "")}`)
   );
