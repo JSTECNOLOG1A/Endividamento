@@ -22,8 +22,14 @@ remote() {
     "${USER}@${HOST}" "$@"
 }
 
-command -v rsync >/dev/null || die "rsync não encontrado"
 command -v git >/dev/null || die "git não encontrado"
+# Sem rsync (ex.: Git Bash no Windows): envia o commit com git archive + tar sobre ssh.
+if command -v rsync >/dev/null; then
+  USE_RSYNC=1
+else
+  USE_RSYNC=0
+  command -v tar >/dev/null || die "nem rsync nem tar encontrados"
+fi
 [[ -f "$SSH_KEY" ]] || die "chave SSH não encontrada: $SSH_KEY"
 
 if [[ "${ALLOW_DIRTY:-0}" != "1" ]]; then
@@ -51,6 +57,13 @@ info "Testando SSH ${USER}@${HOST} ..."
 remote "test -d '${REMOTE_PATH}' && test -f '${REMOTE_PATH}/.env.production'" \
   || die "VPS sem ${REMOTE_PATH} ou sem .env.production"
 
+if [[ "$USE_RSYNC" != "1" ]]; then
+  info "Sem rsync: enviando o commit ${COMMIT_SHORT} (git archive + tar; .env.production não é tocado)"
+  echo "AVISO: sem rsync, arquivos removidos do repositório não são apagados no VPS."
+  git archive --format=tar "$COMMIT" \
+    | remote "tar -x -C '${REMOTE_PATH}' --no-same-owner --overwrite" \
+    || die "falha ao enviar o commit por tar"
+else
 info "Rsync (sem .env.production)"
 rsync -az --delete \
   --exclude '.git/' \
@@ -70,6 +83,7 @@ rsync -az --delete \
   --exclude '.cursor/' \
   -e "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=accept-new -o BatchMode=yes" \
   "${ROOT}/" "${USER}@${HOST}:${REMOTE_PATH}/"
+fi
 
 STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 info "Gravando DEPLOYED_COMMIT"
