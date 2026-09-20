@@ -37,6 +37,7 @@ import {
   evaluateSettlementMateriality,
   calculateClosingReconciliation,
   buildOpeningEntries,
+  deploymentOpeningFromConfigs,
   buildJournalEntries,
   canApproveClosing,
 } from "@/lib/accountingClosing";
@@ -642,7 +643,9 @@ export default function FechamentoContabil({ entityId, entityName }) {
       } catch {
         // sem o parâmetro, vale a regra antiga
       }
-      const reconciliation = calculateClosingReconciliation(contracts, settlementsByContract, year, month, dataBase, { requireSettlementFrom });
+      const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
+      const deploymentOpening = deploymentOpeningFromConfigs(deploymentConfigs.filter((cfg) => String(cfg.data_virada || "").slice(0, 7) === monthPrefix));
+      const reconciliation = calculateClosingReconciliation(contracts, settlementsByContract, year, month, dataBase, { requireSettlementFrom, deploymentOpening });
       setCalcResult(reconciliation);
       const nextStatus = reconciliation.hasBlockingDivergence ? "divergencia" : "calculado";
       await base44.entities.AccountingClosing.update(activeClosing.id, {

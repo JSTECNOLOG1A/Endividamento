@@ -50,3 +50,12 @@ Decisão (19/09/2026): **sem T9**. Os títulos antigos dos empréstimos são exc
 3. Pagar no Protheus; a consulta ao ERP (manual ou pelo Agendamento) traz a baixa **com a data real**; o fechamento atribui o pagamento ao mês dessa data. Baixa manual em Contas a Pagar continua valendo para o que não tiver retorno.
 
 Ajustes feitos: retorno da baixa guarda data e origem (`baixa_data`, `baixa_origem`); baixas derivadas incluem parcelas pagas em atraso (sem limite inferior de vencimento) e usam a data real; parcela do título ("013") e do cronograma (13) passam a casar (o vínculo não funcionava para baixas derivadas); "Aplicar" é recusado se o fechamento da competência da virada já estiver aprovado; recusa do Protheus por tipo de título (E2_TIPO) mostra o que fazer (cadastrar o tipo na SX5, tabela 05, ou ajustar Parâmetros → Financeiro). Teste ponta a ponta do fechamento automático postando a abertura passou (idempotente).
+
+## Posição em USD pela PTAX da data-base
+
+Contrato em moeda estrangeira: a posição de abertura é apurada em USD (cronograma em moeda, sem o bloco contábil em reais) e convertida pela **PTAX da data-base** — cotação mais recente até a data-base (fim de semana/feriado usa a anterior), no máximo 7 dias de defasagem. O passivo em moeda estrangeira é remensurado na data de fechamento; a PTAX das linhas do cronograma deixa de ser usada aqui.
+- Sem PTAX até 7 dias antes da data-base: a prévia sinaliza "sem PTAX da data-base" e a **aprovação é recusada** até cadastrar a cotação em Moedas.
+- A fotografia aprovada guarda moeda, PTAX, data da PTAX e a posição em moeda (`positionForeign`).
+- Testes: 7 casos USD em `npm run test:deployment`.
+- **Ajuste cambial da virada (USD).** A abertura é lançada pela PTAX da data-base, mas o motor mede a variação cambial da virada a partir da PTAX das próprias linhas do cronograma. A diferença entre os dois pontos de partida vira um evento de variação cambial (`implantacao-cambial`) na competência da virada; sem ele o passivo lançado ficava distante do saldo apurado (achado na simulação com contrato USD no Cangaia local: R$ 11.000 = saldo em USD × diferença de PTAX). Vale só para contrato em moeda estrangeira; a matriz precisa ter as contas de variação cambial (ativa/passiva).
+- Fechamento da competência da virada só aprova se as competências anteriores da entidade estiverem aprovadas (regra já existente do fechamento).

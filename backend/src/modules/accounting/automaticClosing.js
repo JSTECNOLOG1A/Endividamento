@@ -19,6 +19,7 @@ import { resolveParameter } from "../parameters/service.js";
 import {
   calculateClosingReconciliation,
   buildOpeningEntries,
+  deploymentOpeningFromConfigs,
   buildJournalEntries,
   canApproveClosing,
 } from "./closingEngine.js";
@@ -182,9 +183,15 @@ async function closeEntityForCompetencia(entity, competencia) {
   const settlementFromRaw = String((await resolveParameter("accounting.settlement_required_from", { groupId })) || "").trim();
   const requireSettlementFrom = /^\d{4}-\d{2}-\d{2}$/.test(settlementFromRaw) ? settlementFromRaw : "";
 
+  // Abertura da implantação de saldos: configuração aplicada cuja virada cai nesta competência.
+  const deployResult = await pool.query(
+    `SELECT * FROM balance_deployment_configs
+      WHERE entity_id = $1 AND group_id = $2 AND status = 'aplicada' AND data_virada >= $3::date AND data_virada <= $4::date`,
+    [entity.id, groupId, competencia.start, competencia.end]
+  );
   const reconciliation = calculateClosingReconciliation(
     contracts, settlementsByContract, competencia.year, competencia.month, competencia.end,
-    { requireSettlementFrom }
+    { requireSettlementFrom, deploymentOpening: deploymentOpeningFromConfigs(deployResult.rows) }
   );
 
   const mappingsResult = await pool.query(
@@ -201,12 +208,6 @@ async function closeEntityForCompetencia(entity, competencia) {
   );
   const bankAccountsById = new Map(bankAccountsResult.rows.map((a) => [a.id, a]));
 
-  // Abertura da implantação de saldos: configuração aplicada cuja virada cai nesta competência.
-  const deployResult = await pool.query(
-    `SELECT * FROM balance_deployment_configs
-      WHERE entity_id = $1 AND group_id = $2 AND status = 'aplicada' AND data_virada >= $3::date AND data_virada <= $4::date`,
-    [entity.id, groupId, competencia.start, competencia.end]
-  );
   const openingEntries = deployResult.rows.flatMap((cfg) => {
     let snap = cfg.position_snapshot;
     if (typeof snap === "string") { try { snap = JSON.parse(snap); } catch { snap = null; } }

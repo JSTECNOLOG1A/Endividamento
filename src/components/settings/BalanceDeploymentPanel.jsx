@@ -373,6 +373,10 @@ export default function BalanceDeploymentPanel() {
                               {c.contractNumber}
                             </button>
                             {open ? <span className="ml-2 text-[10px] text-amber-700">{open} vencida(s) em aberto</span> : null}
+                            {c.ptax ? (
+                              <span className="ml-2 text-[10px] text-slate-500">{c.currency} · PTAX {Number(c.ptax).toLocaleString("pt-BR", { minimumFractionDigits: 4 })} ({String(c.ptaxDate || "").split("-").reverse().join("/")})</span>
+                            ) : null}
+                            {c.missingPtax ? <span className="ml-2 text-[10px] font-medium text-red-600">sem PTAX da data-base</span> : null}
                             {c.warnings?.length ? (
                               <span title={c.warnings.join("\n")} className="ml-2 inline-flex items-center text-amber-600"><AlertTriangle className="w-3 h-3" /></span>
                             ) : null}

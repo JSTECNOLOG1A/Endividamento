@@ -94,6 +94,22 @@ function isoOf(dateObj) {
 }
 
 /**
+ * Posição aprovada de cada contrato nas implantações cuja virada cai na competência: { [contractId]: {principal, interest} }.
+ * Usada para o ajuste cambial da virada de contratos em moeda estrangeira.
+ */
+export function deploymentOpeningFromConfigs(configs = []) {
+  const out = {};
+  for (const cfg of configs) {
+    let snap = cfg.position_snapshot;
+    if (typeof snap === "string") { try { snap = JSON.parse(snap); } catch { snap = null; } }
+    for (const c of snap?.contratos || []) {
+      out[c.contractId] = { principal: Number(c.position?.principalTotal) || 0, interest: Number(c.position?.jurosTotal) || 0 };
+    }
+  }
+  return out;
+}
+
+/**
  * Concilia um contrato numa competência.
  *
  * Regras (validadas com o responsável — ver plano de virada de saldos):
@@ -284,6 +300,19 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
   const push = (type, amount, date, origin, extra = {}) => {
     result.events.push({ type, amount, date, key: eventKey(contract.id, type, date, origin), ...extra });
   };
+
+  // Implantação em moeda estrangeira: a abertura foi lançada pela PTAX da data-base, e o cronograma mede a
+  // variação cambial da virada a partir da PTAX das suas próprias linhas. A diferença entre os dois pontos de
+  // partida é ajuste cambial da competência da virada — sem ele o passivo lançado não fecha no saldo apurado.
+  const depOpen = options.deploymentOpening && options.deploymentOpening[contract.id];
+  if (cutoffIso && contract.currency_id && depOpen) {
+    const [cy, cm, cd] = cutoffIso.split("-").map(Number);
+    const atCutoff = snapshotAt(new Date(cy, cm - 1, cd, 23, 59, 59, 999));
+    const delta = r2((atCutoff.principal + atCutoff.interest) - (depOpen.principal + depOpen.interest));
+    if (Math.abs(delta) >= 0.01) {
+      push(delta > 0 ? SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_PASSIVA : SETTLEMENT_EVENT_TYPES.VARIACAO_CAMBIAL_ATIVA, r2(Math.abs(delta)), isoOf(monthStart), "implantacao-cambial");
+    }
+  }
 
   // Liberação, IOF e custo de transação: na data da operação.
   if (liberationDate >= monthStart && liberationDate <= monthEnd) {

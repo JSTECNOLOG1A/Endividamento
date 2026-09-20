@@ -1,6 +1,7 @@
 // Posição de abertura da Implantação de Saldos (sem banco). Rodar: npm run test:deployment
 import { calculateAmortizationSchedule } from "../../engine/CalculationEngine.js";
 import { computeDeploymentPosition, isLastDayOfMonthIso } from "./deploymentPosition.js";
+import { reconcileContractForCompetencia } from "./closingEngine.js";
 
 const r2 = (v) => Math.round(v * 100) / 100;
 let failures = 0;
@@ -52,6 +53,46 @@ const l = computeDeploymentPosition(lc, CUT, []);
 const within12 = long.schedule.filter((r) => r.dataVencimento > CUT && r.dataVencimento <= "2027-08-31").reduce((s, r) => s + r.amortizacao, 0);
 check("circulante = amortizações que vencem até data-base + 12 meses", Math.abs(l.position.principalCP - within12) < 0.1, `${l.position.principalCP} x ${r2(within12)}`);
 check("não circulante = o restante", l.position.principalLP > 0 && Math.abs(l.position.principalCP + l.position.principalLP - l.position.principalTotal) < 0.01);
+
+console.log("\n== Contrato em USD: posição em reais pela PTAX da data-base");
+const usdRates = [];
+for (let t = new Date(Date.UTC(2024, 0, 2)); t < new Date(Date.UTC(2028, 0, 1)); t = new Date(t.getTime() + 86400000)) {
+  const i = Math.round((t - new Date(Date.UTC(2024, 0, 2))) / 86400000);
+  usdRates.push({ rate_date: t.toISOString().slice(0, 10), ptax_rate: r2(5 + 0.0007 * i), source: "teste" });
+}
+const usdParams = { ...base, operationValue: 1000000, currencyId: "cur_usd", amount_foreign: 200000, exchange_rate_closing: 5, exchangeLag: 1, exchangeRates: usdRates,
+  fixedRate: 8, operationDate: "2024-01-10", firstPaymentDate: "2024-02-10", first_payment_date: "2024-02-10", principalInstallments: 36, interestInstallments: 36,
+  principalFrequency: 1, interestFrequency: 1, calculationSystem: "SAC", totalTermMonths: 36, finalMaturityDate: "2027-01-10", graceInterestBehavior: "PAGAR" };
+const usd = await calculateAmortizationSchedule(usdParams);
+const usdContract = { id: "u", contract_number: "USD", operation_date: "2024-01-10", currency_id: "cur_usd", amount_foreign: 200000, schedule_data: JSON.stringify({ schedule: usd.schedule }) };
+const lastUsd = usd.schedule.filter((r) => r.dataVencimento <= CUT).at(-1);
+const PTAX = 5.4321;
+const u = computeDeploymentPosition(usdContract, CUT, [], { ptax: PTAX, ptaxDate: "2026-08-31" });
+check("USD: principal em reais = saldo em USD da última parcela × PTAX da data-base", Math.abs(u.position.principalTotal - lastUsd.sdFinal_USD * PTAX) < 0.5, `${u.position.principalTotal} x ${r2(lastUsd.sdFinal_USD * PTAX)}`);
+check("USD: não usa a PTAX das linhas do cronograma", Math.abs(u.position.principalTotal - lastUsd.sdFinal) > 1);
+check("USD: posição em moeda e PTAX registradas", u.ptax === PTAX && Math.abs(u.positionForeign.principalTotal - lastUsd.sdFinal_USD) < 0.1);
+check("USD: total = principal + juros e CP + LP = total", Math.abs(u.position.total - (u.position.principalTotal + u.position.jurosTotal)) < 0.02 && Math.abs(u.position.principalCP + u.position.principalLP - u.position.principalTotal) < 0.02);
+const u2 = computeDeploymentPosition(usdContract, CUT, [], { ptax: PTAX * 2, ptaxDate: "2026-08-31" });
+check("USD: dobrar a PTAX dobra a posição em reais", Math.abs(u2.position.total - 2 * u.position.total) < 0.05);
+const uOpen = computeDeploymentPosition(usdContract, CUT, [String(lastUsd.parcela)], { ptax: PTAX });
+check("USD: parcela vencida em aberto soma a amortização em USD × PTAX", Math.abs(uOpen.position.principalVencido - lastUsd.amortizacao_USD * PTAX) < 0.05, `${uOpen.position.principalVencido}`);
+const noPtax = computeDeploymentPosition(usdContract, CUT, [], {});
+check("USD sem PTAX da data-base: sinaliza para bloquear a aprovação", noPtax.missingPtax === true && noPtax.warnings.some((w) => w.includes("PTAX da data-base ausente")));
+
+console.log("\n== USD: o passivo lançado na virada fecha no saldo apurado (ajuste cambial da virada)");
+{
+  const depContract = { ...usdContract, deployment_mode: true, deployment_cutoff: CUT, deployment_open_parcelas: [] };
+  const pos = computeDeploymentPosition(usdContract, CUT, [], { ptax: 5.9, ptaxDate: CUT }).position;
+  const opening = { principal: pos.principalTotal, interest: pos.jurosTotal };
+  const rec = reconcileContractForCompetencia(depContract, 2026, 9, [], { deploymentOpening: { [usdContract.id]: opening } });
+  const sum = (types) => rec.events.filter((e) => types.includes(e.type)).reduce((t, e) => t + e.amount, 0);
+  const flows = sum(["juros_apropriados", "variacao_cambial_passiva"]) - sum(["pagamento_principal", "pagamento_juros", "variacao_cambial_ativa"]);
+  const closingTotal = rec.closing.principal + rec.closing.interest;
+  check("USD: razão (abertura pela PTAX da data-base + movimentos) = saldo do motor", Math.abs(opening.principal + opening.interest + flows - closingTotal) < 0.05, `${r2(opening.principal + opening.interest + flows)} x ${r2(closingTotal)}`);
+  const recSem = reconcileContractForCompetencia(depContract, 2026, 9, []);
+  check("USD: sem a abertura informada não há ajuste (comportamento anterior)", !recSem.events.some((e) => String(e.key).includes("implantacao-cambial")));
+  check("USD: com a abertura há evento de ajuste cambial da virada", rec.events.some((e) => String(e.key).includes("implantacao-cambial")));
+}
 
 console.log("\n== Sem duplicidade e sem efeito colateral");
 const again = computeDeploymentPosition(contract, CUT, []);

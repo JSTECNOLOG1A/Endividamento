@@ -32,6 +32,21 @@ function parseOpen(value) {
   return Array.isArray(v) ? v.map((p) => String(p)) : [];
 }
 
+// PTAX da data-base para contratos em moeda estrangeira: a cotação mais recente até a data-base (fim de
+// semana e feriado usam a última cotação anterior), aceitando no máximo 7 dias de defasagem.
+async function loadDataBasePtax(currencyId, dataBase) {
+  const code = (await pool.query(`SELECT currency_code FROM currencies WHERE id = $1`, [currencyId])).rows[0]?.currency_code;
+  if (!code) return null;
+  const found = await pool.query(
+    `SELECT exchange_rate, rate_date FROM currencies
+      WHERE currency_code = $1 AND (group_id = $2 OR group_id IS NULL) AND rate_date <= $3::date AND rate_date >= $3::date - 7
+      ORDER BY rate_date DESC, group_id NULLS LAST LIMIT 1`,
+    [code, groupIdOrThrow(), dataBase]
+  );
+  const row = found.rows[0];
+  return row ? { ptax: Number(row.exchange_rate), ptaxDate: iso(row.rate_date), code } : null;
+}
+
 /**
  * Prévia da posição de abertura, por contrato, na data-base. Só leitura.
  * openParcelasByContract: { [contractId]: ["27","28"] } — parcelas até a data-base ainda em aberto.
@@ -66,13 +81,18 @@ export async function previewBalanceDeployment(payload = {}) {
       continue;
     }
     const open = openParcelasByContract[c.id] !== undefined ? openParcelasByContract[c.id].map(String) : parseOpen(c.deployment_open_parcelas);
-    const calc = computeDeploymentPosition(c, dataBase, open);
+    const fx = c.currency_id ? await loadDataBasePtax(c.currency_id, dataBase) : null;
+    const calc = computeDeploymentPosition(c, dataBase, open, fx || {});
     items.push({
       contractId: c.id,
       contractNumber: c.contract_number,
       operationDate: opDate,
       operationValue: Number(c.operation_value) || 0,
-      currency: c.currency_id || "BRL",
+      currency: fx?.code || (c.currency_id ? "MOEDA" : "BRL"),
+      ptax: calc.ptax ?? null,
+      ptaxDate: calc.ptaxDate ?? null,
+      positionForeign: calc.positionForeign ?? null,
+      missingPtax: Boolean(calc.missingPtax),
       inDeployment: Boolean(c.deployment_mode),
       openParcelas: open,
       parcelasAteDataBase: calc.parcelasAteDataBase,
@@ -131,6 +151,8 @@ export async function approveBalanceDeployment(payload = {}) {
   if (!preview.contracts.length) throw httpError(400, "Nenhum contrato aprovado entra na posição desta data-base");
   const blocking = preview.contracts.filter((c) => c.warnings.some((w) => w.startsWith("Saldo negativo")));
   if (blocking.length) throw httpError(400, `Revise antes de aprovar: saldo negativo em ${blocking.map((c) => c.contractNumber).join(", ")}`);
+  const noPtax = preview.contracts.filter((c) => c.missingPtax);
+  if (noPtax.length) throw httpError(400, `Sem PTAX da data-base (${dataBase}) para: ${noPtax.map((c) => c.contractNumber).join(", ")}. Cadastre a cotação em Moedas e aprove novamente.`);
 
   const snapshot = {
     aprovadoEm: new Date().toISOString(),
@@ -141,6 +163,7 @@ export async function approveBalanceDeployment(payload = {}) {
     parametros: { regraCircularCP: "data-base + 12 meses (CPC 26)", juros: "rateio por dias corridos no período de cada parcela" },
     contratos: preview.contracts.map((c) => ({
       contractId: c.contractId, contractNumber: c.contractNumber, openParcelas: c.openParcelas, position: c.position, warnings: c.warnings,
+      ...(c.ptax ? { currency: c.currency, ptax: c.ptax, ptaxDate: c.ptaxDate, positionForeign: c.positionForeign } : {}),
     })),
     totals: preview.totals,
   };
