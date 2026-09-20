@@ -40,7 +40,7 @@ const EVENT_REFERENCE = [
     color: "bg-red-50 text-red-700",
     items: [
       {
-        label: "Juros apropriados (competência)",
+        label: "Provisão de juros (competência)",
         timing: "Mensal, até o último dia do mês",
         note: "Reconhece o juro acumulado até o fim do mês (rateado por dias corridos dentro do período de cada parcela), mesmo antes de pago — regime de competência. Não gera título no financeiro: o título de juros segue com o valor cheio no vencimento.",
       },

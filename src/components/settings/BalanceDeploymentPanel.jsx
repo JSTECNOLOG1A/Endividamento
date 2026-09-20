@@ -23,8 +23,8 @@ const ACCOUNT_FIELDS = [
 const CATEGORY_PARTS = [
   { key: "principal_cp", label: "Principal — circulante" },
   { key: "principal_lp", label: "Principal — não circulante" },
-  { key: "juros_cp", label: "Juros a pagar — circulante" },
-  { key: "juros_lp", label: "Juros a pagar — não circulante" },
+  { key: "juros_cp", label: "Provisão de juros — circulante" },
+  { key: "juros_lp", label: "Provisão de juros — não circulante" },
 ];
 
 function parseJson(value) {
@@ -169,9 +169,14 @@ export default function BalanceDeploymentPanel() {
     const find = (type) => mappings.find((m) => m.event_type === type && (m.operation_category || "emprestimos") === category && m.status !== "inativo");
     const p = find("reclassificacao_circulante_principal");
     const j = find("reclassificacao_circulante_juros");
+    const accrual = find("juros_apropriados");
     return {
       principal_lp: p?.debit_account_id || "", principal_cp: p?.credit_account_id || "",
-      juros_lp: j?.debit_account_id || "", juros_cp: j?.credit_account_id || "",
+      // Juros a pagar circulante: a reclassificação de juros; sem ela, a conta de crédito dos juros apropriados
+      // (é onde os juros a pagar ficam registrados). Não circulante: a reclassificação de juros; sem ela, a conta
+      // de principal não circulante (os juros a pagar quase sempre vencem em até 12 meses).
+      juros_cp: j?.credit_account_id || accrual?.credit_account_id || "",
+      juros_lp: j?.debit_account_id || p?.debit_account_id || "",
     };
   };
   const fillFromMatrix = (category, overwrite = false) => {

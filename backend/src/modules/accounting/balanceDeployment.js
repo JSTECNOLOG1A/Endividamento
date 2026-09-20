@@ -154,7 +154,9 @@ export async function approveBalanceDeployment(payload = {}) {
     const accs = resolveOpeningAccounts(cfg, cat.category);
     if (!accs) throw httpError(400, `Defina as quatro contas de passivo de ${cat.label} (principal e juros, circulante e não circulante) antes de aprovar`);
     const ids = Object.values(accs);
-    if (new Set(ids).size !== ids.length) throw httpError(400, `As quatro contas de ${cat.label} devem ser diferentes entre si`);
+    // Principal e juros podem ficar na mesma conta de passivo (é comum); circulante e não circulante não.
+    if (accs.principalCP === accs.principalLP) throw httpError(400, `Em ${cat.label}, o principal circulante e o não circulante devem ser contas diferentes`);
+    if (accs.jurosCP === accs.jurosLP) throw httpError(400, `Em ${cat.label}, os juros a pagar circulante e não circulante devem ser contas diferentes`);
     if (ids.includes(cfg.transitoria_account_id)) throw httpError(400, `A conta transitória não pode ser uma das contas de ${cat.label}`);
     ids.forEach((id) => usedAccounts.add(id));
     frozenCategories[cat.category] = { principal_cp: accs.principalCP, principal_lp: accs.principalLP, juros_cp: accs.jurosCP, juros_lp: accs.jurosLP };

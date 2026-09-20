@@ -65,7 +65,7 @@ Contrato em moeda estrangeira: a posição de abertura é apurada em USD (cronog
 A abertura não usa mais um único par circulante/não circulante para todos os contratos. Cada categoria de operação presente nos contratos da empresa (empréstimos, financiamentos, mútuos...) tem quatro contas de passivo: principal circulante, principal não circulante, juros a pagar circulante e juros a pagar não circulante. A conta transitória continua única.
 - Cada contrato é lançado nas contas da sua categoria (`operation_category`); o lançamento de abertura, a conciliação e o razão seguem essa classificação.
 - As contas vêm sugeridas pela Lógica Contábil: na matriz, a reclassificação circulante/não circulante de cada categoria já tem as contas (débito = não circulante, crédito = circulante), do principal e dos juros. A tela preenche as vazias e há o botão "Preencher pela Lógica Contábil" por categoria.
-- A aprovação exige as quatro contas de cada categoria presente, diferentes entre si e da transitória, todas analíticas. As contas ficam congeladas na fotografia (`contas.categorias`).
+- A aprovação exige as quatro contas de cada categoria presente, todas analíticas e diferentes da transitória; circulante e não circulante (do principal e dos juros) devem ser contas diferentes, mas principal e juros podem usar a mesma conta de passivo (comum, e é o caso do Cangaia: juros apropriados e principal circulante na mesma conta). As contas ficam congeladas na fotografia (`contas.categorias`).
 - Configurações antigas (quatro colunas únicas) continuam valendo para a categoria sem contas próprias. Migration 069 (`category_accounts`).
 
 ## Baixa efetiva como regra padrão do fechamento (pagamento só lança se foi baixado)
@@ -86,3 +86,7 @@ Ao aplicar a implantação, os títulos do contrato com vencimento até a data-b
 - As parcelas informadas como vencidas em aberto e as futuras seguem normais (retidas até a liberação).
 - Cenário previsto: a implantação é feita do zero, em etapa única, com a exclusão dos títulos antigos no Protheus na virada.
 - Correção junto: a geração de títulos só considerava "existente" o título aberto — a parcela já baixada voltava como novo título em aberto na sincronização seguinte. Agora aberto, baixado e ignorado contam como existentes (só o cancelado/estornado pode ser gerado de novo). Migration 070.
+
+- Sugestão dos juros: reclassificação de juros da matriz; sem ela, o crédito de "juros apropriados" (circulante) e a conta de principal não circulante (não circulante).
+- Nome na tela e no histórico da abertura: "Provisão de juros" (circulante / não circulante), o mesmo vocabulário da Lógica Contábil, em vez de "juros a pagar".
+- O evento `juros_apropriados` passou a se chamar "Provisão de juros (competência)" na Lógica Contábil e no histórico dos lançamentos mensais (só o rótulo; o comportamento e as contas não mudam).

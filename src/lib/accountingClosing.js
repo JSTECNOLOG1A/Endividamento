@@ -57,7 +57,7 @@ export const SETTLEMENT_EVENT_TYPES = {
 
 export const EVENT_TYPE_LABELS = {
   liberacao: "Liberação do empréstimo",
-  juros_apropriados: "Juros apropriados (competência)",
+  juros_apropriados: "Provisão de juros (competência)",
   pagamento_principal: "Pagamento de principal",
   pagamento_juros: "Pagamento de juros",
   variacao_cambial_passiva: "Variação cambial passiva (provisão)",
@@ -803,15 +803,15 @@ export const OPENING_EVENT_TYPE = "abertura_implantacao";
  * Lançamento de abertura da Implantação de Saldos: um lançamento por contrato, contra a conta
  * transitória, com os valores da FOTOGRAFIA aprovada (não recalcula nada).
  *   Débito  — conta transitória (total do contrato)
- *   Crédito — passivo principal circulante / não circulante e juros a pagar circulante / não circulante
+ *   Crédito — passivo principal circulante / não circulante e provisão de juros circulante / não circulante
  * A data do lançamento é a da virada. Cada linha tem chave de idempotência
  * (abertura|configuração|contrato|componente): lançar duas vezes não duplica.
  */
 const OPENING_ACCOUNT_PARTS = [
   ["principalCP", "principal_cp", "principal_cp_account_id", "principal circulante"],
   ["principalLP", "principal_lp", "principal_lp_account_id", "principal não circulante"],
-  ["jurosCP", "juros_cp", "juros_cp_account_id", "juros a pagar circulante"],
-  ["jurosLP", "juros_lp", "juros_lp_account_id", "juros a pagar não circulante"],
+  ["jurosCP", "juros_cp", "juros_cp_account_id", "provisão de juros circulante"],
+  ["jurosLP", "juros_lp", "juros_lp_account_id", "provisão de juros não circulante"],
 ];
 
 /**
