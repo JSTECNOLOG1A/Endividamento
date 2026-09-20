@@ -95,7 +95,8 @@ export function sanitizeValue(value, key = "") {
   if (SECRET_KEYS.test(key)) return "[oculto]";
   if (value == null) return null;
   if (typeof value === "string") {
-    if (value.length > 400) return `${value.slice(0, 400)}…`;
+    const limit = key === "message" || key === "erp_mensagem" || key === "registro" ? 800 : 400;
+    if (value.length > limit) return `${value.slice(0, limit)}…`;
     return value;
   }
   if (typeof value === "number" || typeof value === "boolean") return value;
@@ -214,13 +215,44 @@ function clip(text, size = 90) {
   return value.length > size ? `${value.slice(0, size)}…` : value;
 }
 
+/** Extrai a mensagem de falha do ERP gravada no after_json da auditoria. */
+export function extractErpError(after) {
+  if (!after || typeof after !== "object") return null;
+  const failed = Number(after.failed) || 0;
+  const fromMessage = String(after.message || "").replace(/\s+/g, " ").trim();
+  if (fromMessage && (failed > 0 || /FINA|recus|falha|erro|E2_|SX5|Protheus|ERP/i.test(fromMessage))) {
+    return fromMessage;
+  }
+  if (Array.isArray(after.erros)) {
+    for (const item of after.erros) {
+      const text = String(item || "").replace(/\s+/g, " ").trim();
+      if (text) return text;
+    }
+  }
+  if (Array.isArray(after.titulos)) {
+    for (const row of after.titulos) {
+      if (row?.ok === false) {
+        const text = String(row.message || "").replace(/\s+/g, " ").trim();
+        if (text) return text;
+      }
+    }
+  }
+  return null;
+}
+
 export function sideSummary(action, before, after, changes, registro) {
+  const erpError = extractErpError(after);
+  if (erpError) {
+    const failed = Number(after?.failed) || 0;
+    const prefix = failed > 0 ? `${failed} com falha · ` : "Falha · ";
+    return { de: "—", para: clip(`${prefix}${erpError}`, 240) };
+  }
   if (after?.resumo) {
-    return { de: before ? clip(registro) : "—", para: clip(after.resumo) };
+    return { de: before ? clip(registro) : "—", para: clip(after.resumo, 160) };
   }
   if (Array.isArray(after?.titulos) && after.titulos.length) {
     const labels = after.titulos.map((row) => row.label || row.id).filter(Boolean);
-    return { de: "—", para: clip(labels.join(", ")) };
+    return { de: "—", para: clip(labels.join(", "), 160) };
   }
   if (action === "CREATE" || action === "BULK_CREATE") {
     return { de: "—", para: clip(registro) };
@@ -236,7 +268,7 @@ export function sideSummary(action, before, after, changes, registro) {
       para: clip(`${first.campo}: ${first.para}${extra}`),
     };
   }
-  if (after?.message) return { de: "—", para: clip(after.message) };
+  if (after?.message) return { de: "—", para: clip(after.message, 240) };
   if (action === "LOGIN") return { de: "—", para: clip(registro || after?.email) };
   if (action === "LOGOUT") return { de: clip(registro), para: "—" };
   return {

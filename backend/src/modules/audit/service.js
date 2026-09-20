@@ -1,5 +1,5 @@
 import { pool } from "../../db/pool.js";
-import { actionLabel, diffRecords, sideSummary } from "./format.js";
+import { actionLabel, diffRecords, sideSummary, extractErpError } from "./format.js";
 import { scopedGroupSql } from "../tenants/access.js";
 
 function parseJson(value) {
@@ -21,12 +21,31 @@ function boundDate(value, endOfDay = false) {
   return text;
 }
 
+function clipRegistro(text, size = 220) {
+  const value = String(text || "").trim();
+  if (!value) return "—";
+  return value.length > size ? `${value.slice(0, size)}…` : value;
+}
+
 export function toPublic(row) {
   const before = parseJson(row.before_json);
   const after = parseJson(row.after_json);
   const payload = parseJson(row.payload);
   const changes = diffRecords(before, after);
-  const registro = row.registro || row.resource_id || "—";
+  const erpError = extractErpError(after);
+  let registro = row.registro || row.resource_id || "—";
+  // Garante que a mensagem do ERP apareça no campo Registro (lista do log),
+  // inclusive em eventos antigos que só tinham o erro em after.titulos[].message.
+  if (erpError) {
+    const compact = erpError.slice(0, 80);
+    if (!String(registro).includes(compact)) {
+      const failed = Number(after?.failed) || 0;
+      const prefix = failed > 0
+        ? `${failed} ${failed === 1 ? "título com falha" : "títulos com falha"}`
+        : "Falha na integração";
+      registro = clipRegistro(`${prefix} · ${erpError}`, 280);
+    }
+  }
   const sides = sideSummary(row.action, before, after, changes, registro);
   return {
     id: row.id,
@@ -37,6 +56,7 @@ export function toPublic(row) {
     processingType: row.processing_type || "manual",
     rotina: row.rotina || row.resource_type,
     registro,
+    erpError: erpError || null,
     resourceType: row.resource_type,
     resourceId: row.resource_id,
     action: row.action,

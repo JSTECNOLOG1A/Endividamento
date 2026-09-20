@@ -337,14 +337,18 @@ export default function AuditLogPanel() {
                   {PROCESSING_LABELS[row.processingType] || row.processingType}
                 </TableCell>
                 <TableCell className="text-[11px]">{row.rotina}</TableCell>
-                <TableCell className="max-w-[180px] truncate text-[11px]" title={row.registro}>{row.registro}</TableCell>
+                <TableCell className={`max-w-[280px] text-[11px] ${row.erpError ? "text-rose-800 font-medium" : ""}`} title={row.registro}>
+                  <span className="line-clamp-3 whitespace-normal break-words">{row.registro}</span>
+                </TableCell>
                 <TableCell>
                   <Badge variant="outline" className={ACTION_BADGE[row.action] || "border-slate-200 bg-slate-50 text-slate-700"}>
                     {row.actionLabel}
                   </Badge>
                 </TableCell>
-                <TableCell className="max-w-[160px] truncate text-[11px] text-slate-600" title={row.de}>{row.de}</TableCell>
-                <TableCell className="max-w-[160px] truncate text-[11px] text-slate-600" title={row.para}>{row.para}</TableCell>
+                <TableCell className="max-w-[120px] truncate text-[11px] text-slate-600" title={row.de}>{row.de}</TableCell>
+                <TableCell className={`max-w-[280px] text-[11px] ${row.erpError ? "text-rose-700" : "text-slate-600"}`} title={row.para}>
+                  <span className="line-clamp-3 whitespace-normal break-words">{row.para}</span>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -379,6 +383,18 @@ export default function AuditLogPanel() {
                 <Detail label="Ação" value={selected.actionLabel} />
                 <Detail label="IP" value={selected.ipAddress || "—"} />
               </div>
+              {selected.erpError || selected.after?.message ? (
+                <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-900 whitespace-pre-wrap">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-rose-700">Mensagem do ERP</p>
+                  {selected.erpError || selected.after.message}
+                </div>
+              ) : null}
+              {Array.isArray(selected.after?.erros) && selected.after.erros.length > 1 ? (
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-700 whitespace-pre-wrap">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Outros erros</p>
+                  {selected.after.erros.slice(1).join("\n")}
+                </div>
+              ) : null}
 
               {affectedRecords(selected).length ? (
                 <div>
@@ -399,7 +415,7 @@ export default function AuditLogPanel() {
                               {item.label || [item.prefixo, item.numero || item.titulo_numero, item.parcela].filter(Boolean).join(" ") || item.id || "—"}
                             </TableCell>
                             <TableCell>{item.tipo || "—"}</TableCell>
-                            <TableCell className="text-[11px] text-slate-600">
+                            <TableCell className="max-w-[320px] whitespace-pre-wrap text-[11px] text-slate-600">
                               {item.message || (item.ok == null ? "—" : item.ok ? "Ok" : "Erro")}
                             </TableCell>
                           </TableRow>

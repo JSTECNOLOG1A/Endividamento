@@ -80,6 +80,13 @@ function refsFromResult(result) {
 }
 
 export function recordsLabel(records, fallback, result = {}) {
+  const failed = Number(result.failed) || 0;
+  const failMessages = uniqueFailMessages(records);
+  if (failed > 0 && failMessages.length) {
+    const err = clipText(failMessages[0], 180);
+    const countLabel = `${failed} ${failed === 1 ? "título com falha" : "títulos com falha"}`;
+    return `${countLabel} · ${err}`;
+  }
   if (records?.length) {
     const shown = records.slice(0, 6).map((row) => row.label).join(", ");
     const extra = records.length > 6 ? ` (+${records.length - 6})` : "";
@@ -91,6 +98,25 @@ export function recordsLabel(records, fallback, result = {}) {
     return `${count} ${Number(count) === 1 ? "registro" : "registros"} · ${fallback}`;
   }
   return fallback;
+}
+
+function uniqueFailMessages(records = []) {
+  const seen = new Set();
+  const out = [];
+  for (const row of records) {
+    if (row?.ok !== false) continue;
+    const message = String(row.message || "").replace(/\s+/g, " ").trim();
+    if (!message || seen.has(message)) continue;
+    seen.add(message);
+    out.push(message);
+  }
+  return out;
+}
+
+function clipText(text, size = 180) {
+  const value = String(text || "").trim();
+  if (!value) return "—";
+  return value.length > size ? `${value.slice(0, size)}…` : value;
 }
 
 function countsFrom(result = {}) {
@@ -126,13 +152,15 @@ export async function snapshotForAudit({ resourceType, result, payload, fallback
   }
   const counts = countsFrom(result);
   const registro = recordsLabel(records, fallbackLabel, { ...result, ...counts });
+  const failMessages = uniqueFailMessages(records);
   return {
     registro,
     after: {
       resumo: registro,
       ...counts,
-      message: result?.message || null,
+      message: failMessages[0] || result?.message || null,
       ok: result?.ok,
+      erros: failMessages.slice(0, 20),
       titulos: records.slice(0, 100),
     },
   };
