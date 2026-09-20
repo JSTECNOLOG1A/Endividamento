@@ -800,19 +800,42 @@ export const OPENING_EVENT_TYPE = "abertura_implantacao";
  * A data do lançamento é a da virada. Cada linha tem chave de idempotência
  * (abertura|configuração|contrato|componente): lançar duas vezes não duplica.
  */
+const OPENING_ACCOUNT_PARTS = [
+  ["principalCP", "principal_cp", "principal_cp_account_id", "principal circulante"],
+  ["principalLP", "principal_lp", "principal_lp_account_id", "principal não circulante"],
+  ["jurosCP", "juros_cp", "juros_cp_account_id", "juros a pagar circulante"],
+  ["jurosLP", "juros_lp", "juros_lp_account_id", "juros a pagar não circulante"],
+];
+
+/**
+ * Contas de passivo da abertura para uma categoria de operação: as da própria categoria
+ * (config.category_accounts, ou as congeladas na fotografia); sem elas, as quatro colunas antigas
+ * (uma conta para todas as categorias). Devolve null se faltar alguma das quatro.
+ */
+export function resolveOpeningAccounts(config, category, snapshot = null) {
+  const key = category || "emprestimos";
+  const parse = (v) => { if (typeof v === "string") { try { return JSON.parse(v); } catch { return null; } } return v || null; };
+  const own = (parse(snapshot?.contas?.categorias) || parse(config?.category_accounts) || {})[key];
+  if (own && OPENING_ACCOUNT_PARTS.every(([, k]) => own[k])) {
+    return Object.fromEntries(OPENING_ACCOUNT_PARTS.map(([part, k]) => [part, own[k]]));
+  }
+  if (config && OPENING_ACCOUNT_PARTS.every(([, , col]) => config[col])) {
+    return Object.fromEntries(OPENING_ACCOUNT_PARTS.map(([part, , col]) => [part, config[col]]));
+  }
+  return null;
+}
+
 export function buildOpeningEntries(config, snapshot) {
   if (!config || !snapshot?.contratos?.length) return [];
   const date = String(config.data_virada || "").slice(0, 10);
-  const parts = [
-    ["principalCP", config.principal_cp_account_id, "principal circulante"],
-    ["principalLP", config.principal_lp_account_id, "principal não circulante"],
-    ["jurosCP", config.juros_cp_account_id, "juros a pagar circulante"],
-    ["jurosLP", config.juros_lp_account_id, "juros a pagar não circulante"],
-  ];
   const entries = [];
   snapshot.contratos.forEach((c) => {
     const pos = c.position || {};
-    const credits = parts.map(([k, account, label]) => ({ k, account, label, amount: r2(pos[k]) })).filter((p) => p.amount > 0);
+    const accounts = resolveOpeningAccounts(config, c.operationCategory, snapshot);
+    if (!accounts) return;
+    const credits = OPENING_ACCOUNT_PARTS
+      .map(([part, , , label]) => ({ k: part, account: accounts[part], label, amount: r2(pos[part]) }))
+      .filter((p) => p.amount > 0);
     const total = r2(credits.reduce((s, p) => s + p.amount, 0));
     if (!total) return;
     const historico = `Abertura da implantação de saldos — contrato ${c.contractNumber}`;

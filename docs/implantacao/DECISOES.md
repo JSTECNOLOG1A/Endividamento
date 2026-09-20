@@ -59,3 +59,11 @@ Contrato em moeda estrangeira: a posição de abertura é apurada em USD (cronog
 - Testes: 7 casos USD em `npm run test:deployment`.
 - **Ajuste cambial da virada (USD).** A abertura é lançada pela PTAX da data-base, mas o motor mede a variação cambial da virada a partir da PTAX das próprias linhas do cronograma. A diferença entre os dois pontos de partida vira um evento de variação cambial (`implantacao-cambial`) na competência da virada; sem ele o passivo lançado ficava distante do saldo apurado (achado na simulação com contrato USD no Cangaia local: R$ 11.000 = saldo em USD × diferença de PTAX). Vale só para contrato em moeda estrangeira; a matriz precisa ter as contas de variação cambial (ativa/passiva).
 - Fechamento da competência da virada só aprova se as competências anteriores da entidade estiverem aprovadas (regra já existente do fechamento).
+
+## Contas da abertura por categoria (empréstimos x financiamentos)
+
+A abertura não usa mais um único par circulante/não circulante para todos os contratos. Cada categoria de operação presente nos contratos da empresa (empréstimos, financiamentos, mútuos...) tem quatro contas de passivo: principal circulante, principal não circulante, juros a pagar circulante e juros a pagar não circulante. A conta transitória continua única.
+- Cada contrato é lançado nas contas da sua categoria (`operation_category`); o lançamento de abertura, a conciliação e o razão seguem essa classificação.
+- As contas vêm sugeridas pela Lógica Contábil: na matriz, a reclassificação circulante/não circulante de cada categoria já tem as contas (débito = não circulante, crédito = circulante), do principal e dos juros. A tela preenche as vazias e há o botão "Preencher pela Lógica Contábil" por categoria.
+- A aprovação exige as quatro contas de cada categoria presente, diferentes entre si e da transitória, todas analíticas. As contas ficam congeladas na fotografia (`contas.categorias`).
+- Configurações antigas (quatro colunas únicas) continuam valendo para a categoria sem contas próprias. Migration 069 (`category_accounts`).

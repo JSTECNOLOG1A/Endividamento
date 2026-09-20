@@ -3,6 +3,7 @@ import { logger } from "../../logger.js";
 import { groupIdOrThrow } from "../tenants/access.js";
 import { actorEmail } from "../tenants/policy.js";
 import { computeDeploymentPosition, isLastDayOfMonthIso } from "./deploymentPosition.js";
+import { OPERATION_CATEGORY_LABELS, resolveOpeningAccounts } from "./closingEngine.js";
 import { markContractForDeployment, releaseDeploymentTitles } from "../payables/implantacao.js";
 
 function httpError(status, message) {
@@ -86,6 +87,7 @@ export async function previewBalanceDeployment(payload = {}) {
     items.push({
       contractId: c.id,
       contractNumber: c.contract_number,
+      operationCategory: c.operation_category || "emprestimos",
       operationDate: opDate,
       operationValue: Number(c.operation_value) || 0,
       currency: fx?.code || (c.currency_id ? "MOEDA" : "BRL"),
@@ -107,14 +109,18 @@ export async function previewBalanceDeployment(payload = {}) {
     jurosCP: sum("jurosCP"), jurosLP: sum("jurosLP"),
     principalVencido: sum("principalVencido"), jurosVencido: sum("jurosVencido"), total: sum("total"),
   };
+  // Categorias presentes (empréstimos, financiamentos...): cada uma tem as suas contas de passivo na abertura.
+  const categories = [...new Set(items.map((i) => i.operationCategory))].map((category) => ({
+    category,
+    label: OPERATION_CATEGORY_LABELS[category] || category,
+    contracts: items.filter((i) => i.operationCategory === category).length,
+  }));
   return {
-    entityId, entityName: entity.entity_name, dataBase, contracts: items, excluded, totals,
+    entityId, entityName: entity.entity_name, dataBase, contracts: items, excluded, totals, categories,
     // Lançamento de abertura previsto (T8 o executa): Débito na transitória, Crédito nas contas de passivo.
     entry: { debitoTransitoria: totals.total, creditos: { principalCP: totals.principalCP, principalLP: totals.principalLP, jurosCP: totals.jurosCP, jurosLP: totals.jurosLP } },
   };
 }
-
-const ACCOUNT_KEYS = ["principal_cp_account_id", "principal_lp_account_id", "juros_cp_account_id", "juros_lp_account_id", "transitoria_account_id"];
 
 async function loadConfig(configId) {
   const found = await pool.query(`SELECT * FROM balance_deployment_configs WHERE id = $1 AND group_id = $2`, [configId, groupIdOrThrow()]);
@@ -136,21 +142,29 @@ export async function approveBalanceDeployment(payload = {}) {
   const virada = iso(cfg.data_virada);
   if (!isLastDayOfMonthIso(dataBase)) throw httpError(400, "A data-base deve ser o último dia de um mês");
   if (!(virada > dataBase)) throw httpError(400, "A data da virada deve ser posterior à data-base");
-  const missing = ACCOUNT_KEYS.filter((k) => !cfg[k]);
-  if (missing.length) throw httpError(400, "Defina as cinco contas (passivo circulante e não circulante, juros a pagar circulante e não circulante, transitória) antes de aprovar");
-  if (new Set(ACCOUNT_KEYS.map((k) => cfg[k])).size !== ACCOUNT_KEYS.length) throw httpError(400, "As cinco contas devem ser diferentes entre si");
-
-  const accounts = await pool.query(
-    `SELECT id, account_type FROM chart_of_accounts WHERE id = ANY($1::text[]) AND group_id = $2`,
-    [ACCOUNT_KEYS.map((k) => cfg[k]), groupIdOrThrow()]
-  );
-  if (accounts.rows.length !== ACCOUNT_KEYS.length) throw httpError(400, "Alguma conta selecionada não existe neste cliente");
-  if (accounts.rows.some((a) => a.account_type === "sintetica")) throw httpError(400, "Use apenas contas analíticas");
-
   const preview = await previewBalanceDeployment({ entityId: cfg.entity_id, dataBase, openParcelasByContract });
   if (!preview.contracts.length) throw httpError(400, "Nenhum contrato aprovado entra na posição desta data-base");
   const blocking = preview.contracts.filter((c) => c.warnings.some((w) => w.startsWith("Saldo negativo")));
   if (blocking.length) throw httpError(400, `Revise antes de aprovar: saldo negativo em ${blocking.map((c) => c.contractNumber).join(", ")}`);
+  // Contas: transitória única + quatro contas de passivo por categoria presente nos contratos.
+  if (!cfg.transitoria_account_id) throw httpError(400, "Defina a conta transitória antes de aprovar");
+  const usedAccounts = new Set([cfg.transitoria_account_id]);
+  const frozenCategories = {};
+  for (const cat of preview.categories) {
+    const accs = resolveOpeningAccounts(cfg, cat.category);
+    if (!accs) throw httpError(400, `Defina as quatro contas de passivo de ${cat.label} (principal e juros, circulante e não circulante) antes de aprovar`);
+    const ids = Object.values(accs);
+    if (new Set(ids).size !== ids.length) throw httpError(400, `As quatro contas de ${cat.label} devem ser diferentes entre si`);
+    if (ids.includes(cfg.transitoria_account_id)) throw httpError(400, `A conta transitória não pode ser uma das contas de ${cat.label}`);
+    ids.forEach((id) => usedAccounts.add(id));
+    frozenCategories[cat.category] = { principal_cp: accs.principalCP, principal_lp: accs.principalLP, juros_cp: accs.jurosCP, juros_lp: accs.jurosLP };
+  }
+  const accountRows = await pool.query(
+    `SELECT id, account_type FROM chart_of_accounts WHERE id = ANY($1::text[]) AND group_id = $2`,
+    [[...usedAccounts], groupIdOrThrow()]
+  );
+  if (accountRows.rows.length !== usedAccounts.size) throw httpError(400, "Alguma conta selecionada não existe neste cliente");
+  if (accountRows.rows.some((a) => a.account_type === "sintetica")) throw httpError(400, "Use apenas contas analíticas");
   const noPtax = preview.contracts.filter((c) => c.missingPtax);
   if (noPtax.length) throw httpError(400, `Sem PTAX da data-base (${dataBase}) para: ${noPtax.map((c) => c.contractNumber).join(", ")}. Cadastre a cotação em Moedas e aprove novamente.`);
 
@@ -158,11 +172,11 @@ export async function approveBalanceDeployment(payload = {}) {
     aprovadoEm: new Date().toISOString(),
     aprovadoPor: actorEmail() || "sistema",
     dataBase, dataVirada: virada,
-    contas: Object.fromEntries(ACCOUNT_KEYS.map((k) => [k, cfg[k]])),
+    contas: { transitoria_account_id: cfg.transitoria_account_id, categorias: frozenCategories },
     // Parâmetros que produziram o saldo: mantém a fotografia reproduzível.
     parametros: { regraCircularCP: "data-base + 12 meses (CPC 26)", juros: "rateio por dias corridos no período de cada parcela" },
     contratos: preview.contracts.map((c) => ({
-      contractId: c.contractId, contractNumber: c.contractNumber, openParcelas: c.openParcelas, position: c.position, warnings: c.warnings,
+      contractId: c.contractId, contractNumber: c.contractNumber, operationCategory: c.operationCategory, openParcelas: c.openParcelas, position: c.position, warnings: c.warnings,
       ...(c.ptax ? { currency: c.currency, ptax: c.ptax, ptaxDate: c.ptaxDate, positionForeign: c.positionForeign } : {}),
     })),
     totals: preview.totals,

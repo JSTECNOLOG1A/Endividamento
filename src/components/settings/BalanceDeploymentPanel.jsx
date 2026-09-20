@@ -10,17 +10,27 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Combobox } from "@/components/ui/combobox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronDown, ChevronRight, AlertTriangle, Lock } from "lucide-react";
+import { OPERATION_CATEGORY_LABELS } from "@/lib/accountingClosing";
 
 const brl = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const dmy = (iso) => (iso ? iso.split("-").reverse().join("/") : "");
 
 const ACCOUNT_FIELDS = [
-  { key: "principal_cp_account_id", label: "Passivo — principal circulante" },
-  { key: "principal_lp_account_id", label: "Passivo — principal não circulante" },
-  { key: "juros_cp_account_id", label: "Juros a pagar — circulante" },
-  { key: "juros_lp_account_id", label: "Juros a pagar — não circulante" },
   { key: "transitoria_account_id", label: "Conta transitória (contrapartida da abertura)" },
 ];
+
+// Contas de passivo da abertura: quatro por categoria de operação (empréstimos, financiamentos...).
+const CATEGORY_PARTS = [
+  { key: "principal_cp", label: "Principal — circulante" },
+  { key: "principal_lp", label: "Principal — não circulante" },
+  { key: "juros_cp", label: "Juros a pagar — circulante" },
+  { key: "juros_lp", label: "Juros a pagar — não circulante" },
+];
+
+function parseJson(value) {
+  if (typeof value === "string") { try { return JSON.parse(value); } catch { return null; } }
+  return value || null;
+}
 
 const STATUS = {
   rascunho: { label: "Rascunho", cls: "bg-slate-100 text-slate-700" },
@@ -48,7 +58,7 @@ const RECON_STATUS = {
   divergente: { label: "Divergente", cls: "bg-rose-50 text-rose-700" },
 };
 
-const emptyForm = { data_base: "", data_virada: "", principal_cp_account_id: "", principal_lp_account_id: "", juros_cp_account_id: "", juros_lp_account_id: "", transitoria_account_id: "" };
+const emptyForm = { data_base: "", data_virada: "", transitoria_account_id: "", category_accounts: {} };
 
 export default function BalanceDeploymentPanel() {
   const queryClient = useQueryClient();
@@ -80,6 +90,12 @@ export default function BalanceDeploymentPanel() {
     enabled: !!entityId,
     initialData: [],
   });
+  const { data: mappings = [] } = useQuery({
+    queryKey: ["deployment-mappings", entityId],
+    queryFn: () => base44.entities.AccountingEventMapping.filter({ entity_id: entityId }, "", 1000),
+    enabled: !!entityId,
+    initialData: [],
+  });
   const cfg = configs[0] || null;
   const status = cfg?.status || "rascunho";
   const locked = status !== "rascunho";
@@ -97,11 +113,8 @@ export default function BalanceDeploymentPanel() {
       setForm({
         data_base: String(cfg.data_base || "").slice(0, 10),
         data_virada: String(cfg.data_virada || "").slice(0, 10),
-        principal_cp_account_id: cfg.principal_cp_account_id || "",
-        principal_lp_account_id: cfg.principal_lp_account_id || "",
-        juros_cp_account_id: cfg.juros_cp_account_id || "",
-        juros_lp_account_id: cfg.juros_lp_account_id || "",
         transitoria_account_id: cfg.transitoria_account_id || "",
+        category_accounts: parseJson(cfg.category_accounts) || {},
       });
       let snap = cfg.position_snapshot;
       if (typeof snap === "string") { try { snap = JSON.parse(snap); } catch { snap = null; } }
@@ -144,6 +157,32 @@ export default function BalanceDeploymentPanel() {
     if (k === "data_base" && (!prev.data_virada || prev.data_virada <= v)) next.data_virada = nextDay(v);
     return next;
   });
+
+  const setCategoryAccount = (category, key, value) => setForm((prev) => ({
+    ...prev,
+    category_accounts: { ...(prev.category_accounts || {}), [category]: { ...((prev.category_accounts || {})[category] || {}), [key]: value } },
+  }));
+
+  // Sugestão pela Lógica Contábil: na matriz, a reclassificação circulante/não circulante de cada categoria
+  // já tem as contas de passivo (débito = não circulante, crédito = circulante), do principal e dos juros.
+  const suggestFromMatrix = (category) => {
+    const find = (type) => mappings.find((m) => m.event_type === type && (m.operation_category || "emprestimos") === category && m.status !== "inativo");
+    const p = find("reclassificacao_circulante_principal");
+    const j = find("reclassificacao_circulante_juros");
+    return {
+      principal_lp: p?.debit_account_id || "", principal_cp: p?.credit_account_id || "",
+      juros_lp: j?.debit_account_id || "", juros_cp: j?.credit_account_id || "",
+    };
+  };
+  const fillFromMatrix = (category, overwrite = false) => {
+    const sug = suggestFromMatrix(category);
+    setForm((prev) => {
+      const cur = (prev.category_accounts || {})[category] || {};
+      const next = { ...cur };
+      CATEGORY_PARTS.forEach(({ key }) => { if (sug[key] && (overwrite || !cur[key])) next[key] = sug[key]; });
+      return { ...prev, category_accounts: { ...(prev.category_accounts || {}), [category]: next } };
+    });
+  };
 
   const toggleParcela = (contractId, parcela) => {
     if (locked) return;
@@ -235,7 +274,22 @@ export default function BalanceDeploymentPanel() {
   let snapshot = cfg?.position_snapshot;
   if (typeof snapshot === "string") { try { snapshot = JSON.parse(snapshot); } catch { snapshot = null; } }
   const view = locked && snapshot ? { totals: snapshot.totals, contracts: snapshot.contratos.map((c) => ({ ...c, parcelasAteDataBase: [] })) } : preview ? { totals: preview.totals, contracts: preview.contracts } : null;
-  const accountsComplete = ACCOUNT_FIELDS.every((f) => form[f.key]);
+  const categories = useMemo(() => {
+    if (locked && snapshot?.contratos) {
+      const cats = [...new Set(snapshot.contratos.map((c) => c.operationCategory || "emprestimos"))];
+      return cats.map((category) => ({ category, label: OPERATION_CATEGORY_LABELS[category] || category, contracts: snapshot.contratos.filter((c) => (c.operationCategory || "emprestimos") === category).length }));
+    }
+    return preview?.categories || [];
+  }, [locked, cfg?.position_snapshot, preview]);
+
+  // Ao aparecerem as categorias, preenche as contas ainda vazias pela Lógica Contábil.
+  useEffect(() => {
+    if (locked || !entityId) return;
+    categories.forEach((c) => fillFromMatrix(c.category, false));
+  }, [categories.map((c) => c.category).join("|"), mappings.length, cfg?.id, locked]);
+
+  const categoryComplete = (category) => CATEGORY_PARTS.every((p) => form.category_accounts?.[category]?.[p.key]);
+  const accountsComplete = ACCOUNT_FIELDS.every((f) => form[f.key]) && categories.length > 0 && categories.every((c) => categoryComplete(c.category));
   const canApprove = !locked && cfg && accountsComplete && !baseError && !viradaError && preview?.contracts?.length > 0;
   const totals = view?.totals;
 
@@ -301,6 +355,49 @@ export default function BalanceDeploymentPanel() {
                 </div>
               ))}
             </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-medium text-slate-600 uppercase tracking-wider">Contas de passivo por categoria</p>
+                <p className="text-xs text-slate-500">
+                  Cada contrato entra na conta da sua categoria (empréstimo ou financiamento), separada em circulante e não circulante.
+                  Por padrão vêm da Lógica Contábil; ajuste se precisar.
+                </p>
+              </div>
+              {!categories.length ? (
+                <p className="text-xs text-amber-700">Informe a data-base para listar as categorias dos contratos desta empresa.</p>
+              ) : categories.map((c) => (
+                <div key={c.category} className="rounded-md border border-slate-200 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-slate-800">
+                      {c.label} <span className="text-xs font-normal text-slate-500">· {c.contracts} contrato(s)</span>
+                      {categoryComplete(c.category) ? null : <span className="ml-2 text-xs font-normal text-amber-700">contas incompletas</span>}
+                    </p>
+                    {!locked && (
+                      <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => fillFromMatrix(c.category, true)}>
+                        Preencher pela Lógica Contábil
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    {CATEGORY_PARTS.map((p) => (
+                      <div key={p.key} className="space-y-1">
+                        <label className="text-xs font-medium text-slate-600">{p.label}</label>
+                        <Combobox
+                          options={accountOptions}
+                          value={form.category_accounts?.[c.category]?.[p.key] || ""}
+                          onChange={(v) => setCategoryAccount(c.category, p.key, v)}
+                          placeholder="Selecione a conta"
+                          searchPlaceholder="Buscar conta..."
+                          className="h-9 w-full text-xs"
+                          disabled={locked}
+                          wideList
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
             <div className="flex flex-wrap gap-2">
               {!locked && (
                 <Button size="sm" onClick={save} disabled={busy || !form.data_base || !form.data_virada || !!baseError || !!viradaError}>
@@ -313,7 +410,7 @@ export default function BalanceDeploymentPanel() {
                 </Button>
               )}
               {!locked && (
-                <Button size="sm" onClick={approve} disabled={busy || !canApprove} title={!cfg ? "Salve o rascunho antes" : !accountsComplete ? "Defina as cinco contas" : ""}>
+                <Button size="sm" onClick={approve} disabled={busy || !canApprove} title={!cfg ? "Salve o rascunho antes" : !accountsComplete ? "Defina a conta transitória e as quatro contas de passivo de cada categoria" : ""}>
                   Aprovar posição
                 </Button>
               )}
@@ -430,10 +527,20 @@ export default function BalanceDeploymentPanel() {
               <div className="rounded-lg border border-cyan-200 bg-cyan-50/40 p-3 text-xs text-slate-700 space-y-1">
                 <p className="font-medium text-slate-900">Lançamento de abertura previsto (executado na etapa seguinte)</p>
                 <p>Débito — {accountLabel(form.transitoria_account_id)}: <strong>{brl(totals.total)}</strong></p>
-                <p>Crédito — {accountLabel(form.principal_cp_account_id)}: {brl(totals.principalCP)}</p>
-                <p>Crédito — {accountLabel(form.principal_lp_account_id)}: {brl(totals.principalLP)}</p>
-                <p>Crédito — {accountLabel(form.juros_cp_account_id)}: {brl(totals.jurosCP)}</p>
-                <p>Crédito — {accountLabel(form.juros_lp_account_id)}: {brl(totals.jurosLP)}</p>
+                {categories.map((cat) => {
+                  const rows = (view?.contracts || []).filter((c) => (c.operationCategory || "emprestimos") === cat.category);
+                  const sum = (k) => rows.reduce((s, c) => s + (c.position?.[k] || 0), 0);
+                  const accs = form.category_accounts?.[cat.category] || {};
+                  return (
+                    <div key={cat.category} className="pt-1">
+                      <p className="font-medium text-slate-800">{cat.label}</p>
+                      <p>Crédito — {accountLabel(accs.principal_cp)}: {brl(sum("principalCP"))}</p>
+                      <p>Crédito — {accountLabel(accs.principal_lp)}: {brl(sum("principalLP"))}</p>
+                      <p>Crédito — {accountLabel(accs.juros_cp)}: {brl(sum("jurosCP"))}</p>
+                      <p>Crédito — {accountLabel(accs.juros_lp)}: {brl(sum("jurosLP"))}</p>
+                    </div>
+                  );
+                })}
                 <p className="text-slate-500">A conta transitória deve fechar em zero depois do lançamento espelho no sistema antigo.</p>
               </div>
             )}
