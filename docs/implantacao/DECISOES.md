@@ -41,3 +41,12 @@ Nada disso muda o comportamento de contratos e clientes existentes até ser ativ
 - A abertura entra no **Fechamento Contábil da competência da virada** (manual e automático): um lançamento por contrato, Débito na conta transitória, Crédito nas quatro contas de passivo, com os valores da fotografia aprovada e chave de idempotência por linha. Aprovar o fechamento é o que a lança.
 - Parcelas informadas como vencidas em aberto continuam devidas depois da virada e viram pendência até existir baixa; o saldo de abertura do primeiro fechamento é igual à posição aprovada (teste automático).
 - **Conciliação da transitória** (Implantação de Saldos, depois de aplicada): fotografia × lançado × espelho do sistema antigo. Estados: aguardando lançamento, aguardando espelho, conciliada (transitória zerada) e divergente (com a lista de problemas: valor diferente, duplicidade, conta errada, débitos ≠ créditos).
+
+## Financeiro da implantação (substitui a T9)
+
+Decisão (19/09/2026): **sem T9**. Os títulos antigos dos empréstimos são excluídos no Protheus pelo próprio usuário; **só os títulos que o AllDebt cria** (e integra) têm retorno de baixa ("paga lá, baixa aqui"). Fluxo:
+1. Excluir no Protheus os títulos antigos desses empréstimos (mapeamento a cargo do usuário; lista dos títulos do AllDebt exportada em `titulos_piloto.csv`).
+2. Em Implantação de Saldos → "Títulos no financeiro": confirmar a exclusão e **liberar** os títulos retidos; integrar pela tela de Contas a Pagar (integração existente).
+3. Pagar no Protheus; a consulta ao ERP (manual ou pelo Agendamento) traz a baixa **com a data real**; o fechamento atribui o pagamento ao mês dessa data. Baixa manual em Contas a Pagar continua valendo para o que não tiver retorno.
+
+Ajustes feitos: retorno da baixa guarda data e origem (`baixa_data`, `baixa_origem`); baixas derivadas incluem parcelas pagas em atraso (sem limite inferior de vencimento) e usam a data real; parcela do título ("013") e do cronograma (13) passam a casar (o vínculo não funcionava para baixas derivadas); "Aplicar" é recusado se o fechamento da competência da virada já estiver aprovado; recusa do Protheus por tipo de título (E2_TIPO) mostra o que fazer (cadastrar o tipo na SX5, tabela 05, ou ajustar Parâmetros → Financeiro). Teste ponta a ponta do fechamento automático postando a abertura passou (idempotente).

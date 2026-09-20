@@ -634,7 +634,12 @@ export default function AccountsPayable() {
                           aria-label={`Selecionar título ${item.titulo_numero} parcela ${item.parcela}`}
                         />
                       </td>
-                      <td className="px-2 py-1.5 align-middle"><ErpStatusBadge item={item} /></td>
+                      <td className="px-2 py-1.5 align-middle">
+                        <ErpStatusBadge item={item} />
+                        {item.retido_implantacao ? (
+                          <span className="ml-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700" title="Retido pela implantação de saldos: não é integrado ao ERP até a liberação (Configurações → Implantação de Saldos).">Retido</span>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-1.5 align-middle font-medium text-slate-800 max-w-[180px] truncate" title={item.entity_name || ""}>
                         {item.entity_name || "—"}
                       </td>

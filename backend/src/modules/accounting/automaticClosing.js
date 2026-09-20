@@ -61,8 +61,10 @@ async function deriveSettlementsFromErp(entityId, groupId, competencia, closingI
      WHERE contract_id = ANY($1::text[])
        AND group_id = $2
        AND (erp_status = 'baixado' OR baixa_origem = 'manual')
-       AND vencimento >= $3::date AND vencimento <= $4::date`,
-    [contractIds, groupId, competencia.start, competencia.end]
+       -- Parcela paga em atraso (vencimento em mês anterior) também entra; quem já virou baixa não repete
+       -- (a checagem por contrato+parcela abaixo). A data da baixa decide o mês do pagamento.
+       AND COALESCE(baixa_data, vencimento) <= $3::date`,
+    [contractIds, groupId, competencia.end]
   );
 
   const byKey = new Map();
@@ -100,7 +102,10 @@ async function deriveSettlementsFromErp(entityId, groupId, competencia, closingI
     );
     if (existing.rows.length) continue;
 
-    const paymentDate = dateOnly(bucket.baixa_data || bucket.vencimento);
+    // Data do pagamento: a da baixa; sem ela, o vencimento. Baixa anterior à competência (detectada agora)
+    // é lançada no primeiro dia desta competência, com a data real na observação, para não se perder num mês já fechado.
+    const realDate = dateOnly(bucket.baixa_data || bucket.vencimento);
+    const paymentDate = realDate < competencia.start ? competencia.start : realDate;
     await store.create("ContractSettlement", {
       contract_id: bucket.contract_id,
       closing_id: closingId,
@@ -113,7 +118,9 @@ async function deriveSettlementsFromErp(entityId, groupId, competencia, closingI
       other_amount: bucket.other_amount,
       total_paid: totalPaid,
       status: "baixado",
-      observacao: "Gerado automaticamente a partir da baixa no ERP",
+      observacao: realDate < competencia.start
+        ? `Gerado automaticamente a partir da baixa no ERP (pagamento real em ${realDate})`
+        : "Gerado automaticamente a partir da baixa no ERP",
     }, "sistema");
     created += 1;
   }

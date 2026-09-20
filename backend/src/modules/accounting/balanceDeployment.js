@@ -3,7 +3,7 @@ import { logger } from "../../logger.js";
 import { groupIdOrThrow } from "../tenants/access.js";
 import { actorEmail } from "../tenants/policy.js";
 import { computeDeploymentPosition, isLastDayOfMonthIso } from "./deploymentPosition.js";
-import { markContractForDeployment } from "../payables/implantacao.js";
+import { markContractForDeployment, releaseDeploymentTitles } from "../payables/implantacao.js";
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -183,6 +183,18 @@ export async function applyBalanceDeployment(payload = {}) {
   if (typeof snap === "string") snap = JSON.parse(snap);
   if (!snap?.contratos?.length) throw httpError(409, "Fotografia da posição ausente");
 
+  // Se o fechamento da competência da virada já foi aprovado, a abertura não seria lançada nele.
+  const viradaIso = iso(cfg.data_virada);
+  const closed = await pool.query(
+    `SELECT 1 FROM accounting_closings
+      WHERE entity_id = $1 AND group_id = $2 AND status = 'aprovado'
+        AND competencia >= date_trunc('month', $3::date) AND competencia < date_trunc('month', $3::date) + interval '1 month' LIMIT 1`,
+    [cfg.entity_id, groupIdOrThrow(), viradaIso]
+  );
+  if (closed.rows.length) {
+    throw httpError(409, `O fechamento contábil de ${viradaIso.slice(5, 7)}/${viradaIso.slice(0, 4)} (competência da virada) já está aprovado: a abertura não seria lançada. Reabra esse fechamento antes de aplicar.`);
+  }
+
   const results = [];
   for (const c of snap.contratos) {
     const res = await markContractForDeployment({ contractId: c.contractId, cutoffDate: snap.dataBase, openParcelas: c.openParcelas });
@@ -190,4 +202,28 @@ export async function applyBalanceDeployment(payload = {}) {
   }
   await pool.query(`UPDATE balance_deployment_configs SET status = 'aplicada', applied_at = now(), updated_date = now() WHERE id = $1 AND group_id = $2`, [configId, groupIdOrThrow()]);
   return { configId, status: "aplicada", contratos: results };
+}
+
+/**
+ * Libera os títulos retidos de todos os contratos da implantação para a integração com o ERP.
+ * Só depois de aplicada — e só quando o usuário confirma que os títulos antigos já saíram do Protheus
+ * (senão as parcelas ficariam duplicadas).
+ */
+export async function releaseBalanceDeploymentTitles(payload = {}) {
+  const { configId, confirmedOldTitlesRemoved } = payload;
+  if (!configId) throw httpError(400, "configId é obrigatório");
+  if (confirmedOldTitlesRemoved !== true) {
+    throw httpError(400, "Confirme que os títulos antigos já foram excluídos no ERP antes de liberar a integração");
+  }
+  const cfg = await loadConfig(configId);
+  if (cfg.status !== "aplicada") throw httpError(409, "Aplique a implantação antes de liberar os títulos");
+  let snap = cfg.position_snapshot;
+  if (typeof snap === "string") snap = JSON.parse(snap);
+  const results = [];
+  for (const c of snap?.contratos || []) {
+    const r = await releaseDeploymentTitles({ contractId: c.contractId });
+    results.push({ contractNumber: c.contractNumber, titulosLiberados: r.titulosLiberados });
+  }
+  logger.info({ configId, results }, "títulos da implantação liberados para integração");
+  return { configId, contratos: results, total: results.reduce((sum, r) => sum + r.titulosLiberados, 0) };
 }

@@ -61,6 +61,7 @@ export default function BalanceDeploymentPanel() {
   const [busy, setBusy] = useState(false);
   const previewSeq = useRef(0);
   const [recon, setRecon] = useState(null);
+  const [releaseOk, setReleaseOk] = useState(false);
   const [mirror, setMirror] = useState({ amount: "", date: "", reference: "" });
 
   const { data: entities = [] } = useQuery({
@@ -166,6 +167,18 @@ export default function BalanceDeploymentPanel() {
     }
   };
   useEffect(() => { loadRecon(); }, [cfg?.id, cfg?.status, cfg?.updated_date]);
+
+  const releaseTitles = async () => {
+    if (!window.confirm("Liberar os títulos para integração com o ERP? Confirme que os títulos antigos desses empréstimos já foram excluídos no Protheus — senão as parcelas ficam duplicadas.")) return;
+    setBusy(true);
+    try {
+      const { data } = await base44.functions.invoke("releaseBalanceDeploymentTitles", { configId: cfg.id, confirmedOldTitlesRemoved: true });
+      toast.success(`${data.total} título(s) liberado(s) para integração.`);
+      setReleaseOk(false);
+    } catch (err) {
+      toast.error(err.message || "Não foi possível liberar os títulos");
+    } finally { setBusy(false); }
+  };
 
   const saveMirror = async () => {
     setBusy(true);
@@ -420,6 +433,26 @@ export default function BalanceDeploymentPanel() {
                 <p className="text-slate-500">A conta transitória deve fechar em zero depois do lançamento espelho no sistema antigo.</p>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {entityId && status === "aplicada" && (
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base text-slate-900">Títulos no financeiro (integração com o ERP)</CardTitle>
+            <CardDescription>
+              Os títulos dos contratos desta implantação estão <strong>retidos</strong>: não são integrados ao ERP, nem automática nem manualmente.
+              Libere só depois de excluir no Protheus os títulos antigos desses empréstimos — os títulos do AllDebt passam a ser os que se pagam lá,
+              e a baixa volta para cá pela consulta ao ERP.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs">
+            <label className="flex items-center gap-2 text-slate-700">
+              <Checkbox checked={releaseOk} onCheckedChange={(v) => setReleaseOk(Boolean(v))} />
+              Confirmo que os títulos antigos já foram excluídos no ERP
+            </label>
+            <Button size="sm" variant="outline" onClick={releaseTitles} disabled={busy || !releaseOk}>Liberar títulos para integração</Button>
           </CardContent>
         </Card>
       )}

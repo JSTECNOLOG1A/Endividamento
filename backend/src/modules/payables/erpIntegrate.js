@@ -71,7 +71,19 @@ function erpAccepted(statusCode, data) {
   return true;
 }
 
+// Recusa por tipo de título inexistente no Protheus (E2_TIPO / SX5 tabela 05): acrescenta o que fazer.
+export function withTipoHint(message) {
+  if (/E2_TIPO/i.test(message) && !/Parâmetros → Financeiro/.test(message)) {
+    return `${message} — Tipo de título não cadastrado no Protheus: cadastre-o na SX5 (tabela 05) ou ajuste o tipo em Parâmetros → Financeiro (tipo do título de juros / principal / provisório).`;
+  }
+  return message;
+}
+
 function messageFromErp(statusCode, data, ctx = {}) {
+  return withTipoHint(messageFromErpRaw(statusCode, data, ctx));
+}
+
+function messageFromErpRaw(statusCode, data, ctx = {}) {
   if (statusCode === 403) {
     const empresa = ctx.empresa || "";
     const filial = ctx.filial || "";
@@ -791,6 +803,9 @@ function patchFromConsult(title, data) {
     valor: Number.isFinite(valor) ? valor : null,
     status: baixado ? "baixado" : "aberto",
     erp_status: baixado ? "baixado" : "integrado",
+    // Data real da baixa e origem: o fechamento contábil atribui o pagamento ao mês desta data.
+    baixa_data: baixado && baixa ? baixa : null,
+    baixa_origem: baixado ? "erp" : null,
     integrado_erp: true,
     erp_mensagem: message,
     vencimento,
@@ -836,6 +851,8 @@ async function applyConsultPatch(id, patch) {
         natureza = COALESCE($9, natureza),
         filial = COALESCE($10, filial),
         filial_origem = COALESCE($11, filial_origem),
+        baixa_data = COALESCE($12::date, baixa_data),
+        baixa_origem = CASE WHEN $13::text IS NOT NULL AND baixa_origem IS DISTINCT FROM 'manual' THEN $13::text ELSE baixa_origem END,
         integrado_erp_em = CASE
           WHEN COALESCE($5, erp_status) IN ('integrado', 'baixado') THEN COALESCE(integrado_erp_em, now())
           WHEN COALESCE($5, erp_status) = 'estornado' THEN null
@@ -857,6 +874,8 @@ async function applyConsultPatch(id, patch) {
       patch.natureza ?? null,
       patch.filial ?? null,
       patch.filialOrigem ?? null,
+      patch.baixa_data ?? null,
+      patch.baixa_origem ?? null,
     ]
   );
   return result.rows[0];

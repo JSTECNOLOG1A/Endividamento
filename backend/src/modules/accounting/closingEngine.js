@@ -83,6 +83,12 @@ function eventKey(contractId, type, date, origin) {
   return [contractId, type, date, origin || ""].join("|");
 }
 
+// Parcela do título vem como "013" e a do cronograma como 13: compara pelo número.
+function parcelaKey(p) {
+  const n = Number(p);
+  return Number.isFinite(n) ? String(n) : String(p);
+}
+
 function isoOf(dateObj) {
   return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
 }
@@ -149,7 +155,7 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
   const settlementsByParcela = new Map();
   settlements.forEach((s) => {
     if (s.status === "estornado") return;
-    settlementsByParcela.set(String(s.parcela), s);
+    settlementsByParcela.set(parcelaKey(s.parcela), s);
   });
 
   // Implantação de saldos: parcelas até a data de corte informadas como vencidas em aberto continuam
@@ -162,7 +168,7 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
 
   // Linhas com pagamento efetivo já resolvido (baixa x cronograma x regra de baixa efetiva).
   const rows = schedule.map((row, idx) => {
-    const settlement = settlementsByParcela.get(String(row.parcela));
+    const settlement = settlementsByParcela.get(parcelaKey(row.parcela));
     const unpaidByDeployment = Boolean(cutoffIso) && row.dataVencimento <= cutoffIso && deployOpen.has(String(Number(row.parcela))) && !settlement;
     const unpaidByRule = unpaidByDeployment || (Boolean(requireFrom) && row.dataVencimento >= requireFrom && !settlement);
     const payIso = settlement && settlement.actual_payment_date ? isoDateOnly(settlement.actual_payment_date) : "";
