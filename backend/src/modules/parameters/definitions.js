@@ -189,7 +189,7 @@ export const PARAMETER_DEFINITIONS = [
     category: "accounting",
     type: "STRING",
     label: "Início da regra de baixa efetiva",
-    description: "Data (AAAA-MM-DD) a partir da qual uma parcela só é considerada paga se houver baixa (retorno do ERP ou baixa manual em Contas a Pagar). Vazio = regra antiga (parcela do cronograma conta como paga). Parcelas anteriores a esta data não mudam; fechamentos aprovados nunca mudam.",
+    description: "Data (AAAA-MM-DD) a partir da qual uma parcela só é considerada paga se houver baixa (retorno do ERP ou baixa manual em Contas a Pagar); sem baixa, o fechamento não lança o pagamento. Vazio = padrão: a baixa efetiva vale desde o início (empresas que já tinham fechamento aprovado antes desta regra mantêm o histórico como está, e a regra passa a valer no mês seguinte ao último fechamento aprovado). Parcelas anteriores à data não mudam; fechamentos aprovados nunca mudam.",
     defaultValue: "",
     isEditable: true,
     implemented: true,

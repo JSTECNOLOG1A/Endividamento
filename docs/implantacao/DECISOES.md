@@ -67,3 +67,13 @@ A abertura não usa mais um único par circulante/não circulante para todos os 
 - As contas vêm sugeridas pela Lógica Contábil: na matriz, a reclassificação circulante/não circulante de cada categoria já tem as contas (débito = não circulante, crédito = circulante), do principal e dos juros. A tela preenche as vazias e há o botão "Preencher pela Lógica Contábil" por categoria.
 - A aprovação exige as quatro contas de cada categoria presente, diferentes entre si e da transitória, todas analíticas. As contas ficam congeladas na fotografia (`contas.categorias`).
 - Configurações antigas (quatro colunas únicas) continuam valendo para a categoria sem contas próprias. Migration 069 (`category_accounts`).
+
+## Baixa efetiva como regra padrão do fechamento (pagamento só lança se foi baixado)
+
+O pagamento de principal e juros só gera lançamento quando a parcela foi realmente baixada no Contas a Pagar — baixa manual ou retorno do ERP (API). Juros apropriados, reclassificação, capitalização e variação cambial de provisão continuam automáticos (são da competência).
+- **Regra padrão** (`settlementRule.js`): parâmetro `accounting.settlement_required_from` preenchido vale como data de início; vazio, a baixa efetiva vale desde o início. Empresas que já tinham fechamento aprovado antes desta entrega (2026-09-20T13:20Z) mantêm o histórico como está: a regra vale a partir do mês seguinte ao último fechamento aprovado nessa época. Fechamento aprovado nunca muda.
+- **Fechamento manual**: a baixa da parcela deixa de ser digitada na tela; a tela sincroniza as baixas do Contas a Pagar (`syncClosingSettlements`) e só as mostra (situação, data e origem). Parcelas anteriores à data da regra mantêm a baixa manual antiga. Baixas de meses anteriores pagas no mês aparecem na tabela.
+- **Baixas de todos os fechamentos**: o fechamento passou a considerar as baixas do contrato de todos os meses (antes só as do próprio fechamento) — sem isso, uma parcela paga em outubro voltava a aparecer em aberto em novembro. O pagamento só gera lançamento no mês da data da baixa.
+- **Avisos (não bloqueiam a aprovação)**: parcelas vencidas sem baixa e contratos sem título no Contas a Pagar (sem título não há baixa). Ficam em `accounting_closings.extra_json.avisos` e aparecem na tela.
+- **Baixa atrasada em mês já fechado**: continua entrando no primeiro dia da competência aberta, com a data real na observação (decisão contábil pendente: manter ou reabrir o mês).
+- **Fica para a sequência (item 5)**: baixa manual com divisão principal/juros, multa, desconto, tarifa e PTAX do dia do pagamento; baixa parcial em vários meses (hoje a baixa da parcela é uma só).

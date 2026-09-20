@@ -13,6 +13,7 @@ import { settlePayableTitleManually, undoManualPayableSettlement } from "../paya
 import { markContractForDeployment, releaseDeploymentTitles } from "../payables/implantacao.js";
 import { previewBalanceDeployment, approveBalanceDeployment, reopenBalanceDeployment, applyBalanceDeployment, releaseBalanceDeploymentTitles } from "../accounting/balanceDeployment.js";
 import { recordDeploymentMirror, getDeploymentReconciliation } from "../accounting/deploymentReconciliation.js";
+import { syncClosingSettlements } from "../accounting/automaticClosing.js";
 import { convertPayablePrToTx } from "../payables/convertPrToTx.js";
 import { lookupPayableErp } from "../payables/erpLookup.js";
 import { syncReceivableTitlesFromApprovedContracts } from "../receivables/generate.js";
@@ -101,6 +102,7 @@ const FUNCTION_AUDIT = {
   approveBalanceDeployment: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Aprovar implantação de saldos" },
   reopenBalanceDeployment: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Reabrir implantação de saldos" },
   recordDeploymentMirror: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Registrar lançamento espelho da implantação" },
+  syncClosingSettlements: { action: "CALCULATE", rotina: "Fechamento contábil", resourceType: "AccountingClosing", registro: "Baixas do Contas a Pagar para o fechamento" },
   getDeploymentReconciliation: { action: "CALCULATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Conciliação da conta transitória" },
   releaseBalanceDeploymentTitles: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "PayableTitle", registro: "Liberar títulos da implantação para integração" },
   applyBalanceDeployment: { action: "UPDATE", rotina: "Implantação de saldos", resourceType: "BalanceDeploymentConfig", registro: "Aplicar implantação de saldos aos contratos" },
@@ -158,6 +160,7 @@ const handlers = {
   releaseBalanceDeploymentTitles: (payload) => releaseBalanceDeploymentTitles(payload || {}),
   recordDeploymentMirror: (payload) => recordDeploymentMirror(payload || {}),
   getDeploymentReconciliation: (payload) => getDeploymentReconciliation(payload || {}),
+  syncClosingSettlements: (payload) => syncClosingSettlements(payload || {}),
   settlePayableTitleManually: (payload) => settlePayableTitleManually(payload || {}),
   undoManualPayableSettlement: (payload) => undoManualPayableSettlement(payload || {}),
   markContractForDeployment: (payload) => markContractForDeployment(payload || {}),

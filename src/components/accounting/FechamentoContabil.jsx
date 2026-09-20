@@ -28,7 +28,6 @@ import { CheckCircle2, AlertTriangle, Lock, RotateCcw, Calculator, ClipboardChec
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSortableRows, SortableTh } from "@/components/ui/sortable-table";
 import { Link } from "react-router-dom";
-import { parametersApi } from "@/api/parameters";
 import {
   EVENT_TYPE_LABELS,
   sumSettlementCashBuckets,
@@ -487,12 +486,22 @@ export default function FechamentoContabil({ entityId, entityName }) {
     return idx > 0 ? sorted[idx - 1] : null;
   }, [closings, competencia]);
 
-  const { data: settlements = [], refetch: refetchSettlements } = useQuery({
-    queryKey: ["contract-settlements", closing?.id],
-    queryFn: () => base44.entities.ContractSettlement.filter({ closing_id: closing.id }, "", 5000),
-    enabled: !!closing?.id,
-    initialData: [],
+  // Baixas vêm do Contas a Pagar (baixa manual ou retorno do ERP): o servidor sincroniza as baixas com este
+  // fechamento e devolve a regra vigente (a partir de quando só a baixa efetiva vale) e os avisos.
+  const { data: syncData, refetch: refetchSettlements } = useQuery({
+    queryKey: ["closing-sync", entityId, competencia, closing?.id, closing?.status],
+    queryFn: async () => {
+      const { data } = await base44.functions.invoke("syncClosingSettlements", closing?.id ? { closingId: closing.id } : { entityId, competencia });
+      return data;
+    },
+    enabled: !!entityId,
   });
+  const settlements = syncData?.settlements || [];
+  const settlementRule = syncData?.rule || null;
+  const contratosSemTitulos = syncData?.contratosSemTitulos || [];
+  // Linha sob a regra de baixa efetiva: o pagamento vem do Contas a Pagar, não é digitado aqui.
+  const isApDriven = (row) => Boolean(settlementRule) && String(row.dataVencimento || "") >= settlementRule.from;
+  const parcelaKey = (contractId, parcela) => `${contractId}|${Number(parcela)}`;
 
   const [creatingClosing, setCreatingClosing] = useState(false);
   const ensureClosing = async () => {
@@ -530,12 +539,21 @@ export default function FechamentoContabil({ entityId, entityName }) {
         }
       });
     });
+    // Parcelas de meses anteriores pagas neste mês (baixa em atraso): aparecem aqui também.
+    const seen = new Set(rows.map(({ contract, row }) => parcelaKey(contract.id, row.parcela)));
+    settlements.forEach((st) => {
+      if (String(st.actual_payment_date || "").slice(0, 7) !== competencia.slice(0, 7)) return;
+      if (seen.has(parcelaKey(st.contract_id, st.parcela))) return;
+      const contract = contracts.find((c) => c.id === st.contract_id);
+      const row = contract ? extractScheduleRows(contract).find((r) => Number(r.parcela) === Number(st.parcela)) : null;
+      if (contract && row) { rows.push({ contract, row }); seen.add(parcelaKey(contract.id, row.parcela)); }
+    });
     return rows;
-  }, [contracts, competencia]);
+  }, [contracts, competencia, settlements]);
 
   const settlementByKey = useMemo(() => {
     const map = new Map();
-    settlements.forEach((s) => map.set(`${s.contract_id}|${s.parcela}`, s));
+    settlements.forEach((s) => map.set(parcelaKey(s.contract_id, s.parcela), s));
     return map;
   }, [settlements]);
 
@@ -546,7 +564,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
   const step1Rows = useMemo(
     () =>
       scheduleRowsInMonth.map(({ contract, row }) => {
-        const settlement = settlementByKey.get(`${contract.id}|${row.parcela}`);
+        const settlement = settlementByKey.get(parcelaKey(contract.id, row.parcela));
         const isEstornado = settlement?.status === "estornado";
         return { contract, row, settlement, isEstornado, _key: `${contract.id}-${row.parcela}` };
       }),
@@ -584,7 +602,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
   const handleOpenSettlement = async (contract, row) => {
     const activeClosing = closing || (await ensureClosing());
     if (!activeClosing) return;
-    setDialogTarget({ contract, scheduleRow: row, existing: settlementByKey.get(`${contract.id}|${row.parcela}`) });
+    setDialogTarget({ contract, scheduleRow: row, existing: settlementByKey.get(parcelaKey(contract.id, row.parcela)) });
   };
 
   const [savingSettlement, setSavingSettlement] = useState(false);
@@ -592,7 +610,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
     setSavingSettlement(true);
     try {
       const activeClosing = closing || (await ensureClosing());
-      const existing = settlementByKey.get(`${payload.contract_id}|${payload.parcela}`);
+      const existing = settlementByKey.get(parcelaKey(payload.contract_id, payload.parcela));
       if (existing) {
         await base44.entities.ContractSettlement.update(existing.id, { ...payload, closing_id: activeClosing.id });
       } else {
@@ -629,20 +647,15 @@ export default function FechamentoContabil({ entityId, entityName }) {
     setCalculating(true);
     try {
       const activeClosing = closing || (await ensureClosing());
+      // Baixas atuais do Contas a Pagar e a regra de baixa efetiva vigente, direto do servidor.
+      const { data: fresh } = await base44.functions.invoke("syncClosingSettlements", { closingId: activeClosing.id });
       const settlementsByContract = new Map();
-      settlements.forEach((s) => {
+      (fresh.settlements || []).forEach((s) => {
         if (!settlementsByContract.has(s.contract_id)) settlementsByContract.set(s.contract_id, []);
         settlementsByContract.get(s.contract_id).push(s);
       });
-      // Baixa efetiva: data de início por cliente (vazia = regra antiga).
-      let requireSettlementFrom = "";
-      try {
-        const param = await parametersApi.get("accounting.settlement_required_from");
-        const raw = String(param?.data?.value || "").trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) requireSettlementFrom = raw;
-      } catch {
-        // sem o parâmetro, vale a regra antiga
-      }
+      const requireSettlementFrom = fresh.rule?.from || "";
+      await refetchSettlements();
       const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
       const deploymentOpening = deploymentOpeningFromConfigs(deploymentConfigs.filter((cfg) => String(cfg.data_virada || "").slice(0, 7) === monthPrefix));
       const reconciliation = calculateClosingReconciliation(contracts, settlementsByContract, year, month, dataBase, { requireSettlementFrom, deploymentOpening });
@@ -905,10 +918,21 @@ export default function FechamentoContabil({ entityId, entityName }) {
             Baixas de parcelas pagas
           </CardTitle>
           <p className="text-xs text-slate-600">
-            Registre os pagamentos efetivamente realizados até a data-base — usados para ajustar o saldo e gerar os lançamentos.
+            {settlementRule
+              ? "O pagamento só é lançado se a parcela foi baixada no Contas a Pagar (baixa manual ou retorno do ERP). Aqui as baixas são apenas conferidas."
+              : "Pagamentos efetivamente realizados até a data-base — usados para ajustar o saldo e gerar os lançamentos."}
           </p>
         </CardHeader>
         <CardContent>
+          {contratosSemTitulos.length > 0 && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>
+                Sem títulos no Contas a Pagar: {contratosSemTitulos.map((c) => c.contractNumber).join(", ")}. Sem título não há baixa,
+                e o pagamento dessas parcelas não será lançado — gere os títulos do contrato.
+              </span>
+            </div>
+          )}
           {scheduleRowsInMonth.length === 0 ? (
             <p className="text-sm text-slate-600 py-6 text-center">Nenhuma parcela prevista para esta competência.</p>
           ) : (
@@ -937,7 +961,11 @@ export default function FechamentoContabil({ entityId, entityName }) {
                           {settlement && !isEstornado ? formatCurrency(settlement.total_paid) : "—"}
                         </td>
                         <td className="px-2 py-1.5">
-                          {!settlement || isEstornado ? (
+                          {isApDriven(row) && (!settlement || isEstornado) ? (
+                            <Badge variant="secondary">
+                              {row.dataVencimento < new Date().toISOString().slice(0, 10) ? "Vencida — aguardando baixa" : "A vencer"}
+                            </Badge>
+                          ) : !settlement || isEstornado ? (
                             <Badge variant="secondary">Pendente</Badge>
                           ) : settlement.triggers_recalculation ? (
                             <Button
@@ -954,18 +982,26 @@ export default function FechamentoContabil({ entityId, entityName }) {
                           )}
                         </td>
                         <td className="px-2 py-1.5 text-right">
-                          <div className="flex gap-1.5 justify-end">
-                            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={isApproved}
-                              onClick={() => handleOpenSettlement(contract, row)}>
-                              {settlement && !isEstornado ? "Editar" : "Baixar"}
-                            </Button>
-                            {settlement && !isEstornado && (
-                              <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600" disabled={isApproved}
-                                onClick={() => handleEstornarSettlement(settlement)}>
-                                Estornar
+                          {isApDriven(row) ? (
+                            <span className="text-[10px] text-slate-500">
+                              {settlement && !isEstornado
+                                ? `Baixa em ${String(settlement.actual_payment_date || "").slice(0, 10).split("-").reverse().join("/")} · Contas a Pagar`
+                                : "Baixa no Contas a Pagar"}
+                            </span>
+                          ) : (
+                            <div className="flex gap-1.5 justify-end">
+                              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={isApproved}
+                                onClick={() => handleOpenSettlement(contract, row)}>
+                                {settlement && !isEstornado ? "Editar" : "Baixar"}
                               </Button>
-                            )}
-                          </div>
+                              {settlement && !isEstornado && (
+                                <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600" disabled={isApproved}
+                                  onClick={() => handleEstornarSettlement(settlement)}>
+                                  Estornar
+                                </Button>
+                              )}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -1002,6 +1038,16 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 {calcResult.pendingRecalculation.length} baixa(s) exigem recálculo do contrato antes de seguir
                 para aprovação — reabra {calcResult.pendingRecalculation.map((p) => p.contractNumber).join(", ")} na Calculadora.
+              </div>
+            )}
+            {(calcResult.pendingUnsettled || []).length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  {calcResult.pendingUnsettled.length} parcela(s) vencida(s) sem baixa no Contas a Pagar — o pagamento não foi lançado e o saldo continua em aberto:{" "}
+                  {calcResult.pendingUnsettled.slice(0, 8).map((p) => `${p.contractNumber} (parc. ${p.parcela}, venc. ${String(p.dataVencimento).split("-").reverse().join("/")})`).join("; ")}
+                  {calcResult.pendingUnsettled.length > 8 ? "…" : ""}. Se já foi paga, registre a baixa no Contas a Pagar e calcule de novo.
+                </span>
               </div>
             )}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">

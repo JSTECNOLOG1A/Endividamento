@@ -15,7 +15,7 @@ import { pool } from "../../db/pool.js";
 import { logger } from "../../logger.js";
 import * as store from "../entities/store.js";
 import { groupIdOrThrow } from "../tenants/access.js";
-import { resolveParameter } from "../parameters/service.js";
+import { resolveSettlementRule, findContractsWithoutTitles } from "./settlementRule.js";
 import {
   calculateClosingReconciliation,
   buildOpeningEntries,
@@ -49,7 +49,7 @@ function currentCompetencia(now = new Date()) {
 // (ex.: IOF, já contabilizado à parte no evento automático de IOF na
 // liberação) caem em other_amount, só pra fechar a soma de caixa da baixa —
 // não geram lançamento próprio.
-async function deriveSettlementsFromErp(entityId, groupId, competencia, closingId) {
+export async function deriveSettlementsFromErp(entityId, groupId, competencia, closingId) {
   const contractsResult = await pool.query(
     `SELECT id FROM loan_contracts WHERE entity_id = $1 AND group_id = $2 AND status = 'aprovado'`,
     [entityId, groupId]
@@ -128,6 +128,61 @@ async function deriveSettlementsFromErp(entityId, groupId, competencia, closingI
   return { created };
 }
 
+// Baixas (não estornadas) dos contratos, de todos os fechamentos. Na mesma parcela vale a mais recente.
+export async function loadEntitySettlements(contractIds, groupId) {
+  if (!contractIds.length) return { rows: [] };
+  return pool.query(
+    `SELECT * FROM contract_settlements
+      WHERE group_id = $1 AND contract_id = ANY($2::text[]) AND status <> 'estornado'
+      ORDER BY created_date ASC`,
+    [groupId, contractIds]
+  );
+}
+
+function competenciaFromDate(value) {
+  const start = dateOnly(value).slice(0, 8) + "01";
+  const [year, month] = start.split("-").map(Number);
+  const end = `${year}-${String(month).padStart(2, "0")}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
+  return { year, month, start, end };
+}
+
+/**
+ * Sincroniza as baixas do fechamento com o Contas a Pagar (baixa manual ou retorno do ERP) e devolve a regra
+ * vigente, as baixas dos contratos da empresa e os avisos. Usada pelo fechamento manual: a baixa da parcela
+ * vem do Contas a Pagar, não é mais digitada na tela do fechamento. Fechamento aprovado não recebe baixas novas.
+ */
+export async function syncClosingSettlements(payload = {}) {
+  const { closingId } = payload;
+  const groupId = groupIdOrThrow();
+  const bad = (status, message) => Object.assign(new Error(message), { status });
+
+  let entityId = payload.entityId;
+  let competencia;
+  let closingRow = null;
+  if (closingId) {
+    closingRow = (await pool.query(`SELECT * FROM accounting_closings WHERE id = $1 AND group_id = $2`, [closingId, groupId])).rows[0];
+    if (!closingRow) throw bad(404, "Fechamento não encontrado");
+    entityId = closingRow.entity_id;
+    competencia = competenciaFromDate(closingRow.competencia);
+  } else {
+    if (!entityId || !/^\d{4}-\d{2}/.test(String(payload.competencia || ""))) throw bad(400, "Informe closingId ou entityId e competencia");
+    competencia = competenciaFromDate(payload.competencia);
+  }
+
+  const rule = await resolveSettlementRule({ groupId, entityId });
+  // Só deriva baixas para um fechamento existente e ainda não aprovado.
+  const derived = closingRow && closingRow.status !== "aprovado"
+    ? await deriveSettlementsFromErp(entityId, groupId, competencia, closingRow.id)
+    : { created: 0 };
+  const contracts = (await pool.query(
+    `SELECT id FROM loan_contracts WHERE entity_id = $1 AND group_id = $2 AND status = 'aprovado'`,
+    [entityId, groupId]
+  )).rows;
+  const settlements = (await loadEntitySettlements(contracts.map((c) => c.id), groupId)).rows;
+  const contratosSemTitulos = await findContractsWithoutTitles({ entityId, groupId, from: rule.from, endIso: competencia.end });
+  return { rule, created: derived.created, settlements, contratosSemTitulos };
+}
+
 async function ensureClosing(entity, competencia) {
   const existing = await pool.query(
     `SELECT * FROM accounting_closings WHERE entity_id = $1 AND competencia = $2::date AND group_id = $3`,
@@ -168,10 +223,9 @@ async function closeEntityForCompetencia(entity, competencia) {
   );
   const contracts = contractsResult.rows;
 
-  const settlementsResult = await pool.query(
-    `SELECT * FROM contract_settlements WHERE closing_id = $1 AND group_id = $2`,
-    [closing.id, groupId]
-  );
+  // Baixas de todos os fechamentos do contrato: a parcela paga num mês continua paga nos meses seguintes
+  // (o pagamento em si só gera lançamento no mês da data da baixa).
+  const settlementsResult = await loadEntitySettlements(contracts.map((c) => c.id), groupId);
 
   const settlementsByContract = new Map();
   for (const s of settlementsResult.rows) {
@@ -179,9 +233,9 @@ async function closeEntityForCompetencia(entity, competencia) {
     settlementsByContract.get(s.contract_id).push(s);
   }
 
-  // Baixa efetiva: data de início por cliente (vazia = regra antiga).
-  const settlementFromRaw = String((await resolveParameter("accounting.settlement_required_from", { groupId })) || "").trim();
-  const requireSettlementFrom = /^\d{4}-\d{2}-\d{2}$/.test(settlementFromRaw) ? settlementFromRaw : "";
+  // Baixa efetiva: pagamento só existe se a parcela foi baixada (Contas a Pagar, manual ou retorno do ERP).
+  const rule = await resolveSettlementRule({ groupId, entityId: entity.id });
+  const requireSettlementFrom = rule.from;
 
   // Abertura da implantação de saldos: configuração aplicada cuja virada cai nesta competência.
   const deployResult = await pool.query(
@@ -192,6 +246,18 @@ async function closeEntityForCompetencia(entity, competencia) {
   const reconciliation = calculateClosingReconciliation(
     contracts, settlementsByContract, competencia.year, competencia.month, competencia.end,
     { requireSettlementFrom, deploymentOpening: deploymentOpeningFromConfigs(deployResult.rows) }
+  );
+
+  // Avisos (não bloqueiam): parcelas vencidas sem baixa e contratos sem títulos no Contas a Pagar.
+  const contratosSemTitulos = await findContractsWithoutTitles({ entityId: entity.id, groupId, from: rule.from, endIso: competencia.end });
+  const avisos = {
+    regraBaixa: rule,
+    parcelasSemBaixa: (reconciliation.pendingUnsettled || []).length,
+    contratosSemTitulos,
+  };
+  await pool.query(
+    `UPDATE accounting_closings SET extra_json = COALESCE(extra_json, '{}'::jsonb) || $2::jsonb WHERE id = $1`,
+    [closing.id, JSON.stringify({ avisos })]
   );
 
   const mappingsResult = await pool.query(
@@ -289,6 +355,7 @@ async function closeEntityForCompetencia(entity, competencia) {
     balanced: journalResult.balanced,
     missingMappings: journalResult.missingMappings.length,
     reasons: gate.reasons,
+    avisos,
   };
 }
 
