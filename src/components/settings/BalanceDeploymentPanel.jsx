@@ -312,6 +312,33 @@ export default function BalanceDeploymentPanel() {
         </CardContent>
       </Card>
 
+      <Card className="border-cyan-200 bg-cyan-50/40 shadow-sm">
+        <CardContent className="py-4 text-xs text-slate-700 space-y-2">
+          <p className="font-medium text-slate-900">Como a data-base afeta os títulos do Contas a Pagar</p>
+          <ul className="list-disc pl-4 space-y-1">
+            <li>
+              <strong>Só passa a valer ao aplicar aos contratos.</strong> Informar a data, salvar o rascunho ou aprovar a posição não altera nenhum título.
+            </li>
+            <li>
+              <strong>Depois de aplicada, a data-base é o corte dos títulos.</strong> Parcelas com vencimento até a data-base não geram título; os que já existiam
+              ficam como "ignorados pela implantação" (ocultos, fora do ERP, da baixa e do fechamento). Exceção: as parcelas que você marcar como vencidas em aberto.
+            </li>
+            <li>
+              <strong>Parcelas depois da data-base</strong> geram títulos normalmente, mas ficam <strong>retidas</strong> até você usar "Liberar títulos" (depois de
+              excluir os títulos antigos no Protheus). Só então seguem para o ERP.
+            </li>
+            <li>
+              <strong>Sem implantação, nada é cortado ou retido:</strong> todas as parcelas do contrato geram título (inclusive as de datas passadas) e podem ser
+              integradas ao ERP, desde que classificadas (natureza e fornecedor).
+            </li>
+            <li>
+              O corte vale por contrato: contratos fora da implantação (por exemplo, operação posterior à data-base) continuam gerando títulos normalmente.
+              O lançamento do pagamento na contabilidade depende da baixa no Contas a Pagar, com ou sem implantação.
+            </li>
+          </ul>
+        </CardContent>
+      </Card>
+
       {entityId && (
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
