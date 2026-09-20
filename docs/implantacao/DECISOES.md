@@ -108,3 +108,9 @@ O cronograma salvo é uma fotografia (para o que ainda não foi publicado, o mot
 
 ## Fica para a sequência
 Ajuste no pagamento (valor pago × provisão restante: juros, multa, desconto, câmbio realizado pela cotação da liquidação) e atualização do valor dos títulos ainda não integrados ao ERP quando a taxa real sair; nos já integrados, aviso de "valor divergente da projeção".
+
+## Fechamento automático: fuso de São Paulo e PTAX do último dia útil
+
+- **Competência pelo fuso de São Paulo.** O servidor roda em UTC e o agendamento mensal roda às 22:00 de Brasília (01:00 UTC do dia seguinte): pelo relógio do servidor, "o mês atual" seria o que acabou de começar. `competenciaEmSaoPaulo` e `todayInSaoPaulo` (saoPaulo.js) passam a definir a competência e o "hoje" do fechamento e do recálculo das taxas.
+- **Atualização de mercado no início do fechamento.** O fechamento automático primeiro atualiza PTAX e índices do BACEN (a PTAX do último dia útil sai ~13h, mas a atualização diária pode rodar depois do fechamento). Falha na atualização não derruba o fechamento (fica registrada em `detalhes.mercado`); o gate abaixo acusa a cotação faltante. Variável `CLOSING_SKIP_MARKET_SYNC=1` desliga a atualização (uso em testes).
+- **PTAX do último dia útil é exigida.** A cotação usada precisa ser a do último dia útil até o fim do mês (segunda a sexta, fora os feriados cadastrados). Se só há cotação mais antiga, o cálculo avisa (`ptax_defasada`) e o fechamento **não pode ser aprovado nem postado** até atualizar as cotações em Moedas; sem cotação nenhuma nos 7 dias anteriores, também bloqueia (`ptax_ausente`). Competência em andamento segue provisória. Feriado no último dia útil: cadastrar em Feriados.

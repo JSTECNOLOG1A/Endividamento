@@ -17,6 +17,8 @@ import * as store from "../entities/store.js";
 import { groupIdOrThrow } from "../tenants/access.js";
 import { resolveSettlementRule, findContractsWithoutTitles } from "./settlementRule.js";
 import { loadLiveSchedules } from "./liveSchedule.js";
+import { todayInSaoPaulo, competenciaEmSaoPaulo } from "./saoPaulo.js";
+import { syncPtaxToCurrencies, syncRatesToCdiRates } from "../functions/bacen.js";
 import {
   calculateClosingReconciliation,
   buildOpeningEntries,
@@ -33,13 +35,9 @@ function dateOnly(value) {
   return String(value).slice(0, 10);
 }
 
+// Competência do momento pelo fuso de São Paulo (o servidor roda em UTC).
 function currentCompetencia(now = new Date()) {
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  const start = `${year}-${String(month).padStart(2, "0")}-01`;
-  const lastDay = new Date(year, month, 0).getDate();
-  const end = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-  return { year, month, start, end };
+  return competenciaEmSaoPaulo(now);
 }
 
 // Agrupa títulos a pagar já baixados no ERP (erp_status = 'baixado') por
@@ -175,10 +173,33 @@ export async function saveClosingBalances(closingId, groupId, balances) {
   );
 }
 
+// Feriados (do grupo e globais) para achar o último dia útil da PTAX de fechamento.
+export async function loadHolidayDates(groupId) {
+  const rows = (await pool.query(`SELECT holiday_date FROM holidays WHERE group_id = $1 OR group_id IS NULL`, [groupId])).rows;
+  return rows.map((h) => dateOnly(h.holiday_date));
+}
+
+// Atualiza PTAX e índices no início do fechamento: a PTAX do último dia útil (publicada ~13h) só entra na tabela pela
+// atualização diária, que pode rodar depois do fechamento. Falha não derruba o fechamento; o gate acusa a cotação faltante.
+async function syncMarketData() {
+  if (process.env.CLOSING_SKIP_MARKET_SYNC === "1") return { skipped: true };
+  const out = {};
+  for (const [key, fn] of [["ptax", syncPtaxToCurrencies], ["indices", syncRatesToCdiRates]]) {
+    try {
+      const r = await fn();
+      out[key] = { ok: r.ok !== false, message: r.message || null };
+    } catch (error) {
+      logger.warn({ err: error }, "atualização de " + key + " antes do fechamento falhou");
+      out[key] = { ok: false, message: error.message };
+    }
+  }
+  return out;
+}
+
 // Contratos com o cronograma recalculado pelas taxas publicadas (indexados) e as entradas do ajuste de provisão.
 async function prepareLiveInputs(entityId, groupId, contracts, competencia) {
   // Taxas conhecidas na data de fechamento: até o fim da competência (ou hoje, se ela ainda está em andamento).
-  const todayIso = dateOnly(new Date());
+  const todayIso = todayInSaoPaulo();
   const asOf = competencia.end < todayIso ? competencia.end : todayIso;
   const { schedules, failed } = await loadLiveSchedules(contracts, groupId, asOf);
   const liveContracts = contracts.map((c) => (schedules[c.id] ? { ...c, schedule_data: JSON.stringify({ schedule: schedules[c.id] }) } : c));
@@ -318,6 +339,7 @@ async function closeEntityForCompetencia(entity, competencia) {
     {
       requireSettlementFrom, deploymentOpening: deploymentOpeningFromConfigs(deployResult.rows), fxRates, fxRemeasureFrom: rule.from,
       trueUpContracts: live.trueUpContracts, ledgerPrev: live.ledgerPrev,
+      today: todayInSaoPaulo(), holidays: await loadHolidayDates(groupId),
     }
   );
 
@@ -437,6 +459,7 @@ async function closeEntityForCompetencia(entity, competencia) {
 export async function runAutomaticClosingForGroup() {
   const groupId = groupIdOrThrow();
   const competencia = currentCompetencia();
+  const mercado = await syncMarketData();
   const entitiesResult = await pool.query(
     `SELECT * FROM company_entities
      WHERE group_id = $1 AND accounting_mode = 'api' AND status = 'ativa'`,
@@ -463,6 +486,6 @@ export async function runAutomaticClosingForGroup() {
     message: entitiesResult.rows.length === 0
       ? "Nenhuma empresa em modo API para fechamento automático"
       : `${approved} aprovado(s) · ${calculated} calculado(s) aguardando aprovação · ${divergent} com divergência · ${failed} com erro`,
-    detalhes: { competencia: competencia.start, entidades: entitiesResult.rows.length, resultados: results },
+    detalhes: { competencia: competencia.start, entidades: entitiesResult.rows.length, resultados: results, mercado },
   };
 }

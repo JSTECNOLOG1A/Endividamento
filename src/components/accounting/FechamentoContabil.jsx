@@ -658,6 +658,8 @@ export default function FechamentoContabil({ entityId, entityName }) {
       await refetchSettlements();
       // Moeda estrangeira: cotações (PTAX de venda do BACEN) de cada moeda dos contratos, em ordem de data.
       const currencyRows = await base44.entities.Currency.list("rate_date", 20000);
+      const holidayRows = await base44.entities.Holiday.list("holiday_date", 5000);
+      const holidays = holidayRows.map((h) => String(h.holiday_date).slice(0, 10));
       const fxRates = {};
       contracts.filter((c) => c.currency_id).forEach((c) => {
         if (fxRates[c.currency_id]) return;
@@ -674,7 +676,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
       const liveContracts = contracts.map((c) => (liveSchedules[c.id] ? { ...c, schedule_data: JSON.stringify({ schedule: liveSchedules[c.id] }) } : c));
       const trueUpContracts = Object.fromEntries(Object.keys(liveSchedules).map((id) => [id, true]));
       const reconciliation = calculateClosingReconciliation(liveContracts, settlementsByContract, year, month, dataBase, {
-        trueUpContracts, ledgerPrev: fresh.ledgerPrev || {}, requireSettlementFrom, deploymentOpening, fxRates, fxRemeasureFrom: fresh.rule?.from || "" });
+        trueUpContracts, ledgerPrev: fresh.ledgerPrev || {}, requireSettlementFrom, deploymentOpening, fxRates, holidays, fxRemeasureFrom: fresh.rule?.from || "" });
       setCalcResult(reconciliation);
       // Saldos deste fechamento: base do ajuste de provisão de juros do mês seguinte.
       try {
@@ -1067,6 +1069,9 @@ export default function FechamentoContabil({ entityId, entityName }) {
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <span>
+                  {calcResult.fxIssues.some((f) => f.type === "ptax_defasada")
+                    ? "PTAX do último dia útil ainda não carregada (" + [...new Set(calcResult.fxIssues.filter((f) => f.type === "ptax_defasada").map((f) => String(f.esperada).split("-").reverse().join("/") + ", disponível " + String(f.usada).split("-").reverse().join("/")))].join("; ") + "): o fechamento não pode ser aprovado até atualizar as cotações em Moedas. "
+                    : ""}
                   {calcResult.fxIssues.some((f) => f.type === "ptax_ausente")
                     ? "Sem PTAX de fechamento publicada para: " + [...new Set(calcResult.fxIssues.filter((f) => f.type === "ptax_ausente").map((f) => f.contractNumber))].join(", ") + ". A variação cambial seguiu o cronograma; atualize as cotações em Moedas e calcule de novo. "
                     : ""}

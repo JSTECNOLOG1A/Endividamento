@@ -495,6 +495,20 @@ export function toForeignView(contract, scheduleRows) {
   };
 }
 
+/** Último dia útil (segunda a sexta, fora feriados) até a data. holidays: lista ou Set de AAAA-MM-DD. */
+export function lastBusinessDayOnOrBefore(iso, holidays) {
+  const skip = holidays instanceof Set ? holidays : new Set(holidays || []);
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  for (let i = 0; i < 15; i++) {
+    const day = dt.getUTCDay();
+    const cur = dt.toISOString().slice(0, 10);
+    if (day !== 0 && day !== 6 && !skip.has(cur)) return cur;
+    dt.setUTCDate(dt.getUTCDate() - 1);
+  }
+  return iso;
+}
+
 /** Cotação vigente na data: a mais recente até ela, no máximo maxAgeDays antes. list = [{rate_date, rate}] em ordem crescente. */
 export function fxRateOn(list, iso, maxAgeDays = 7) {
   if (!Array.isArray(list) || !list.length || !iso) return null;
@@ -533,6 +547,15 @@ function applyForeignRemeasurement({ contract, schedule, settlements, options, r
   if (!ptaxEnd) {
     result.fxIssues.push({ type: "ptax_ausente", contractNumber: contract.contract_number, date: endRef });
     return;
+  }
+
+  // A PTAX do último dia útil precisa estar carregada: a mais recente só vale se ela é a do último dia útil.
+  // (Fim de semana e feriado usam a do último dia útil; competência em andamento é provisória.)
+  if (!provisional) {
+    const expected = lastBusinessDayOnOrBefore(monthEndIso, options.holidays);
+    if (ptaxEnd.date < expected) {
+      result.fxIssues.push({ type: "ptax_defasada", contractNumber: contract.contract_number, esperada: expected, usada: ptaxEnd.date });
+    }
   }
 
   const view = toForeignView(contract, schedule);
@@ -897,6 +920,14 @@ export function canApproveClosing({ journalResult, reconciliation, previousClosi
     reasons.push("Existem baixas que exigem recálculo do contrato antes de aprovar (reabra o contrato na Calculadora).");
   }
   if (hasUnresolvedSettlementBlockers) reasons.push("Existem baixas pendentes de validação.");
+  const fxBlocking = (reconciliation.fxIssues || []).filter((f) => f.type === "ptax_ausente" || f.type === "ptax_defasada");
+  if (fxBlocking.length > 0) {
+    const fmt = (iso) => String(iso || "").split("-").reverse().join("/");
+    const detail = fxBlocking.map((f) => (f.type === "ptax_defasada"
+      ? `${f.contractNumber} (esperada ${fmt(f.esperada)}, disponível ${fmt(f.usada)})`
+      : `${f.contractNumber} (sem cotação até ${fmt(f.date)})`)).join("; ");
+    reasons.push(`PTAX de fechamento do último dia útil não carregada: ${detail}. Atualize as cotações em Moedas e calcule de novo.`);
+  }
   if (previousClosingApproved === false) reasons.push("A competência anterior ainda não está aprovada.");
 
   return { canApprove: reasons.length === 0, reasons };

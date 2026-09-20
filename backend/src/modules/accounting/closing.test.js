@@ -1,7 +1,8 @@
 // Invariantes do fechamento contábil (sem banco): juros por competência, liberação/IOF/custo na data
 // da operação, capitalização e regra de baixa efetiva. Rodar: npm run test:closing
 import { calculateAmortizationSchedule } from "../../engine/CalculationEngine.js";
-import { reconcileContractForCompetencia, buildOpeningEntries, calculateClosingReconciliation, fxRateOn, buildJournalEntries } from "./closingEngine.js";
+import { reconcileContractForCompetencia, buildOpeningEntries, calculateClosingReconciliation, fxRateOn, buildJournalEntries, lastBusinessDayOnOrBefore, canApproveClosing } from "./closingEngine.js";
+import { competenciaEmSaoPaulo, todayInSaoPaulo } from "./saoPaulo.js";
 import { computeDeploymentPosition } from "./deploymentPosition.js";
 
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -326,6 +327,50 @@ console.log("== Ajuste de provisão de juros: cronograma recalculado com as taxa
   const pMay = reconcileContractForCompetencia(mkC(await priceOf(12)), 2026, 5);
   const pJun = reconcileContractForCompetencia(mkC(await priceOf(15)), 2026, 6, [], { trueUpContracts: { ix: true }, ledgerPrev: { ix: { principal: pMay.closing.principal, interest: pMay.closing.interest } } });
   check("PRICE indexado: diferença de principal recalculado é sinalizada", pJun.fxIssues.some((f) => f.type === "principal_recalculado"));
+}
+
+// ---------------------------------------------------------------------------------------------
+console.log("== Fuso de São Paulo e PTAX do último dia útil");
+{
+  // 22:00 de 30/09 em Brasília é 01:00 de 01/10 em UTC: a competência é setembro, não outubro
+  const at = (iso) => new Date(iso);
+  check("22:00 de 30/09 em Brasília (01:00Z de 01/10): a competência é setembro", competenciaEmSaoPaulo(at("2026-10-01T01:00:00Z")).month === 9 && todayInSaoPaulo(at("2026-10-01T01:00:00Z")) === "2026-09-30");
+  check("competência traz início e fim do mês", (() => { const c = competenciaEmSaoPaulo(at("2026-10-01T01:00:00Z")); return c.start === "2026-09-01" && c.end === "2026-09-30" && c.year === 2026; })());
+  check("meio-dia em Brasília: mesmo dia", todayInSaoPaulo(at("2026-05-31T15:00:00Z")) === "2026-05-31");
+  check("02:59Z de 01/06 ainda é 31/05 em Brasília", competenciaEmSaoPaulo(at("2026-06-01T02:59:00Z")).month === 5);
+  check("03:00Z de 01/06 já é junho em Brasília", competenciaEmSaoPaulo(at("2026-06-01T03:00:00Z")).month === 6);
+
+  check("último dia útil: domingo 31/05 -> sexta 29/05", lastBusinessDayOnOrBefore("2026-05-31") === "2026-05-29");
+  check("último dia útil: dia útil é ele mesmo", lastBusinessDayOnOrBefore("2026-03-31") === "2026-03-31");
+  check("último dia útil: feriado na sexta -> quinta", lastBusinessDayOnOrBefore("2026-05-31", ["2026-05-29"]) === "2026-05-28");
+
+  // contrato USD e cotações: a última carregada precisa ser a do último dia útil
+  const sched = (await calculateAmortizationSchedule({ ...usdBase, exchangeRates: ptaxTable("variavel") })).schedule;
+  const mkU = () => ({ id: "u", contract_number: "USD", operation_category: "emprestimos", operation_date: usdBase.operationDate, amount_foreign: usdBase.amount_foreign,
+    schedule_data: JSON.stringify({ schedule: sched }), currency_id: "cur_usd" });
+  const daily = (until) => { const l = []; for (let t = new Date(Date.UTC(2023, 0, 2)); t <= new Date(until + "T00:00:00Z"); t = new Date(t.getTime() + 86400000)) { if (t.getUTCDay() === 0 || t.getUTCDay() === 6) continue; l.push({ rate_date: t.toISOString().slice(0, 10), rate: 5.1 }); } return l; };
+  const run = (until, extra = {}) => reconcileContractForCompetencia(mkU(), 2026, 3, [], { fxRates: { cur_usd: daily(until) }, today: "2026-04-05", ...extra });
+
+  const ok31 = run("2026-03-31");
+  check("PTAX do último dia útil carregada: sem aviso", !ok31.fxIssues.some((f) => f.type === "ptax_defasada"));
+  const late = run("2026-03-30");
+  const lateIssue = late.fxIssues.find((f) => f.type === "ptax_defasada");
+  check("PTAX do último dia útil ausente (só a do dia anterior): aviso de defasagem", lateIssue && lateIssue.esperada === "2026-03-31" && lateIssue.usada === "2026-03-30", JSON.stringify(lateIssue));
+  const holidayOk = run("2026-03-30", { holidays: ["2026-03-31"] });
+  check("feriado no último dia: a PTAX do dia útil anterior basta", !holidayOk.fxIssues.some((f) => f.type === "ptax_defasada"));
+  const weekend = reconcileContractForCompetencia(mkU(), 2026, 5, [], { fxRates: { cur_usd: daily("2026-05-29") }, today: "2026-06-05" });
+  check("mês termina em domingo: a de sexta basta", !weekend.fxIssues.some((f) => f.type === "ptax_defasada"));
+  const prov = run("2026-03-19", { today: "2026-03-20" });
+  check("competência em andamento: provisória, sem exigir a do último dia", !prov.fxIssues.some((f) => f.type === "ptax_defasada") && prov.remeasurement?.provisional === true);
+
+  // o gate: não aprova (nem posta) com a PTAX de fechamento faltando
+  const recon = (until) => calculateClosingReconciliation([mkU()], new Map(), 2026, 3, "2026-03-31", { fxRates: { cur_usd: daily(until) }, today: "2026-04-05" });
+  const gate = (until) => canApproveClosing({ journalResult: { balanced: true, missingMappings: [] }, reconciliation: recon(until), previousClosingApproved: true, hasUnresolvedSettlementBlockers: false });
+  const gLate = gate("2026-03-30");
+  check("PTAX defasada: o fechamento não pode ser aprovado", !gLate.canApprove && gLate.reasons.some((r) => r.includes("PTAX de fechamento")), gLate.reasons.join(" | "));
+  check("PTAX do último dia útil carregada: o gate libera", gate("2026-03-31").canApprove);
+  const gNone = canApproveClosing({ journalResult: { balanced: true, missingMappings: [] }, reconciliation: calculateClosingReconciliation([mkU()], new Map(), 2026, 3, "2026-03-31", { fxRates: { cur_usd: [{ rate_date: "2020-01-02", rate: 5 }] }, today: "2026-04-05" }), previousClosingApproved: true, hasUnresolvedSettlementBlockers: false });
+  check("sem nenhuma cotação recente: também bloqueia", !gNone.canApprove);
 }
 
 if (failures) {
