@@ -17,7 +17,6 @@ import GuaranteedAccountFormDialog from "../components/loan/GuaranteedAccountFor
 import { RenegotiateDialog, SettleEarlyDialog } from "../components/loan/ContractLifecycleDialogs";
 import { createPageUrl } from "../utils";
 import { statusLabel } from "../lib/contractStatus";
-import { toBRDecimalString } from "../lib/brNumber";
 import { computeContractCET } from "../lib/cetFromSchedule";
 import { withAuthToken } from "../lib/documentActions";
 
@@ -161,44 +160,10 @@ export default function Contracts() {
     window.location.href = createPageUrl("Simulator") + "?edit=" + contract.id;
   };
 
+  // Duplicar abre o contrato salvo como um contrato NOVO, pelo mesmo caminho de carga do "editar"
+  // (todos os campos, o cronograma e o PDF vêm do registro no banco); só o número muda.
   const handleDuplicate = (contract) => {
-    // ⚠️ Os campos abaixo alimentam diretamente o `initialData` do
-    // <ContractForm>, cujo parser no submit assume formato BR (vírgula
-    // decimal). Números "crus" do banco (ponto decimal) inflariam o valor
-    // em 10x-1000x ou quebrariam o cálculo — mesmo bug corrigido no fluxo
-    // de reabrir/editar um contrato (ver Simulator.jsx/loadContractForEdit).
-    const contractData = encodeURIComponent(JSON.stringify({
-      group_id: contract.group_id,
-      entity_id: contract.entity_id,
-      bank_id: contract.bank_id,
-      currency_id: contract.currency_id,
-      contract_number: "",
-      operation_type: contract.operation_type,
-      guarantee_real_type: contract.guarantee_real_type || "",
-      guarantee_personal_type: contract.guarantee_personal_type || "",
-      operation_value: contract.operation_value,
-      signal_value: toBRDecimalString(contract.signal_value ?? 0),
-      iof_value: toBRDecimalString(contract.iof_value ?? 0),
-      iof_financed: contract.iof_financed,
-      encargo_garantia_value: toBRDecimalString(contract.encargo_garantia_value ?? 0),
-      encargo_garantia_financed: contract.encargo_garantia_financed,
-      other_fees: toBRDecimalString(contract.other_fees ?? 0),
-      other_fees_financed: contract.other_fees_financed,
-      fixed_rate: toBRDecimalString(contract.fixed_rate),
-      indexer: contract.indexer,
-      indexer_spread: toBRDecimalString(contract.indexer_spread ?? 0),
-      operation_date: contract.operation_date,
-      first_payment_date: contract.first_payment_date,
-      principal_grace_months: contract.principal_grace_months,
-      interest_grace_months: contract.interest_grace_months,
-      grace_action: contract.grace_action,
-      principal_installments: contract.principal_installments,
-      interest_installments: contract.interest_installments,
-      principal_frequency: contract.principal_frequency,
-      interest_frequency: contract.interest_frequency,
-      calculation_system: contract.calculation_system,
-    }));
-    window.location.href = createPageUrl("Simulator") + "?reopen=" + contractData;
+    window.location.href = createPageUrl("Simulator") + "?duplicate=" + encodeURIComponent(contract.id);
   };
 
   if (selected) {

@@ -64,6 +64,11 @@ function resolveEditBootstrap() {
     writeEditSession({ mode: "edit", id: edit });
     return { mode: "edit", id: edit };
   }
+  const duplicate = params.get("duplicate");
+  if (duplicate) {
+    writeEditSession({ mode: "duplicate", id: duplicate });
+    return { mode: "duplicate", id: duplicate };
+  }
   const reopen = params.get("reopen");
   if (reopen) {
     writeEditSession({ mode: "reopen", payload: reopen });
@@ -72,6 +77,9 @@ function resolveEditBootstrap() {
   const saved = readEditSession();
   if (saved?.mode === "edit" && saved.id) {
     return { mode: "edit", id: saved.id, snapshot: saved.snapshot || null };
+  }
+  if (saved?.mode === "duplicate" && saved.id) {
+    return { mode: "duplicate", id: saved.id, snapshot: saved.snapshot || null };
   }
   if (saved?.mode === "reopen" && saved.payload) {
     return { mode: "reopen", payload: saved.payload };
@@ -145,9 +153,14 @@ export default function Simulator() {
     initialData: [],
   });
 
-  const loadContractForEdit = React.useCallback(async (contractId) => {
+  // duplicate = true: carrega o contrato como um contrato NOVO (sem id de edição), idêntico ao original
+  // — todos os campos, cronograma e PDF — mudando só o número do contrato.
+  const loadContractForEdit = React.useCallback(async (contractId, { duplicate = false } = {}) => {
     try {
       const contract = await base44.entities.LoanContract.get(contractId);
+      if (duplicate) {
+        contract.contract_number = `${contract.contract_number || ""} (contrato duplicado)`.trim();
+      }
       // schedule_data / exchange_rates vêm do Postgres como JSONB — o driver
       // já devolve objeto. JSON.parse(objeto) vira "[object Object]" e quebra
       // a reabertura, deixando o formulário vazio.
@@ -249,13 +262,14 @@ export default function Simulator() {
       // queremos que o banner "Continuar rascunho" ofereça restaurar dados
       // antigos por cima do que acabou de ser carregado.
       try {
-        localStorage.removeItem(`endividamento_draft_${contractId}`);
+        // Duplicando, o formulário é de um contrato novo: o rascunho local que vale é o "new".
+        localStorage.removeItem(`endividamento_draft_${duplicate ? "new" : contractId}`);
       } catch (err) {
         console.error("Erro ao limpar rascunho local:", err);
       }
 
-      setEditingContractId(contractId);
-      setEditingContractMeta({
+      setEditingContractId(duplicate ? null : contractId);
+      setEditingContractMeta(duplicate ? null : {
         status: contract.status || "rascunho",
         rejectionComments: contract.rejection_comments || "",
       });
@@ -264,7 +278,7 @@ export default function Simulator() {
       // FechamentoContabil.jsx → handleReopenForRecalc). Guardado em
       // extra_json (campo dinâmico, sem precisar de migração) — some quando
       // o contrato é salvo de novo daqui (ver persistContract/handleCloseContract).
-      setRecalcFlag(contract.recalculation_flag || null);
+      setRecalcFlag(duplicate ? null : (contract.recalculation_flag || null));
       setReopenData(reopenFormData);
       // Preenche formParams/lastCalculatedParams com os mesmos dados já
       // salvos — assim os botões de Salvar/Enviar funcionam imediatamente,
@@ -288,17 +302,17 @@ export default function Simulator() {
       setResult(scheduleRows.length ? resultData : null);
 
       writeEditSession({
-        mode: "edit",
+        mode: duplicate ? "duplicate" : "edit",
         id: contractId,
         snapshot: {
           reopenData: reopenFormData,
           formParams: contractFormData,
           result: scheduleRows.length ? resultData : null,
-          editingContractMeta: {
+          editingContractMeta: duplicate ? null : {
             status: contract.status || "rascunho",
             rejectionComments: contract.rejection_comments || "",
           },
-          recalcFlag: contract.recalculation_flag || null,
+          recalcFlag: duplicate ? null : (contract.recalculation_flag || null),
           uploadedPdfUrl: contract.contract_pdf_url || null,
         },
       });
@@ -342,6 +356,29 @@ export default function Simulator() {
       if (editLoadedRef.current === boot.id) return;
       editLoadedRef.current = boot.id;
       loadContractForEdit(boot.id);
+      return;
+    }
+
+    if (boot.mode === "duplicate") {
+      const marker = `duplicate:${boot.id}`;
+      if (boot.snapshot?.reopenData) {
+        // Remount: reidrata do sessionStorage (mantém o que já foi carregado), sem buscar de novo.
+        setEditingContractId(null);
+        setEditingContractMeta(null);
+        setRecalcFlag(null);
+        setReopenData(boot.snapshot.reopenData);
+        setFormParams(boot.snapshot.formParams || boot.snapshot.reopenData);
+        setLastCalculatedParams(boot.snapshot.formParams || boot.snapshot.reopenData);
+        setResult(boot.snapshot.result || null);
+        setUploadedPdfUrl(boot.snapshot.uploadedPdfUrl || null);
+        setHasUnsavedChanges(false);
+        editLoadedRef.current = marker;
+        setEditBootstrap(null);
+        return;
+      }
+      if (editLoadedRef.current === marker) return;
+      editLoadedRef.current = marker;
+      loadContractForEdit(boot.id, { duplicate: true });
       return;
     }
 
@@ -653,6 +690,7 @@ export default function Simulator() {
       // por FechamentoContabil.jsx ao reabrir); caso contrário, mantém o
       // comportamento padrão de ir para a lista de Contratos.
       const savedId = saved?.id || editingContractId;
+      clearEditSession();
       clearDraft(previousDraftKey);
       if (savedId && savedId !== previousDraftKey) clearDraft(savedId);
       if (recalcFlag?.returnTo) {
