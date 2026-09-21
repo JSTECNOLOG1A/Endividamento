@@ -15,6 +15,7 @@ import {
   loadFinanceTitleParams,
   normalizeFinanceTitleParams,
 } from "../payables/generate.js";
+import { isAwaitingImplantation } from "../payables/preImplantacao.js";
 
 function titleIsIntegrated(title) {
   return title.integrado_erp === true || ["integrado", "baixado"].includes(String(title.erp_status || ""));
@@ -93,6 +94,12 @@ export function buildReceivableTitles(contract, bank = null, entity = null, fina
 export async function generateReceivableTitlesForContract(contract, createdBy = "system") {
   if (!contract?.id || contract.status !== "aprovado") {
     return { created: 0, skipped: true };
+  }
+  // Empresa aguardando a implantação de saldos: nada é gerado. Contrato em implantação cuja liberação já aconteceu
+  // antes da data-base: o recebimento (entrada do recurso) é história, não gera título.
+  if (await isAwaitingImplantation(contract.entity_id)) return { created: 0, skipped: true, reason: "pre_implantacao" };
+  if (contract.deployment_mode && contract.deployment_cutoff && dateOnly(contract.operation_date) <= dateOnly(contract.deployment_cutoff)) {
+    return { created: 0, skipped: true, reason: "implantacao" };
   }
 
   await assertContractInTenant(contract.id);

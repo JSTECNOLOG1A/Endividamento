@@ -8,6 +8,7 @@ import { resolveNatureForEntity } from "./natureCode.js";
 import { logger } from "../../logger.js";
 import { groupIdOrThrow } from "../tenants/access.js";
 import { selectByIds, selectEntitiesByIds } from "../tenants/scope.js";
+import { refreshVariableTitleValues } from "./variableValue.js";
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -262,6 +263,8 @@ export async function integratePayableTitles(payload = {}) {
   if (!ids.length) throw httpError(400, "Selecione ao menos um título para integrar");
 
   const { linked, credential } = await loadLinkedPayableEndpoint();
+  // Dólar e indexados: o valor dos títulos ainda não integrados é atualizado antes de ir ao ERP.
+  try { await refreshVariableTitleValues(ids); } catch (error) { logger.warn({ err: error }, "não foi possível atualizar o valor variável antes da integração"); }
   const titlesResult = { rows: await selectByIds("payable_titles", ids, { order: "ORDER BY vencimento ASC, parcela ASC" }) };
   if (!titlesResult.rows.length) throw httpError(400, "Nenhum título encontrado");
 
@@ -287,6 +290,11 @@ export async function integratePayableTitles(payload = {}) {
   let skipped = 0;
 
   for (const title of titlesResult.rows) {
+    if (entityById.get(title.entity_id)?.implantacao_pendente) {
+      skipped += 1;
+      results.push({ id: title.id, ok: false, skipped: true, message: "Empresa aguardando a implantação de saldos: nada é integrado ao ERP até aplicar a implantação" });
+      continue;
+    }
     if (title.retido_implantacao) {
       skipped += 1;
       results.push({ id: title.id, ok: false, skipped: true, message: "Título retido para implantação de saldos — libere na janela de troca" });

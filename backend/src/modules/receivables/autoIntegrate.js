@@ -17,6 +17,7 @@ export async function listReadyReceivableTitles({ limit = 200 } = {}) {
        AND COALESCE(erp_status, '') NOT IN ('integrado', 'baixado')
        AND btrim(COALESCE(natureza, '')) <> ''
        AND btrim(COALESCE(cliente, '')) <> ''
+       AND NOT EXISTS (SELECT 1 FROM company_entities e WHERE e.id = receivable_titles.entity_id AND e.implantacao_pendente)
      ORDER BY vencimento ASC NULLS LAST, parcela ASC, id ASC
      LIMIT $2`,
     [groupIdOrThrow(), Math.max(1, Math.min(Number(limit) || 200, 500))]

@@ -19,6 +19,7 @@ import { createPageUrl } from "../utils";
 import { statusLabel } from "../lib/contractStatus";
 import { computeContractCET } from "../lib/cetFromSchedule";
 import { withAuthToken } from "../lib/documentActions";
+import PreImplantationBanner, { usePreImplantation } from "@/components/accounting/PreImplantationBanner";
 
 export default function Contracts() {
   const [selected, setSelected] = useState(null);
@@ -293,6 +294,7 @@ export default function Contracts() {
   return (
     // Largura máxima da tela, como o padrão em todas as telas do sistema.
     <div className="w-full px-4 sm:px-6 py-8" data-tour="contracts-workspace">
+      <PreImplantationBanner className="mb-4" />
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contratos</h1>

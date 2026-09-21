@@ -28,6 +28,7 @@ import { CheckCircle2, AlertTriangle, Lock, RotateCcw, Calculator, ClipboardChec
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSortableRows, SortableTh } from "@/components/ui/sortable-table";
 import { Link } from "react-router-dom";
+import PreImplantationBanner, { usePreImplantation } from "@/components/accounting/PreImplantationBanner";
 import {
   EVENT_TYPE_LABELS,
   sumSettlementCashBuckets,
@@ -433,6 +434,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
   const [recalcErpBlock, setRecalcErpBlock] = useState(null);
 
   const competencia = competenciaDate(year, month);
+  const awaitingImplantation = usePreImplantation().some((e) => e.id === entityId);
 
   const { data: contracts = [] } = useQuery({
     queryKey: ["fechamento-contracts", entityId],
@@ -862,10 +864,12 @@ export default function FechamentoContabil({ entityId, entityName }) {
   }
 
   const isApproved = closing?.status === "aprovado";
+  const controlsLocked = isApproved || awaitingImplantation;
   const isAdmin = user?.role === "admin";
 
   return (
     <div className="space-y-6">
+      <PreImplantationBanner entityId={entityId} />
       {/* Cabeçalho do fechamento */}
       <Card className="border-slate-200 shadow-sm">
         <CardContent className="pt-6">
@@ -878,14 +882,14 @@ export default function FechamentoContabil({ entityId, entityName }) {
               <div className="space-y-1">
                 <Label className="text-xs text-slate-600 uppercase tracking-wider">Competência</Label>
                 <div className="flex gap-1.5">
-                  <Select value={String(month)} onValueChange={(v) => { setMonth(Number(v)); setDataBase(lastDayOfMonth(year, Number(v))); }} disabled={isApproved}>
+                  <Select value={String(month)} onValueChange={(v) => { setMonth(Number(v)); setDataBase(lastDayOfMonth(year, Number(v))); }} disabled={controlsLocked}>
                     <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {MONTHS.map((m, i) => (<SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>))}
                     </SelectContent>
                   </Select>
                   <Input type="number" className="h-9 w-24" value={year}
-                    onChange={(e) => { setYear(Number(e.target.value)); setDataBase(lastDayOfMonth(Number(e.target.value), month)); }} disabled={isApproved} />
+                    onChange={(e) => { setYear(Number(e.target.value)); setDataBase(lastDayOfMonth(Number(e.target.value), month)); }} disabled={controlsLocked} />
                 </div>
               </div>
               <div className="space-y-1">
@@ -905,7 +909,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
                     // fechamento mais abaixo e derrubaria a tela em branco).
                     if (e.target.value) setDataBase(e.target.value);
                   }}
-                  disabled={isApproved}
+                  disabled={controlsLocked}
                 />
               </div>
             </div>
@@ -998,7 +1002,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
                               variant="destructive"
                               className="h-6 text-xs gap-1 px-2"
                               onClick={() => handleOpenRecalcDialog(contract, row, settlement)}
-                              disabled={isApproved}
+                              disabled={controlsLocked}
                             >
                               <RotateCcw className="w-3 h-3" /> Requer recálculo
                             </Button>
@@ -1015,12 +1019,12 @@ export default function FechamentoContabil({ entityId, entityName }) {
                             </span>
                           ) : (
                             <div className="flex gap-1.5 justify-end">
-                              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={isApproved}
+                              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={controlsLocked}
                                 onClick={() => handleOpenSettlement(contract, row)}>
                                 {settlement && !isEstornado ? "Editar" : "Baixar"}
                               </Button>
                               {settlement && !isEstornado && (
-                                <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600" disabled={isApproved}
+                                <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600" disabled={controlsLocked}
                                   onClick={() => handleEstornarSettlement(settlement)}>
                                   Estornar
                                 </Button>
@@ -1051,7 +1055,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
                 Concilia abertura, apropriações e pagamentos reais do período — por evento, não por diferença de saldo.
               </p>
             </div>
-            <Button size="sm" className="gap-1.5" disabled={isApproved || calculating} onClick={handleCalculate}>
+            <Button size="sm" className="gap-1.5" disabled={controlsLocked || calculating} onClick={handleCalculate}>
               <Calculator className="w-3.5 h-3.5" /> {calculating ? "Calculando..." : "Calcular fechamento"}
             </Button>
           </div>
@@ -1144,7 +1148,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
               </CardTitle>
               <p className="text-xs text-slate-600 mt-1">Confira os lançamentos gerados e aprove o lote para finalizar o fechamento.</p>
             </div>
-            <Button size="sm" variant="outline" className="gap-1.5" disabled={!calcResult || isApproved} onClick={handleBuildJournal}>
+            <Button size="sm" variant="outline" className="gap-1.5" disabled={!calcResult || controlsLocked} onClick={handleBuildJournal}>
               <ClipboardCheck className="w-3.5 h-3.5" /> Gerar lançamentos
             </Button>
           </div>
@@ -1190,7 +1194,7 @@ export default function FechamentoContabil({ entityId, entityName }) {
             )}
 
             <div className="flex justify-end">
-              <Button className="gap-1.5 bg-emerald-600 hover:bg-emerald-700" disabled={!approveGate.canApprove || isApproved || approving} onClick={handleApprove}>
+              <Button className="gap-1.5 bg-emerald-600 hover:bg-emerald-700" disabled={!approveGate.canApprove || controlsLocked || approving} onClick={handleApprove}>
                 <CheckCircle2 className="w-3.5 h-3.5" /> {approving ? "Aprovando..." : "Aprovar fechamento"}
               </Button>
             </div>

@@ -425,6 +425,7 @@ export async function create(name, data, createdBy) {
   else await assertCanWrite();
   const entity = getEntity(name);
   const row = splitPayload(entity, data);
+  if (name === "CompanyEntity") { delete row.implantacao_pendente; delete row.implantacao_liberada_em; }
   if (name === "BalanceDeploymentConfig") {
     for (const key of DEPLOYMENT_WORKFLOW_FIELDS) delete row[key];
     row.status = "rascunho";
@@ -590,6 +591,7 @@ export async function update(name, id, data) {
   const entity = getEntity(name);
   if (entity.immutable) throw httpError(409, `${name} é imutável`);
   const previous = await getById(name, id);
+  if (name === "CompanyEntity") { data = { ...(data || {}) }; delete data.implantacao_pendente; delete data.implantacao_liberada_em; }
   if (ENTITY_SCOPE[name]?.type === "shared" && !previous.group_id) {
     throw httpError(403, "O catálogo compartilhado não pode ser alterado");
   }

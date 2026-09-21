@@ -29,6 +29,7 @@ import { erpStatusOf, ErpStatusBadge, ErpStatusLegend } from "@/lib/erpStatus";
 import { useProcessing } from "@/lib/ProcessingContext";
 import { useAuth } from "@/lib/AuthContext";
 import { useSortableRows, SortableTh } from "@/components/ui/sortable-table";
+import PreImplantationBanner, { usePreImplantation } from "@/components/accounting/PreImplantationBanner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -457,6 +458,7 @@ export default function AccountsPayable() {
 
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-8" data-tour="payables-workspace">
+      <PreImplantationBanner className="mb-4" />
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Contas a pagar</h1>

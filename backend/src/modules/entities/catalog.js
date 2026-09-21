@@ -9,9 +9,9 @@ export const ENTITIES = {
     table: "company_entities",
     columns: [
       "group_id", "entity_name", "document_number", "document_type", "entity_type", "codigo_empresa", "codigo_filial", "status",
-      "accounting_mode", "payment_source", "posting_approval",
+      "accounting_mode", "payment_source", "posting_approval", "implantacao_pendente", "implantacao_liberada_em",
     ],
-    booleans: [],
+    booleans: ["implantacao_pendente"],
     numbers: [],
   },
   Bank: {

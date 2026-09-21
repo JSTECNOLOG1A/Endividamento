@@ -114,3 +114,16 @@ Ajuste no pagamento (valor pago × provisão restante: juros, multa, desconto, c
 - **Competência pelo fuso de São Paulo.** O servidor roda em UTC e o agendamento mensal roda às 22:00 de Brasília (01:00 UTC do dia seguinte): pelo relógio do servidor, "o mês atual" seria o que acabou de começar. `competenciaEmSaoPaulo` e `todayInSaoPaulo` (saoPaulo.js) passam a definir a competência e o "hoje" do fechamento e do recálculo das taxas.
 - **Atualização de mercado no início do fechamento.** O fechamento automático primeiro atualiza PTAX e índices do BACEN (a PTAX do último dia útil sai ~13h, mas a atualização diária pode rodar depois do fechamento). Falha na atualização não derruba o fechamento (fica registrada em `detalhes.mercado`); o gate abaixo acusa a cotação faltante. Variável `CLOSING_SKIP_MARKET_SYNC=1` desliga a atualização (uso em testes).
 - **PTAX do último dia útil é exigida.** A cotação usada precisa ser a do último dia útil até o fim do mês (segunda a sexta, fora os feriados cadastrados). Se só há cotação mais antiga, o cálculo avisa (`ptax_defasada`) e o fechamento **não pode ser aprovado nem postado** até atualizar as cotações em Moedas; sem cotação nenhuma nos 7 dias anteriores, também bloqueia (`ptax_ausente`). Competência em andamento segue provisória. Feriado no último dia útil: cadastrar em Feriados.
+
+## Pré-implantação: empresa trancada até aplicar a implantação (marco zero)
+
+Toda empresa nasce — e as existentes ficaram, na migration 072 — com `company_entities.implantacao_pendente = true`. Enquanto a chave está ligada, para aquela empresa:
+- **Aprovar contrato não gera títulos** (nem a pagar nem a receber); `generatePayableTitlesForContract` e `generateReceivableTitlesForContract` devolvem `reason: "pre_implantacao"`.
+- **Nada é integrado ao ERP:** a seleção da integração automática (a pagar e a receber) exclui a empresa e a integração manual recusa os títulos.
+- **O fechamento contábil automático não roda** (`skipped`, motivo "aguardando a implantação"); o fechamento manual mostra o aviso e trava calcular e aprovar.
+- Continua funcionando: criar/aprovar contratos, calculadora, relatórios, cotações e índices, Lógica Contábil e a própria tela de Implantação.
+- **A chave só muda pela implantação** (não há "dispensar": toda empresa tem dívida no marco zero). Não é editável pela API genérica de empresas.
+
+**Aplicar a implantação** desliga a chave e gera só o necessário: parcelas em aberto informadas e as posteriores à data-base, todas retidas até "Liberar títulos". O que é anterior à data-base nunca chega a ser gerado (não existe título "ignorado" nesse fluxo). O recebimento da liberação do recurso (anterior à data-base) não gera título a receber.
+
+**Integração com antecedência (dólar e indexados).** Parâmetro `finance.integration_lead_days_variable` (padrão 10 dias). Contrato em moeda estrangeira ou indexado só entra na integração a partir de (vencimento − antecedência); contrato de taxa fixa em reais integra sem espera (todas as parcelas de uma vez na liberação). Antes de integrar, o valor do título ainda não integrado é atualizado no lugar — PTAX mais recente (dólar) ou cronograma recalculado com as taxas publicadas (indexados). Título já integrado nunca é alterado; a diferença é tratada no pagamento (próxima entrega).

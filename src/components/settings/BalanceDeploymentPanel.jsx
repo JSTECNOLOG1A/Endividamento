@@ -333,6 +333,13 @@ export default function BalanceDeploymentPanel() {
                 </Select>
               </div>
             </div>
+            {entityId && (() => {
+              const ent = entities.find((e) => e.id === entityId);
+              if (!ent) return null;
+              return ent.implantacao_pendente
+                ? <Badge className="bg-amber-50 text-amber-800 border-0 font-medium gap-1" title="Enquanto a implantação não é aplicada: contrato aprovado não gera títulos, nada integra ao ERP e o fechamento não roda."><Lock className="w-3 h-3" />Pré-implantação: trava ligada</Badge>
+                : <Badge className="bg-emerald-50 text-emerald-700 border-0 font-medium" title="A empresa saiu da pré-implantação.">Trava desligada{ent.implantacao_liberada_em ? ` em ${dmy(String(ent.implantacao_liberada_em).slice(0, 10))}` : ""}</Badge>;
+            })()}
             {entityId && !gateBlocked && (
               <Badge className={`${STATUS[status].cls} border-0 font-medium gap-1`}>
                 {locked ? <Lock className="w-3 h-3" /> : null}{STATUS[status].label}

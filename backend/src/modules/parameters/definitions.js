@@ -196,6 +196,17 @@ export const PARAMETER_DEFINITIONS = [
     writableScopes: ["TENANT"],
   },
   {
+    key: "finance.integration_lead_days_variable",
+    category: "finance",
+    type: "INTEGER",
+    label: "Antecedência da integração (dólar e indexados)",
+    description: "Quantos dias antes do vencimento os títulos de contratos em moeda estrangeira ou indexados (CDI, SELIC, IPCA...) são integrados ao ERP. Até lá o valor é atualizado pela cotação e pelo índice mais recentes; depois de integrado, o valor não muda. Contratos de taxa fixa em reais integram sem espera.",
+    defaultValue: 10,
+    isEditable: true,
+    implemented: true,
+    writableScopes: ["TENANT"],
+  },
+  {
     key: "integrations.external_erp_enabled",
     category: "integrations",
     type: "BOOLEAN",

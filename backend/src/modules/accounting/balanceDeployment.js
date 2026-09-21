@@ -5,6 +5,8 @@ import { actorEmail } from "../tenants/policy.js";
 import { computeDeploymentPosition, isLastDayOfMonthIso } from "./deploymentPosition.js";
 import { OPERATION_CATEGORY_LABELS, resolveOpeningAccounts } from "./closingEngine.js";
 import { getDeploymentReadiness, readinessMessage } from "./deploymentReadiness.js";
+import { generatePayableTitlesForContract } from "../payables/generate.js";
+import { generateReceivableTitlesForContract } from "../receivables/generate.js";
 import { markContractForDeployment, releaseDeploymentTitles } from "../payables/implantacao.js";
 
 function httpError(status, message) {
@@ -244,6 +246,17 @@ export async function applyBalanceDeployment(payload = {}) {
   for (const c of snap.contratos) {
     const res = await markContractForDeployment({ contractId: c.contractId, cutoffDate: snap.dataBase, openParcelas: c.openParcelas });
     results.push({ contractNumber: c.contractNumber, titulosRetidos: res.titulosRetidos });
+  }
+  // A empresa sai da pré-implantação e os títulos necessários são gerados agora: parcelas em aberto informadas e as
+  // posteriores à data-base, todas retidas até a liberação (o que é anterior à data-base nunca chega a ser gerado).
+  await pool.query(`UPDATE company_entities SET implantacao_pendente = false, implantacao_liberada_em = now() WHERE id = $1 AND group_id = $2`, [cfg.entity_id, groupIdOrThrow()]);
+  for (const c of snap.contratos) {
+    const row = (await pool.query(`SELECT * FROM loan_contracts WHERE id = $1 AND group_id = $2`, [c.contractId, groupIdOrThrow()])).rows[0];
+    if (!row) continue;
+    const gen = await generatePayableTitlesForContract(row, actorEmail() || "sistema");
+    await generateReceivableTitlesForContract(row, actorEmail() || "sistema");
+    const res = results.find((r) => r.contractNumber === c.contractNumber);
+    if (res) res.titulosGerados = gen?.created || 0;
   }
   await pool.query(`UPDATE balance_deployment_configs SET status = 'aplicada', applied_at = now(), updated_date = now() WHERE id = $1 AND group_id = $2`, [configId, groupIdOrThrow()]);
   return { configId, status: "aplicada", contratos: results };

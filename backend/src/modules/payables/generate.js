@@ -14,6 +14,7 @@ import { reversePayableTitles } from "./erpIntegrate.js";
 import { reverseReceivableTitles } from "../receivables/erpIntegrate.js";
 import { resolveParameter } from "../parameters/service.js";
 import { resolveSupplierByCnpj } from "./erpLookup.js";
+import { isAwaitingImplantation } from "./preImplantacao.js";
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -615,6 +616,8 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
   if (!contract?.id || contract.status !== "aprovado") {
     return { created: 0, skipped: true };
   }
+  // Empresa aguardando a implantação de saldos: nenhum título é gerado (a implantação gera os necessários ao aplicar).
+  if (await isAwaitingImplantation(contract.entity_id)) return { created: 0, skipped: true, reason: "pre_implantacao" };
 
   await assertContractInTenant(contract.id);
   const groupId = groupIdOrThrow();

@@ -297,6 +297,9 @@ async function ensureClosing(entity, competencia) {
 
 async function closeEntityForCompetencia(entity, competencia) {
   const groupId = entity.group_id;
+  if (entity.implantacao_pendente) {
+    return { entityId: entity.id, entityName: entity.entity_name, skipped: true, reason: "Empresa aguardando a implantação de saldos" };
+  }
   const closing = await ensureClosing(entity, competencia);
   if (closing.status === "aprovado") {
     return { entityId: entity.id, entityName: entity.entity_name, skipped: true, reason: "Competência já aprovada" };

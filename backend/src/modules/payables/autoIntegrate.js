@@ -2,25 +2,38 @@ import { pool } from "../../db/pool.js";
 import { logger } from "../../logger.js";
 import { groupIdOrThrow } from "../tenants/access.js";
 import { integratePayableTitles } from "./erpIntegrate.js";
+import { integrationLeadDays, refreshVariableTitleValues } from "./variableValue.js";
+import { todayInSaoPaulo } from "../accounting/saoPaulo.js";
 
 /**
  * Títulos a pagar prontos para integração automática:
  * abertos, ainda não no ERP, com natureza e fornecedor preenchidos.
  */
 export async function listReadyPayableTitles({ limit = 200 } = {}) {
+  const groupId = groupIdOrThrow();
+  const leadDays = await integrationLeadDays(groupId);
+  // Empresa aguardando a implantação não integra. Contrato em dólar ou indexado só integra a partir de
+  // (vencimento - antecedência): antes disso o valor ainda é uma projeção. Taxa fixa em reais integra sem espera.
   const result = await pool.query(
-    `SELECT id
-     FROM payable_titles
-     WHERE group_id = $1
-       AND status = 'aberto'
-       AND COALESCE(integrado_erp, false) = false
-       AND COALESCE(retido_implantacao, false) = false
-       AND COALESCE(erp_status, '') NOT IN ('integrado', 'baixado')
-       AND btrim(COALESCE(natureza, '')) <> ''
-       AND btrim(COALESCE(fornecedor, '')) <> ''
-     ORDER BY vencimento ASC NULLS LAST, parcela ASC, id ASC
-     LIMIT $2`,
-    [groupIdOrThrow(), Math.max(1, Math.min(Number(limit) || 200, 500))]
+    `SELECT t.id
+       FROM payable_titles t
+       LEFT JOIN loan_contracts c ON c.id = t.contract_id
+      WHERE t.group_id = $1
+        AND t.status = 'aberto'
+        AND COALESCE(t.integrado_erp, false) = false
+        AND COALESCE(t.retido_implantacao, false) = false
+        AND COALESCE(t.erp_status, '') NOT IN ('integrado', 'baixado')
+        AND btrim(COALESCE(t.natureza, '')) <> ''
+        AND btrim(COALESCE(t.fornecedor, '')) <> ''
+        AND NOT EXISTS (SELECT 1 FROM company_entities e WHERE e.id = t.entity_id AND e.implantacao_pendente)
+        AND (
+          c.id IS NULL
+          OR (c.currency_id IS NULL AND upper(COALESCE(c.indexer, 'NA')) IN ('NA', ''))
+          OR t.vencimento <= $3::date + ($4::int * interval '1 day')
+        )
+      ORDER BY t.vencimento ASC NULLS LAST, t.parcela ASC, t.id ASC
+      LIMIT $2`,
+    [groupId, Math.max(1, Math.min(Number(limit) || 200, 500)), todayInSaoPaulo(), leadDays]
   );
   return result.rows;
 }
@@ -37,6 +50,8 @@ export async function autoIntegratePayableTitles(payload = {}) {
 
   const ids = ready.map((row) => row.id);
   try {
+    // Dólar e indexados: valor atualizado pela cotação e pelo índice mais recentes antes de ir ao ERP.
+    await refreshVariableTitleValues(ids);
     const result = await integratePayableTitles({ ids });
     const integrated = result.integrated || 0;
     const failed = result.failed || 0;
