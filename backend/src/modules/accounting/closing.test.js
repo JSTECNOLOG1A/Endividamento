@@ -373,6 +373,69 @@ console.log("== Fuso de São Paulo e PTAX do último dia útil");
   check("sem nenhuma cotação recente: também bloqueia", !gNone.canApprove);
 }
 
+// ---------------------------------------------------------------------------------------------
+console.log("== Custo de transação amortizado (CPC 08 (R1), item 12 — simplificação em linha reta)");
+{
+  const feeParams = { ...base, operationValue: 370000, otherFees: 12000, fixedRate: 12, operationDate: "2026-01-05", firstPaymentDate: "2026-02-05", first_payment_date: "2026-02-05",
+    principalInstallments: 12, interestInstallments: 12, principalFrequency: 1, interestFrequency: 1, calculationSystem: "SAC",
+    totalTermMonths: 12, finalMaturityDate: "2027-01-05", graceInterestBehavior: "PAGAR" };
+  const { schedule } = await calculateAmortizationSchedule(feeParams);
+  const mk = (extra = {}) => ({ id: "ct", contract_number: "CT", operation_category: "emprestimos", operation_date: feeParams.operationDate,
+    other_fees: feeParams.otherFees, schedule_data: JSON.stringify({ schedule }), ...extra });
+
+  // padrão (sem a flag, ou "imediato"): comportamento de sempre — tudo no ato, nada de apropriação
+  const imediato = reconcileContractForCompetencia(mk(), 2026, 1);
+  check("sem a política (undefined): continua 100% no ato, como antes", imediato.events.some((e) => e.type === "custo_transacao_inicial" && e.amount === feeParams.otherFees) && !imediato.events.some((e) => e.type === "custo_transacao_diferido" || e.type === "custo_transacao_apropriacao"));
+  const explicitoImediato = reconcileContractForCompetencia(mk({ transaction_cost_recognition: "imediato" }), 2026, 1);
+  check("\"imediato\" explícito: mesmo resultado", JSON.stringify(explicitoImediato.events) === JSON.stringify(imediato.events));
+
+  // amortizado: no desembolso vai para o diferido, não para despesa
+  const amort = mk({ transaction_cost_recognition: "amortizado" });
+  const jan = reconcileContractForCompetencia(amort, 2026, 1);
+  check("amortizado: no desembolso vai para custo_transacao_diferido (não custo_transacao_inicial)", jan.events.some((e) => e.type === "custo_transacao_diferido" && e.amount === feeParams.otherFees) && !jan.events.some((e) => e.type === "custo_transacao_inicial"));
+  check("amortizado: já apropria uma fração no mês do desembolso (linha reta desde o dia da liberação)", jan.events.some((e) => e.type === "custo_transacao_apropriacao" && e.amount > 0));
+
+  // soma das apropriações mensais = o total do custo, no fim do prazo
+  const start = new Date(feeParams.operationDate + "T12:00:00");
+  const last = new Date(schedule.at(-1).dataVencimento + "T12:00:00");
+  const months = (last.getFullYear() - start.getFullYear()) * 12 + last.getMonth() - start.getMonth() + 2;
+  let totalApropriado = 0, diferidoCount = 0;
+  for (let i = 0; i < months; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+    const rec = reconcileContractForCompetencia(amort, d.getFullYear(), d.getMonth() + 1);
+    totalApropriado += rec.events.filter((e) => e.type === "custo_transacao_apropriacao").reduce((s2, e) => s2 + e.amount, 0);
+    diferidoCount += rec.events.filter((e) => e.type === "custo_transacao_diferido").length;
+  }
+  check("amortizado: a soma das apropriações mensais fecha no total do custo", Math.abs(totalApropriado - feeParams.otherFees) < 0.05, `${totalApropriado} x ${feeParams.otherFees}`);
+  check("amortizado: o diferido é lançado uma única vez (no desembolso)", diferidoCount === 1);
+
+  // quitação antecipada no meio do prazo: reconhece de uma vez o saldo restante, na data da baixa
+  const payoffIso = schedule[5].dataVencimento; // sexto vencimento, no meio do prazo de 12 meses
+  const quitado = mk({ transaction_cost_recognition: "amortizado", payoff_date: payoffIso });
+  const [py, pm] = payoffIso.split("-").map(Number);
+  const rec = reconcileContractForCompetencia(quitado, py, pm);
+  const evQuitacao = rec.events.find((e) => e.type === "custo_transacao_apropriacao");
+  check("quitação antecipada: o evento de apropriação cai na data real da baixa, não no fim do mês", evQuitacao && evQuitacao.date === payoffIso, JSON.stringify(evQuitacao));
+  let acumuladoAntes = 0;
+  for (let i = 0; i < months; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+    if (d.getFullYear() > py || (d.getFullYear() === py && d.getMonth() + 1 >= pm)) break;
+    acumuladoAntes += reconcileContractForCompetencia(quitado, d.getFullYear(), d.getMonth() + 1).events.filter((e) => e.type === "custo_transacao_apropriacao").reduce((s2, e) => s2 + e.amount, 0);
+  }
+  check("quitação antecipada: reconhece de uma vez o saldo ainda não apropriado (não continua o rateio)", evQuitacao && Math.abs(evQuitacao.amount - (feeParams.otherFees - acumuladoAntes)) < 0.05, `${evQuitacao?.amount} x ${r2(feeParams.otherFees - acumuladoAntes)}`);
+  const depoisDaQuitacao = reconcileContractForCompetencia(quitado, py, pm + 2 <= 12 ? pm + 2 : 12);
+  check("mês seguinte à quitação: nada mais é apropriado (o contrato já saiu da conciliação)", depoisDaQuitacao.events.length === 0);
+
+  // sem custo de transação: a flag não gera nenhum evento, mesmo marcada como "amortizado"
+  const semCusto = reconcileContractForCompetencia(mk({ other_fees: 0, transaction_cost_recognition: "amortizado" }), 2026, 1);
+  check("sem custo de transação: nenhum evento de diferido ou apropriação", !semCusto.events.some((e) => e.type.startsWith("custo_transacao_diferido") || e.type === "custo_transacao_apropriacao"));
+
+  // chave de evento estável (idempotência) também para a apropriação
+  const a1 = reconcileContractForCompetencia(amort, 2026, 3).events.filter((e) => e.type === "custo_transacao_apropriacao").map((e) => e.key);
+  const a2 = reconcileContractForCompetencia(amort, 2026, 3).events.filter((e) => e.type === "custo_transacao_apropriacao").map((e) => e.key);
+  check("reprocessar a apropriação gera a mesma chave (idempotência)", JSON.stringify(a1) === JSON.stringify(a2) && a1.every(Boolean) && a1.length > 0);
+}
+
 if (failures) {
   console.error(`\n${failures} falha(s)`);
   process.exit(1);

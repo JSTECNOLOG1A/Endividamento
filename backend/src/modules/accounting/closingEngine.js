@@ -30,6 +30,7 @@ export const SETTLEMENT_EVENT_TYPES = {
   IOF: "iof",
   CUSTO_TRANSACAO_INICIAL: "custo_transacao_inicial",
   CUSTO_TRANSACAO_APROPRIACAO: "custo_transacao_apropriacao",
+  CUSTO_TRANSACAO_DIFERIDO: "custo_transacao_diferido",
   CAPITALIZACAO_JUROS: "capitalizacao_juros",
   AJUSTE_PROVISAO_JUROS: "ajuste_provisao_juros",
   RECLASSIFICACAO_CIRCULANTE_PRINCIPAL: "reclassificacao_circulante_principal",
@@ -53,6 +54,7 @@ export const EVENT_TYPE_LABELS = {
   iof: "IOF",
   custo_transacao_inicial: "Custo de transação inicial",
   custo_transacao_apropriacao: "Apropriação de custo de transação (fee de estruturação)",
+  custo_transacao_diferido: "Custo de transação diferido (a apropriar — CPC 08)",
   capitalizacao_juros: "Capitalização de juros (juros a pagar → principal)",
   ajuste_provisao_juros: "Ajuste de provisão de juros (taxas publicadas)",
   abertura_implantacao: "Abertura — implantação de saldos",
@@ -326,15 +328,46 @@ export function reconcileContractForCompetencia(contract, year, month, settlemen
   }
 
   // Liberação, IOF e custo de transação: na data da operação.
+  // Custo de transação: reconhecido no ato (padrão, D8 do plano da virada) ou amortizado ao longo do prazo —
+  // opção por contrato. CPC 08 (R1), item 12: os encargos financeiros da captação são apropriados ao resultado
+  // em função da fluência do prazo, pelo método dos juros efetivos (TIR da operação). Aqui, simplificação em
+  // linha reta por dias corridos (mesmo padrão da apropriação de juros abaixo) — não o método de juros efetivos
+  // da norma, que exigiria recalcular a taxa implícita do contrato inteiro.
+  const costTotal = r2(contract.other_fees || 0);
+  const amortizeCost = contract.transaction_cost_recognition === "amortizado" && costTotal > 0;
+  const costTermDays = (rows[rows.length - 1].date - liberationDate) / 86400000;
+  const costAccruedThrough = (limit) => {
+    if (!amortizeCost) return 0;
+    if (!(costTermDays > 0)) return limit >= liberationDate ? costTotal : 0;
+    const days = Math.min(costTermDays, Math.max(0, (limit - liberationDate) / 86400000));
+    return r2(costTotal * (days / costTermDays));
+  };
+
   if (liberationDate >= monthStart && liberationDate <= monthEnd) {
     if (initialPrincipal) push(SETTLEMENT_EVENT_TYPES.LIBERACAO, r2(initialPrincipal), liberationIso, "abertura", { bankAccountId: contract.disbursement_bank_account_id || null });
     if ((contract.iof_value || 0) > 0) push(SETTLEMENT_EVENT_TYPES.IOF, r2(contract.iof_value), liberationIso, "abertura");
-    if ((contract.other_fees || 0) > 0) push(SETTLEMENT_EVENT_TYPES.CUSTO_TRANSACAO_INICIAL, r2(contract.other_fees), liberationIso, "abertura");
+    if (costTotal > 0) {
+      // Reconhecimento imediato: despesa direto. Amortizado: vai para o ativo diferido (custo a apropriar);
+      // a despesa só entra mês a mês, no bloco de apropriação abaixo.
+      push(amortizeCost ? SETTLEMENT_EVENT_TYPES.CUSTO_TRANSACAO_DIFERIDO : SETTLEMENT_EVENT_TYPES.CUSTO_TRANSACAO_INICIAL, costTotal, liberationIso, "abertura");
+    }
   }
 
   // Juros apropriados por competência (acumulado até o fim do mês − acumulado até o fim do mês anterior).
   const interestMonth = r2(accruedThrough(monthEnd) - accruedThrough(prevMonthEnd));
   if (interestMonth) push(SETTLEMENT_EVENT_TYPES.JUROS_APROPRIADOS, interestMonth, monthEndIso, "competencia");
+
+  // Apropriação do custo de transação diferido: mesmo padrão pro-rata por dias corridos dos juros acima.
+  // Quitação antecipada ou renegociação (payoff_date cai neste mês): reconhece de uma vez o saldo restante do
+  // ativo diferido, na data da baixa, em vez de continuar o rateio mês a mês.
+  if (amortizeCost) {
+    const payoffDateObj = payoffIso ? new Date(payoffIso + "T12:00:00") : null;
+    const payoffInThisMonth = Boolean(payoffDateObj && payoffDateObj >= monthStart && payoffDateObj <= monthEnd);
+    const prevCostAccrued = costAccruedThrough(prevMonthEnd);
+    const costMonth = payoffInThisMonth ? r2(costTotal - prevCostAccrued) : r2(costAccruedThrough(monthEnd) - prevCostAccrued);
+    const costDateIso = payoffInThisMonth ? payoffIso : monthEndIso;
+    if (costMonth > 0.005) push(SETTLEMENT_EVENT_TYPES.CUSTO_TRANSACAO_APROPRIACAO, costMonth, costDateIso, "apropriacao");
+  }
 
   rows.forEach((r) => {
     const { row, idx, settlement } = r;

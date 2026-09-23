@@ -42,7 +42,7 @@ export async function getDeploymentReadiness(payload = {}) {
   const groupId = groupIdOrThrow();
 
   const contracts = (await pool.query(
-    `SELECT id, operation_category, currency_id, iof_value, other_fees, schedule_data, indexer
+    `SELECT id, operation_category, currency_id, iof_value, other_fees, schedule_data, indexer, transaction_cost_recognition
        FROM loan_contracts WHERE entity_id = $1 AND group_id = $2 AND status = 'aprovado'`,
     [entityId, groupId]
   )).rows;
@@ -65,7 +65,12 @@ export async function getDeploymentReadiness(payload = {}) {
     if (rows.some((c) => c.currency_id)) { required.add("variacao_cambial_passiva"); required.add("variacao_cambial_ativa"); }
     if (rows.some((c) => Number(c.iof_value) > 0)) required.add("iof");
     if (rows.some(isIndexedContract)) required.add("ajuste_provisao_juros");
-    if (rows.some((c) => Number(c.other_fees) > 0)) required.add("custo_transacao_inicial");
+    const feeRows = rows.filter((c) => Number(c.other_fees) > 0);
+    if (feeRows.some((c) => c.transaction_cost_recognition !== "amortizado")) required.add("custo_transacao_inicial");
+    if (feeRows.some((c) => c.transaction_cost_recognition === "amortizado")) {
+      required.add("custo_transacao_diferido");
+      required.add("custo_transacao_apropriacao");
+    }
     if (rows.some((c) => scheduleOf(c).some((r) => Number(r.jurosCapitalizados) > 0 || Number(r.jurosCapitalizadosBRL) > 0))) required.add("capitalizacao_juros");
 
     const filled = (type) => mappings.some(

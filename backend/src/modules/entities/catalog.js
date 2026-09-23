@@ -70,7 +70,7 @@ export const ENTITIES = {
       "group_id", "entity_id", "bank_id", "creditor_cnpj", "disbursement_bank_account_id", "disbursement_schedule", "contract_number", "operation_category", "operation_type",
       "operation_value", "amount_foreign", "exchange_rate_closing", "signal_value", "iof_value",
       "iof_financed", "encargo_garantia_value", "encargo_garantia_financed", "other_fees",
-      "other_fees_financed", "mip_value", "mip_embedded", "dfi_value",
+      "other_fees_financed", "transaction_cost_recognition", "mip_value", "mip_embedded", "dfi_value",
       "dfi_embedded", "other_insurance_value", "other_insurance_embedded", "fixed_rate", "indexer",
       "indexer_spread", "interest_day_count_convention", "indexer_capitalization_mode", "currency_id", "exchange_lag", "exchange_rates", "operation_date", "emission_date",
       "first_payment_date", "total_term_months", "final_maturity_date", "principal_grace_months",

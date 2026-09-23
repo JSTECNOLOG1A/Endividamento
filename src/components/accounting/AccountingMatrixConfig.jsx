@@ -19,11 +19,9 @@ import { SETTLEMENT_EVENT_TYPES, EVENT_TYPE_LABELS } from "@/lib/accountingClosi
 import { OPERATION_CATEGORIES } from "@/lib/contractOptions";
 import { SORT_HEAD_CLASS } from "@/components/ui/sortable-table";
 
-// A apropriação linear do custo de transação foi descontinuada (política única: custo no ato);
-// o tipo continua existindo só para fechamentos antigos e não aparece mais na matriz.
-const EVENT_TYPES_ORDERED = Object.values(SETTLEMENT_EVENT_TYPES).filter(
-  (type) => type !== SETTLEMENT_EVENT_TYPES.CUSTO_TRANSACAO_APROPRIACAO
-);
+// A apropriação do custo de transação volta a valer para contratos com a política "amortizado" (por contrato,
+// na Calculadora — CPC 08). Para os demais (política "imediato", padrão), o custo continua no ato.
+const EVENT_TYPES_ORDERED = Object.values(SETTLEMENT_EVENT_TYPES);
 
 const RECLASSIFICATION_TYPES = new Set([
   SETTLEMENT_EVENT_TYPES.RECLASSIFICACAO_CIRCULANTE_PRINCIPAL,
@@ -69,7 +67,9 @@ const EVENT_TYPE_HINTS = {
   variacao_cambial_passiva_realizada: "Só contratos em USD, e só quando a PTAX do dia do pagamento é informada na baixa — recalcula a variação sobre o valor efetivamente liquidado, separada da provisão.",
   tarifa_bancaria: "Conta de despesa pra tarifas cobradas pelo banco, informadas manualmente na baixa da parcela.",
   iof: "Conta de despesa pro IOF da operação — lançado integral na data da operação (não é amortizado).",
-  custo_transacao_inicial: "Taxas e custos de contratação (\"Outras taxas\" do contrato) — reconhecidos na data da operação, cada verba na sua conta (o IOF tem a conta própria abaixo). Política única da ferramenta: sem apropriação mensal.",
+  custo_transacao_inicial: "Taxas e custos de contratação (\"Outras taxas\" do contrato) — reconhecidos na data da operação, cada verba na sua conta (o IOF tem a conta própria abaixo). Vale para o contrato com a política \"100% no desembolso\" (padrão), definida na Calculadora.",
+  custo_transacao_diferido: "Só contratos com a política \"Amortização conforme CPC-08\" (definida na Calculadora, por contrato): no desembolso, o custo de transação vai para uma conta de ATIVO (custo a apropriar), não direto para despesa. Débito = ativo diferido; Crédito = a mesma conta de \"100% no desembolso\" (banco/passivo). A apropriação mês a mês está no evento abaixo.",
+  custo_transacao_apropriacao: "Apropriação mensal do custo de transação diferido (contratos com a política \"Amortização conforme CPC-08\"), pro-rata por dias corridos do prazo, no mesmo padrão da provisão de juros. Débito = despesa financeira; Crédito = a MESMA conta de ativo diferido usada acima — precisa ser a mesma para zerar no fim do prazo. Quitação antecipada ou renegociação: reconhece de uma vez o saldo restante, na data da baixa.",
   ajuste_provisao_juros: "Contratos indexados (CDI, SELIC, IPCA...): quando a taxa real é publicada, o fechamento recalcula o cronograma e a diferença da provisão de juros entra no mês corrente. Débito = despesa financeira de juros; Crédito = provisão de juros (o sistema inverte o lado quando a provisão diminui). Use as mesmas contas de \"Provisão de juros (competência)\".",
   capitalizacao_juros: "Juros que o contrato incorpora ao principal (carência com capitalização). Débito = juros a pagar; Crédito = principal (passivo). Sem esse lançamento, juros a pagar e principal deixam de fechar em zero no fim do contrato.",
   reclassificacao_circulante_principal: "Contas de passivo (as mesmas de Circulante/Não circulante acima) movimentadas quando o prazo restante do principal migra entre um balde e outro.",

@@ -135,6 +135,7 @@ export function computeDeploymentPosition(contract, cutoffIso, openParcelas = []
 
   if (schedule.some((r) => r.liberacaoInjetada)) warnings.push("Contrato com liberação parcelada: conferir as tranches com o demonstrativo do credor.");
   if (rec.closing.principal < -0.05 || rec.closing.interest < -0.05) warnings.push("Saldo negativo apurado: revisar parcelas em aberto e o cronograma.");
+  if (contract.transaction_cost_recognition === "amortizado") warnings.push("Custo de transação amortizado: o saldo do ativo diferido não está representado nesta posição — confira à parte antes de aprovar.");
 
   return {
     position: {

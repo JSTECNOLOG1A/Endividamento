@@ -55,6 +55,7 @@ const defaultForm = {
   encargo_garantia_financed: false,
   other_fees: "0",
   other_fees_financed: false,
+  transaction_cost_recognition: "imediato",
   fixed_rate: "",
   indexer: "NA",
   indexer_spread: "0",
@@ -140,6 +141,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       encargo_garantia_financed: data.encargo_garantia_financed || false,
       other_fees: data.other_fees || "0",
       other_fees_financed: data.other_fees_financed || false,
+      transaction_cost_recognition: data.transaction_cost_recognition || "imediato",
       fixed_rate: data.fixed_rate || "",
       indexer: data.indexer || "NA",
       indexer_spread: data.indexer_spread || "0",
@@ -631,6 +633,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
       iof_value: parseFloat(form.iof_value.replace(/\./g, '').replace(',', '.')) || 0,
       encargo_garantia_value: parseFloat(form.encargo_garantia_value.replace(/\./g, '').replace(',', '.')) || 0,
       other_fees: parseFloat(form.other_fees.replace(/\./g, '').replace(',', '.')) || 0,
+      transaction_cost_recognition: form.transaction_cost_recognition === "amortizado" ? "amortizado" : "imediato",
       fixed_rate: parseFloat(form.fixed_rate.replace(/\./g, '').replace(',', '.')) || 0,
       indexer_spread: parseFloat(form.indexer_spread.replace(/\./g, '').replace(',', '.')) || 0,
       principal_grace_months: parseInt(form.principal_grace_months) || 0,
@@ -966,7 +969,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                       const foreign = parseBRNumber(e.target.value);
                       const rate = parseBRNumber(form.exchange_rate_closing);
                       if (foreign > 0 && rate > 0) {
-                        const brl = (foreign * rate).toFixed(4);
+                        const brl = (foreign * rate).toFixed(2);
                         update("operation_value", brl);
                       }
                     }}
@@ -999,7 +1002,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                       const foreign = parseBRNumber(form.amount_foreign);
                       const rate = parseBRNumber(newRate);
                       if (foreign > 0 && rate > 0) {
-                        const brl = (foreign * rate).toFixed(4);
+                        const brl = (foreign * rate).toFixed(2);
                         update("operation_value", brl);
                       }
                     }}
@@ -1216,6 +1219,50 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               <div className="flex items-start gap-2">
                 <Switch className="shrink-0 mt-0.5" checked={form.other_fees_financed} onCheckedChange={(v) => update("other_fees_financed", v)} />
                 <Label className="text-xs text-slate-600 leading-snug min-w-0">Taxas financiadas</Label>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                  Reconhecimento do Custo de Transação
+                  <TooltipProvider>
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <p className="text-xs">
+                          Como as Taxas Diversas acima entram no resultado: de uma vez, na liberação, ou aos poucos, ao
+                          longo do prazo do contrato.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <Switch
+                    checked={form.transaction_cost_recognition === "amortizado"}
+                    onCheckedChange={(v) => update("transaction_cost_recognition", v ? "amortizado" : "imediato")}
+                  />
+                  <Label className="text-xs font-medium text-slate-700">
+                    {form.transaction_cost_recognition === "amortizado" ? "Amortização conforme CPC-08" : "100% no desembolso"}
+                  </Label>
+                </div>
+                <p className="text-xs text-slate-600 leading-snug">
+                  {form.transaction_cost_recognition === "amortizado" ? (
+                    <>
+                      O custo vai para uma conta de ativo ("custo a apropriar") na liberação e é levado à despesa mês a
+                      mês, pro-rata pelos dias do prazo — mesma lógica da apropriação de juros. Na quitação antecipada
+                      ou renegociação, o saldo restante vira despesa de uma vez, na data da baixa.{" "}
+                      <span className="text-slate-500">
+                        CPC 08 (R1), item 12: os encargos financeiros da captação são apropriados ao resultado "em
+                        função da fluência do prazo", pelo método dos juros efetivos (TIR da operação). Aqui, por
+                        simplicidade, o rateio é em linha reta por dias corridos — não o método de juros efetivos da
+                        norma, que recalcularia a taxa implícita do contrato inteiro.
+                      </span>
+                    </>
+                  ) : (
+                    "Reconhecido como despesa integral na data da liberação, junto com o IOF (padrão da ferramenta)."
+                  )}
+                </p>
               </div>
             </div>
           </div>
