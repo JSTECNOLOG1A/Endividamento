@@ -71,6 +71,7 @@ services:
       - "${WEB_PORT:-5173}:5173"
     volumes:
       - ./src:/app/src
+      - ./public:/app/public
       - ./backend/src/engine:/app/backend/src/engine
       - ./vite.config.js:/app/vite.config.js
       - ./index.html:/app/index.html

@@ -17,6 +17,13 @@ export default defineConfig({
     fs: {
       allow: [path.resolve(__dirname)],
     },
+    watch: {
+      // Bind mount Windows -> Docker Desktop não propaga eventos de
+      // filesystem de forma confiável; sem polling o HMR fica surdo a
+      // mudanças feitas no host.
+      usePolling: true,
+      interval: 300,
+    },
     port: 5173,
     proxy: {
       '/api': {
