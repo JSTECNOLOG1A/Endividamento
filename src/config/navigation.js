@@ -12,6 +12,7 @@ import {
   Building2,
   Activity,
   FileSignature,
+  ClipboardCheck,
 } from "lucide-react";
 import { GOVERNANCE_SECTIONS } from "./governanceNavigation";
 import { SETTINGS_SECTIONS } from "./settingsNavigation";
@@ -34,6 +35,7 @@ export const NAV_ITEMS = [
   { name: "Manual e FAQ", page: "UserManual", icon: BookOpen },
   { name: "Configurações", page: "Settings", icon: Settings },
   { name: "Proposta Comercial", page: "CommercialProposal", icon: FileSignature, platformAdminOnly: true },
+  { name: "Implantações", page: "Implementations", icon: ClipboardCheck, platformAdminOnly: true },
 ];
 
 /** Control plane — visível apenas para PLATFORM MASTER. */

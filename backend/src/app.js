@@ -26,6 +26,8 @@ import { accountRouter } from "./modules/account/routes.js";
 import { platformRouter } from "./modules/platform/routes.js";
 import { billingRouter } from "./modules/billing/routes.js";
 import { pricingConfigRouter } from "./modules/pricingConfig/routes.js";
+import { commercialProposalsRouter } from "./modules/commercialProposals/routes.js";
+import { implementationsRouter } from "./modules/implementations/routes.js";
 import { onboardingRouter } from "./modules/onboarding/routes.js";
 import { parametersRouter } from "./modules/parameters/routes.js";
 import { legalRouter, meFirstAccessRouter } from "./modules/firstAccess/routes.js";
@@ -130,6 +132,8 @@ export function createApp() {
   app.use("/api/platform", platformRouter);
   app.use("/api/billing", billingRouter);
   app.use("/api/pricing-config", pricingConfigRouter);
+  app.use("/api/commercial-proposals", commercialProposalsRouter);
+  app.use("/api/implementations", implementationsRouter);
   app.use("/api/onboarding", onboardingRouter);
   app.use("/api/me", meFirstAccessRouter);
   app.use("/api/legal", legalRouter);

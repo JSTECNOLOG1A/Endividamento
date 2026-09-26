@@ -64,6 +64,7 @@ import {
   GovernanceChart,
 } from './pages/governancePages';
 import GuaranteedAccounts from './pages/GuaranteedAccounts';
+import Implementations from './pages/Implementations';
 import SettingsPage from './pages/Settings';
 import {
   SettingsIntegrations,
@@ -101,6 +102,7 @@ export const PAGES = {
     "GovernanceNatures": GovernanceNatures,
     "GovernanceChart": GovernanceChart,
     "GuaranteedAccounts": GuaranteedAccounts,
+    "Implementations": Implementations,
     "Platform": Platform,
     "PlatformTenants": PlatformTenants,
     "PlatformTenantDetail": PlatformTenantDetail,
