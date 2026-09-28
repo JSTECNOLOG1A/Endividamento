@@ -16,4 +16,13 @@ export const commercialProposalsApi = {
   update(id, data) {
     return apiRequest(`/commercial-proposals/${id}`, { method: "PUT", body: data });
   },
+  listSends(id) {
+    return apiRequest(`/commercial-proposals/${id}/sends`);
+  },
+  sendEmail(id, { to, nomeDestinatario, mensagem, pdfBase64, nomeArquivo }) {
+    return apiRequest(`/commercial-proposals/${id}/send-email`, {
+      method: "POST",
+      body: { to, nomeDestinatario, mensagem, pdfBase64, nomeArquivo },
+    });
+  },
 };

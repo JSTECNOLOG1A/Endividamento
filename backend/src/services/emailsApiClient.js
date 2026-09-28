@@ -35,13 +35,17 @@ export function isEmailsApiConfigured() {
   return Boolean(config.emailServiceUrl) && Boolean(config.emailServiceApiKey);
 }
 
-async function post(path, body) {
+async function post(path, body, {
+  timeoutMs = HTTP_TIMEOUT_MS,
+  maxRetries = MAX_RETRIES,
+  retryOnTimeout = true,
+} = {}) {
   const url = `${config.emailServiceUrl}${path}`;
   let lastError = null;
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt += 1) {
+  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -62,28 +66,34 @@ async function post(path, body) {
       lastError = new Error(message);
     } catch (error) {
       if (error instanceof TerminalEmailError) throw error;
+      // Timeout não diz se o e-mail saiu: o emails-api pode ter entregue e só
+      // a resposta não chegou. Quem não tolera e-mail duplicado desliga a
+      // retentativa nesse caso.
+      if (controller.signal.aborted && !retryOnTimeout) {
+        throw new Error(`emails-api ${path} não respondeu em ${timeoutMs} ms`);
+      }
       lastError = error;
     } finally {
       clearTimeout(timeout);
     }
 
-    if (attempt < MAX_RETRIES) {
+    if (attempt < maxRetries) {
       const delay = Math.min(MIN_RETRY_DELAY_MS * 2 ** (attempt - 1), MAX_RETRY_DELAY_MS);
       logger.warn({ path, attempt, err: lastError }, "tentativa ao emails-api falhou; retentando");
       await sleep(delay);
     }
   }
 
-  throw lastError || new Error(`emails-api ${path} falhou após ${MAX_RETRIES} tentativas`);
+  throw lastError || new Error(`emails-api ${path} falhou após ${maxRetries} tentativas`);
 }
 
-async function send(path, body) {
+async function send(path, body, options) {
   if (!isEmailsApiConfigured()) {
     logger.warn({ path, to: body.to }, "emails-api não configurado; e-mail não enviado");
-    return { sent: false };
+    return { sent: false, error: "emails-api não configurado" };
   }
   try {
-    await post(path, body);
+    await post(path, body, options);
     return { sent: true };
   } catch (error) {
     logger.error({ err: error, path, to: body.to }, "falha ao enviar e-mail pelo emails-api");
@@ -101,4 +111,45 @@ export function sendUserInvite({ to, nome, convidadoPor, inviteUrl, expiraEmDias
   const body = { to, nome, inviteUrl, expiraEmDias };
   if (convidadoPor) body.convidadoPor = convidadoPor;
   return send("/send/user-invite", body);
+}
+
+// Proposta comercial leva o PDF no corpo (alguns MB em base64): o emails-api
+// repassa ao SMTP antes de responder, então 15 s não bastam. E aqui a
+// retentativa em timeout fica desligada — o cliente receberia a proposta
+// duas vezes, e quem clicou "Enviar" pode tentar de novo sabendo do erro.
+const COMMERCIAL_PROPOSAL_OPTIONS = {
+  timeoutMs: 60 * 1000,
+  maxRetries: 2,
+  retryOnTimeout: false,
+};
+
+/**
+ * Proposta comercial enviada ao cliente, com o PDF anexado.
+ * `nomeDestinatario`, `replyTo`, `mensagem` e `validadeAte` são opcionais e só
+ * vão no corpo quando têm valor. Mesmo aviso do convite: nenhum campo fora
+ * deste contrato — o emails-api recusa com 4xx.
+ */
+export function sendCommercialProposal({
+  to,
+  nomeDestinatario,
+  clienteNome,
+  numeroProposta,
+  remetenteNome,
+  replyTo,
+  mensagem,
+  validadeAte,
+  anexo,
+}) {
+  const body = {
+    to,
+    clienteNome,
+    numeroProposta,
+    remetenteNome,
+    anexo: { nomeArquivo: anexo.nomeArquivo, conteudoBase64: anexo.conteudoBase64 },
+  };
+  if (nomeDestinatario) body.nomeDestinatario = nomeDestinatario;
+  if (replyTo) body.replyTo = replyTo;
+  if (mensagem) body.mensagem = mensagem;
+  if (validadeAte) body.validadeAte = validadeAte;
+  return send("/send/commercial-proposal", body, COMMERCIAL_PROPOSAL_OPTIONS);
 }

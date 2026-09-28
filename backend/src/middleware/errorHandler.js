@@ -33,8 +33,12 @@ export function errorHandler(error, req, res, _next) {
       "requisição rejeitada"
     );
   }
+  // 5xx esconde a mensagem por padrão (pode carregar detalhe técnico). Erro
+  // criado já com texto para o usuário — ex.: serviço externo indisponível —
+  // marca `expose: true` para a mensagem chegar à tela.
+  const exposeMessage = status < 500 || error.expose === true;
   res.status(status).json({
-    error: status >= 500 ? "Erro interno" : error.message,
+    error: exposeMessage ? error.message : "Erro interno",
     code: error.code || (status >= 500 ? "INTERNAL" : "REQUEST"),
     request_id: req.requestId,
     ...(error.details ? { details: error.details } : {}),
