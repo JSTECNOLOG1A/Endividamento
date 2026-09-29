@@ -81,6 +81,8 @@ function attachmentClientSlug(clientName) {
   return trimmed.replace(/-+$/, "") || "cliente";
 }
 
+const PRICES_CHANGED_WARNING = "Os preços dos planos mudaram desde que esta proposta foi salva, e o PDF sairia com valores diferentes dos combinados com o cliente. Se você salvar a proposta de novo, os valores dela serão trocados pelos preços atuais dos planos.";
+
 function formatCurrency(value) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 }).format(Number(value) || 0);
 }
@@ -316,6 +318,9 @@ export default function CommercialProposal() {
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [preparingEmail, setPreparingEmail] = useState(false);
   const [emailRecipientName, setEmailRecipientName] = useState("");
+  // Qual documento vai anexado: "termo" (Termo de Contratação completo) ou
+  // "resumo" (Proposta Comercial resumida, enviada pela pré-visualização).
+  const [emailDocument, setEmailDocument] = useState("termo");
 
   // Só os campos de entrada do formulário (sem os valores calculados, que só
   // existem depois do early-return de carregamento) — usado pra detectar
@@ -473,13 +478,23 @@ export default function CommercialProposal() {
     carteira_total: totalCount,
   });
 
-  const handleSaveProposal = () => {
+  const isSavingProposal = createProposalMutation.isPending || updateProposalMutation.isPending;
+
+  // Único caminho de gravação da proposta (formulário e pré-visualização).
+  // Resolve com o id gravado; mensagens de sucesso e erro ficam nas mutações.
+  const saveProposal = () => {
     const payload = buildProposalPayload();
     if (currentProposalId) {
-      updateProposalMutation.mutate({ id: currentProposalId, payload });
-    } else {
-      createProposalMutation.mutate(payload);
+      return updateProposalMutation
+        .mutateAsync({ id: currentProposalId, payload })
+        .then(() => currentProposalId);
     }
+    return createProposalMutation.mutateAsync(payload).then((created) => created.id);
+  };
+
+  const handleSaveProposal = () => {
+    // O erro já é exibido pelo onError da mutação.
+    saveProposal().catch(() => {});
   };
 
   function applyProposalToForm(record) {
@@ -912,6 +927,7 @@ export default function CommercialProposal() {
   // do cliente limitado para o nome inteiro caber no teto de 150 caracteres
   // que o servidor aceita.
   const proposalPdfFileName = `Proposta-Comercial-${attachmentClientSlug(clientName)}.pdf`;
+  const quickProposalPdfFileName = `Proposta-Comercial-Resumo-${attachmentClientSlug(clientName)}.pdf`;
 
   // O PDF é montado a partir do formulário com os preços dos planos em vigor
   // na tela. Se eles mudaram depois que a proposta foi salva, o anexo sairia
@@ -926,6 +942,49 @@ export default function CommercialProposal() {
     return pairs.every(([shown, saved]) => Math.abs(Number(shown) - Number(saved)) < 0.005);
   };
 
+  const fetchSavedProposal = (id) =>
+    queryClient.fetchQuery({
+      queryKey: ["commercial-proposals", "detail", id],
+      queryFn: () => commercialProposalsApi.get(id),
+      staleTime: 0,
+    });
+
+  // Preços dos planos que entraram nos valores gravados desta proposta
+  // mudaram desde o último salvamento? Salvar agora trocaria os valores
+  // combinados pelos preços atuais — isso tem de ser uma decisão explícita.
+  // Só conta o preço de um item que estava na proposta gravada e continua no
+  // formulário: item removido não tem preço a preservar, e item trocado ou
+  // acrescentado agora é negociação nova, com o preço atual.
+  const planPricesChangedSince = (record) => {
+    const snapshot = record.pricing_snapshot && typeof record.pricing_snapshot === "object" ? record.pricing_snapshot : {};
+    const fields = [];
+    if ((record.tier || "standard") === tier) {
+      fields.push(`${tierMeta.prefix}_implantacao`, `${tierMeta.prefix}_mensalidade`);
+      if (Number(record.blocos_count) > 0 && blocks > 0) fields.push(`${tierMeta.prefix}_bloco`);
+    }
+    if (record.want_cadastro && wantCadastro) fields.push("cadastramento_valor");
+    return fields.some(
+      (f) => snapshot[f] === undefined || Math.abs(parseBRNumber(snapshot[f]) - parseBRNumber(params[f])) >= 0.005
+    );
+  };
+
+  // Conferências sobre a versão gravada, comuns aos dois envios.
+  const openEmailDialogFor = (record, documentKind) => {
+    if (!String(record.client_name || "").trim()) {
+      toast.warning("Informe a razão social do cliente e salve a proposta antes de enviar.");
+      return;
+    }
+    if (!pdfValuesMatchSaved(record)) {
+      toast.warning(PRICES_CHANGED_WARNING);
+      return;
+    }
+    setEmailRecipientName(record.contact_name || "");
+    setEmailDocument(documentKind);
+    setEmailDialogOpen(true);
+  };
+
+  // Termo completo (quadro do Termo): exige a proposta já salva, sem
+  // alterações pendentes.
   const openEmailDialog = async () => {
     if (!currentProposalId || preparingEmail) return;
     if (isProposalDirty) {
@@ -934,27 +993,49 @@ export default function CommercialProposal() {
     }
     setPreparingEmail(true);
     try {
-      const record = await queryClient.fetchQuery({
-        queryKey: proposalDetailKey,
-        queryFn: () => commercialProposalsApi.get(currentProposalId),
-        staleTime: 0,
-      });
-      if (!String(record.client_name || "").trim()) {
-        toast.warning("Informe a razão social do cliente e salve a proposta antes de enviar.");
-        return;
-      }
-      if (!pdfValuesMatchSaved(record)) {
-        toast.warning("Os preços dos planos mudaram desde que esta proposta foi salva, e o PDF sairia com valores diferentes dos combinados com o cliente. Se você salvar a proposta de novo, os valores dela serão trocados pelos preços atuais dos planos.");
-        return;
-      }
-      setEmailRecipientName(record.contact_name || "");
-      setEmailDialogOpen(true);
+      openEmailDialogFor(await fetchSavedProposal(currentProposalId), "termo");
     } catch (error) {
       toast.error(error.data?.error || error.message || "Não foi possível abrir o envio por e-mail. Tente novamente.");
     } finally {
       setPreparingEmail(false);
     }
   };
+
+  // Resumo (pré-visualização): se a proposta é nova ou tem alterações, salva
+  // antes e abre a janela na mesma ação — exceto quando salvar trocaria
+  // valores já combinados por preços de planos que mudaram depois.
+  const saveAndOpenQuickEmailDialog = async () => {
+    if (preparingEmail || isSavingProposal) return;
+    if (!clientName.trim()) {
+      toast.warning("Informe a razão social do cliente antes de enviar.");
+      return;
+    }
+    setPreparingEmail(true);
+    try {
+      let proposalId = currentProposalId;
+      const needsSave = !proposalId || isProposalDirty;
+      if (proposalId && needsSave && planPricesChangedSince(await fetchSavedProposal(proposalId))) {
+        toast.warning(PRICES_CHANGED_WARNING);
+        return;
+      }
+      if (needsSave) {
+        try {
+          proposalId = await saveProposal();
+        } catch {
+          return; // o erro do salvamento já foi exibido
+        }
+      }
+      openEmailDialogFor(await fetchSavedProposal(proposalId), "resumo");
+    } catch (error) {
+      toast.error(error.data?.error || error.message || "Não foi possível abrir o envio por e-mail. Tente novamente.");
+    } finally {
+      setPreparingEmail(false);
+    }
+  };
+
+  const saveProposalLabel = isSavingProposal
+    ? "Salvando..."
+    : currentProposalId ? "Salvar alterações" : "Salvar proposta";
 
   const handleProposalSent = (result) => {
     if (result?.proposal) queryClient.setQueryData(proposalDetailKey, result.proposal);
@@ -1350,13 +1431,11 @@ export default function CommercialProposal() {
               <Button
                 type="button"
                 className="gap-1.5 flex-1"
-                disabled={createProposalMutation.isPending || updateProposalMutation.isPending}
+                disabled={isSavingProposal}
                 onClick={handleSaveProposal}
               >
                 <Save className="w-4 h-4" />
-                {createProposalMutation.isPending || updateProposalMutation.isPending
-                  ? "Salvando..."
-                  : currentProposalId ? "Salvar alterações" : "Salvar proposta"}
+                {saveProposalLabel}
               </Button>
             </div>
           </CardContent>
@@ -1541,8 +1620,8 @@ export default function CommercialProposal() {
         onOpenChange={setEmailDialogOpen}
         proposalId={currentProposalId}
         defaultRecipientName={emailRecipientName}
-        fileName={proposalPdfFileName}
-        buildPdf={buildProposalDoc}
+        fileName={emailDocument === "resumo" ? quickProposalPdfFileName : proposalPdfFileName}
+        buildPdf={emailDocument === "resumo" ? buildQuickProposalDoc : buildProposalDoc}
         onSent={handleProposalSent}
       />
 
@@ -1576,11 +1655,30 @@ export default function CommercialProposal() {
               <iframe title="Pré-visualização da Proposta Comercial (resumo)" src={quickPreviewUrl} className="w-full h-full" />
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:space-x-0">
             <Button type="button" variant="outline" onClick={() => setQuickPreviewOpen(false)}>Fechar</Button>
-            <Button type="button" className="gap-1.5" onClick={downloadQuickPdf}>
+            <Button type="button" variant="outline" className="gap-1.5" onClick={downloadQuickPdf}>
               <Download className="w-4 h-4" />
               Baixar PDF
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-1.5"
+              disabled={isSavingProposal || preparingEmail}
+              onClick={handleSaveProposal}
+            >
+              {isSavingProposal && !preparingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {saveProposalLabel}
+            </Button>
+            <Button
+              type="button"
+              className="gap-1.5"
+              disabled={isSavingProposal || preparingEmail}
+              onClick={saveAndOpenQuickEmailDialog}
+            >
+              {preparingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              Enviar por e-mail
             </Button>
           </DialogFooter>
         </DialogContent>
