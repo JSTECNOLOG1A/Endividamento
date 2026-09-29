@@ -158,12 +158,43 @@ export async function create(data, createdBy) {
     throw httpError(400, "Selecione o cliente para cadastrar o usuário");
   }
   const email = data.email.toLowerCase();
-  const existing = await pool.query(`SELECT id FROM users WHERE email = $1`, [email]);
-  if (existing.rows[0]) throw httpError(409, "Já existe um usuário com este e-mail");
+  const existing = await pool.query(`SELECT * FROM users WHERE email = $1`, [email]);
+  const groupId = groupIdOrThrow();
+  const scope = getTenantScope();
+
+  // E-mail já cadastrado na plataforma: users.email é único globalmente (um login pode
+  // servir a mais de um cliente, via tenant_users), mas o vínculo é por tenant. Se a pessoa
+  // já pertence a ESTE tenant, é duplicidade de verdade. Se pertence só a outro cliente,
+  // vinculamos o login existente a este tenant em vez de tentar criar um segundo `users`
+  // com o mesmo e-mail (a coluna é UNIQUE, o INSERT falharia de qualquer forma).
+  if (existing.rows[0]) {
+    if (existing.rows[0].platform_admin) {
+      throw httpError(409, "Este e-mail pertence a um usuário master da plataforma", "ADMIN_EMAIL_MASTER");
+    }
+    const alreadyLinked = await pool.query(
+      `SELECT 1 FROM tenant_users WHERE tenant_id = $1 AND lower(user_email) = $2`,
+      [scope?.tenantId, email]
+    );
+    if (alreadyLinked.rows[0]) throw httpError(409, "Já existe um usuário com este e-mail");
+
+    const members = await pool.query(`SELECT COUNT(*)::int AS n FROM tenant_users WHERE group_id = $1`, [groupId]);
+    const firstUser = (members.rows[0]?.n || 0) === 0;
+    const tenantRole = firstUser ? "OWNER" : (data.role === "viewer" ? "VIEWER" : "ADMIN");
+    await pool.query(
+      `INSERT INTO tenant_users (id, tenant_id, group_id, user_email, role, joined_at, created_by)
+       VALUES ($1, $2, $3, $4, $5, now(), $6)`,
+      [`tuser_${existing.rows[0].id.replaceAll("-", "").slice(0, 12)}_${groupId.slice(-6)}`, scope?.tenantId, groupId, email, tenantRole, createdBy || email]
+    );
+    return {
+      ...publicUser({ ...existing.rows[0], tenant_role: tenantRole, tenant_id: scope?.tenantId, invite_pending: false }),
+      email_sent: false,
+      invite_pending: false,
+      linked_existing: true,
+    };
+  }
 
   const hash = await bcrypt.hash(randomBytes(24).toString("hex"), config.bcryptRounds);
   const block = blockedState(data.blocked);
-  const groupId = groupIdOrThrow();
   const members = await pool.query(
     `SELECT COUNT(*)::int AS n FROM tenant_users WHERE group_id = $1`,
     [groupId]
@@ -193,7 +224,6 @@ export async function create(data, createdBy) {
       createdBy || "system",
     ]
   );
-  const scope = getTenantScope();
   await pool.query(
     `INSERT INTO tenant_users (id, tenant_id, group_id, user_email, role, joined_at, created_by)
      VALUES ($1, $2, $3, $4, $5, now(), $6)`,

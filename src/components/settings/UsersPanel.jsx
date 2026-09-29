@@ -165,7 +165,9 @@ export default function UsersPanel() {
       }
       if (mode === "create") {
         const created = await usersApi.create(payload);
-        if (created.invite_url) {
+        if (created.linked_existing) {
+          toast.success("E-mail já cadastrado em outro cliente — vinculado a este, sem novo convite.");
+        } else if (created.invite_url) {
           toast.success("Convite criado. Sem SMTP: copie o link exibido.");
           window.prompt("Link do convite (e-mail não enviado)", created.invite_url);
         } else {
