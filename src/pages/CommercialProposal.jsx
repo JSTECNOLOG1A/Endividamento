@@ -22,7 +22,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Save, Loader2, Eye, Download, Search, Pencil, FilePlus2, Plus, ArrowLeft } from "lucide-react";
+import ProposalEmailDialog from "@/components/commercialProposals/ProposalEmailDialog";
+import ProposalSendHistory from "@/components/commercialProposals/ProposalSendHistory";
+import { Save, Loader2, Eye, Download, Search, Pencil, FilePlus2, Plus, ArrowLeft, Mail } from "lucide-react";
 
 const PAGAMENTO_IMPLANTACAO_OPTIONS = [
   { value: "avista", label: "À vista" },
@@ -63,6 +65,21 @@ const parseBRNumber = (str) => {
   const cleaned = String(str).replace(/\./g, "").replace(",", ".");
   return parseFloat(cleaned) || 0;
 };
+
+// Trecho do cliente no nome do anexo: corta numa fronteira entre palavras, sem
+// hífen sobrando no fim. "Proposta-Comercial-" + ".pdf" ocupam 23 caracteres;
+// com 100 aqui o nome fica bem abaixo do teto de 150.
+const ATTACHMENT_CLIENT_SLUG_MAX = 100;
+
+function attachmentClientSlug(clientName) {
+  const slug = slugify(clientName);
+  if (slug.length <= ATTACHMENT_CLIENT_SLUG_MAX) return slug;
+  const cut = slug.slice(0, ATTACHMENT_CLIENT_SLUG_MAX);
+  const atBoundary = slug[ATTACHMENT_CLIENT_SLUG_MAX] === "-";
+  const lastHyphen = cut.lastIndexOf("-");
+  const trimmed = atBoundary || lastHyphen <= 0 ? cut : cut.slice(0, lastHyphen);
+  return trimmed.replace(/-+$/, "") || "cliente";
+}
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 }).format(Number(value) || 0);
@@ -287,6 +304,18 @@ export default function CommercialProposal() {
     enabled: isMaster,
     initialData: [],
   });
+
+  // Versão gravada da proposta aberta no formulário — fonte do status exibido
+  // e da conferência feita antes do envio por e-mail.
+  const proposalDetailKey = ["commercial-proposals", "detail", currentProposalId];
+  const { data: savedProposalDetail } = useQuery({
+    queryKey: proposalDetailKey,
+    queryFn: () => commercialProposalsApi.get(currentProposalId),
+    enabled: isMaster && view === "form" && Boolean(currentProposalId),
+  });
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [preparingEmail, setPreparingEmail] = useState(false);
+  const [emailRecipientName, setEmailRecipientName] = useState("");
 
   // Só os campos de entrada do formulário (sem os valores calculados, que só
   // existem depois do early-return de carregamento) — usado pra detectar
@@ -879,6 +908,59 @@ export default function CommercialProposal() {
     quickDocRef.current.save(`Proposta-Comercial-Resumo-${quickClientSlugRef.current}.pdf`);
   };
 
+  // Nome do anexo do e-mail: o mesmo padrão do "Baixar PDF", mas com o trecho
+  // do cliente limitado para o nome inteiro caber no teto de 150 caracteres
+  // que o servidor aceita.
+  const proposalPdfFileName = `Proposta-Comercial-${attachmentClientSlug(clientName)}.pdf`;
+
+  // O PDF é montado a partir do formulário com os preços dos planos em vigor
+  // na tela. Se eles mudaram depois que a proposta foi salva, o anexo sairia
+  // com valores diferentes dos gravados — então o envio pede para salvar antes.
+  const pdfValuesMatchSaved = (record) => {
+    const pairs = [
+      [implantacao, record.valor_implantacao],
+      [mensalidade, record.valor_mensalidade],
+      [cadastramentoTotal, record.valor_cadastramento_total],
+      [firstMonth, record.valor_total_primeiro_mes],
+    ];
+    return pairs.every(([shown, saved]) => Math.abs(Number(shown) - Number(saved)) < 0.005);
+  };
+
+  const openEmailDialog = async () => {
+    if (!currentProposalId || preparingEmail) return;
+    if (isProposalDirty) {
+      toast.warning("Salve as alterações antes de enviar — o cliente precisa receber a proposta igual à que está salva.");
+      return;
+    }
+    setPreparingEmail(true);
+    try {
+      const record = await queryClient.fetchQuery({
+        queryKey: proposalDetailKey,
+        queryFn: () => commercialProposalsApi.get(currentProposalId),
+        staleTime: 0,
+      });
+      if (!String(record.client_name || "").trim()) {
+        toast.warning("Informe a razão social do cliente e salve a proposta antes de enviar.");
+        return;
+      }
+      if (!pdfValuesMatchSaved(record)) {
+        toast.warning("Os preços dos planos mudaram desde que esta proposta foi salva, e o PDF sairia com valores diferentes dos combinados com o cliente. Se você salvar a proposta de novo, os valores dela serão trocados pelos preços atuais dos planos.");
+        return;
+      }
+      setEmailRecipientName(record.contact_name || "");
+      setEmailDialogOpen(true);
+    } catch (error) {
+      toast.error(error.data?.error || error.message || "Não foi possível abrir o envio por e-mail. Tente novamente.");
+    } finally {
+      setPreparingEmail(false);
+    }
+  };
+
+  const handleProposalSent = (result) => {
+    if (result?.proposal) queryClient.setQueryData(proposalDetailKey, result.proposal);
+    queryClient.invalidateQueries({ queryKey: ["commercial-proposals"] });
+  };
+
   // Compartilhado entre as duas telas: "new" pode ser disparado tanto pela
   // listagem quanto pelo botão rápido dentro do formulário; "open" só pela
   // listagem; "back" só pelo formulário.
@@ -1040,6 +1122,11 @@ export default function CommercialProposal() {
                   </div>
                 </div>
                 <div className="h-px bg-slate-200" />
+                <div>
+                  <div className="text-xs text-slate-500 mb-1.5">Envios por e-mail</div>
+                  <ProposalSendHistory proposalId={viewingProposal.id} />
+                </div>
+                <div className="h-px bg-slate-200" />
                 <div className="text-xs text-slate-500">
                   Criada por {viewingProposal.created_by || "—"} em {formatDateTimeBR(viewingProposal.created_date)}
                   {viewingProposal.updated_by ? (
@@ -1141,6 +1228,14 @@ export default function CommercialProposal() {
               {currentProposalId && (
                 <Badge variant="outline" className="text-[10px] font-medium whitespace-nowrap">
                   Editando {propostaNumero || "proposta salva"}
+                </Badge>
+              )}
+              {currentProposalId && savedProposalDetail && (
+                <Badge
+                  variant={proposalStatusVariant(proposalStatusLabel(savedProposalDetail))}
+                  className="text-[10px] font-medium whitespace-nowrap"
+                >
+                  {proposalStatusLabel(savedProposalDetail)}
                 </Badge>
               )}
               <Button type="button" variant="ghost" size="sm" className="gap-1.5 text-xs h-7 px-2" onClick={startNewProposal}>
@@ -1408,12 +1503,48 @@ export default function CommercialProposal() {
             </div>
           </div>
 
-          <Button type="button" className="gap-1.5 w-full" onClick={openPreview}>
-            <Eye className="w-4 h-4" />
-            Visualizar Termo de Contratação Completo
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button type="button" className="gap-1.5 flex-1" onClick={openPreview}>
+              <Eye className="w-4 h-4" />
+              Visualizar Termo de Contratação Completo
+            </Button>
+            {currentProposalId && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-1.5 flex-1"
+                disabled={preparingEmail}
+                onClick={openEmailDialog}
+              >
+                {preparingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                Enviar por e-mail
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
+
+      {currentProposalId && (
+        <Card className="mt-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Envios por e-mail</CardTitle>
+            <CardDescription>Para quem esta proposta já foi enviada.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ProposalSendHistory proposalId={currentProposalId} />
+          </CardContent>
+        </Card>
+      )}
+
+      <ProposalEmailDialog
+        open={emailDialogOpen}
+        onOpenChange={setEmailDialogOpen}
+        proposalId={currentProposalId}
+        defaultRecipientName={emailRecipientName}
+        fileName={proposalPdfFileName}
+        buildPdf={buildProposalDoc}
+        onSent={handleProposalSent}
+      />
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl w-[95vw] h-[90vh] flex flex-col p-4 sm:p-6">

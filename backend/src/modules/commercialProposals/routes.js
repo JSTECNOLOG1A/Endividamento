@@ -41,3 +41,19 @@ commercialProposalsRouter.put("/:id", async (req, res, next) => {
     next(error);
   }
 });
+
+commercialProposalsRouter.get("/:id/sends", async (req, res, next) => {
+  try {
+    res.json(await service.listSends(req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+commercialProposalsRouter.post("/:id/send-email", async (req, res, next) => {
+  try {
+    res.json(await service.sendByEmail(req.params.id, req.body || {}, req.user));
+  } catch (error) {
+    next(error);
+  }
+});
