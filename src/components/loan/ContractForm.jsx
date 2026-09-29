@@ -1823,12 +1823,31 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               <Input
                 value={form.amortization_percentages}
                 onChange={(e) => update("amortization_percentages", e.target.value)}
-                placeholder="Ex: 24.18, 28.09, 32.72, 38.18"
+                placeholder="Ex: 24,18%,28,86%,100,00%"
                 className="h-9 border-amber-300"
               />
               <p className="text-xs text-amber-600">
-                Insira os percentuais separados por vírgula. Ex: primeira parcela 24,18%, segunda 28,09%, etc.
+                Termine cada percentual com "%" e separe com vírgula — ex.: 24,18%,28,86%,100,00% (a última parcela
+                sempre quita o saldo, mas ainda assim informe 100% nela).
               </p>
+              {(() => {
+                const raw = form.amortization_percentages || "";
+                if (!raw.trim()) return null;
+                const values = raw.includes("%")
+                  ? raw.split("%").map((s) => s.replace(/^[,;\s]+/, "").trim()).filter(Boolean).map((s) => parseFloat(s.replace(",", ".")))
+                  : raw.split(",").map((s) => parseFloat(s.trim()));
+                const valid = values.every((v) => Number.isFinite(v));
+                const expected = parseInt(form.principal_installments, 10) || null;
+                const mismatch = expected != null && values.length !== expected;
+                return (
+                  <p className={`text-xs ${!valid || mismatch ? "text-red-600 font-medium" : "text-emerald-700"}`}>
+                    {!valid
+                      ? "⚠️ Não consegui ler um ou mais percentuais — confira o formato."
+                      : `${values.length} percentual(is) lido(s): ${values.map((v) => `${v.toLocaleString("pt-BR")}%`).join(" · ")}`}
+                    {valid && mismatch ? ` — esperado ${expected} (nº de parcelas de principal)` : ""}
+                  </p>
+                );
+              })()}
             </div>
           </CardContent>
         </Card>

@@ -1057,10 +1057,17 @@ export async function calculateAmortizationSchedule(params) {
   } else if (calculationSystem === "BULLET") {
     strategy = new BULLETStrategy(principal);
   } else if (calculationSystem === "PERCENTAGE_RESIDUAL") {
-    // Parsear percentuais: "24.18,28.09,32.72" → {1: 0.2418, 2: 0.2809, 3: 0.3272}
+    // Parsear percentuais. Dois formatos aceitos, pra não depender de qual exemplo da tela o usuário seguiu:
+    //  - com "%": "24,18%,28,86%,100,00%" (vírgula decimal, como o resto do app) → separa pelo "%", que é o
+    //    único caractere que não aparece dentro de um número nesse formato (a vírgula, aqui, é decimal).
+    //  - sem "%": "24.18,28.09,32.72" (ponto decimal) → vírgula é o separador da lista, como antes.
+    // Sem essa distinção, "24,18%,28,86%" vira 10 valores (24, 18, 28, 86...) em vez de 2 (24.18, 28.86) —
+    // e a última parcela, que devia fechar o saldo, nunca fica marcada como 100%.
     const parsedSchedule = {};
     if (amortizationSchedule && typeof amortizationSchedule === 'string') {
-      const percentages = amortizationSchedule.split(',').map(p => parseFloat(p.trim()) / 100);
+      const percentages = amortizationSchedule.includes('%')
+        ? amortizationSchedule.split('%').map((s) => s.replace(/^[,;\s]+/, '').trim()).filter(Boolean).map((s) => parseFloat(s.replace(',', '.')) / 100)
+        : amortizationSchedule.split(',').map(p => parseFloat(p.trim()) / 100);
       percentages.forEach((p, idx) => {
         parsedSchedule[idx + 1] = p;
       });

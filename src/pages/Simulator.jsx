@@ -461,11 +461,19 @@ export default function Simulator() {
         return `${year}-${month}-${day}`;
       };
 
-      // Converter percentuais para objeto {parcela: decimal}
+      // Converter percentuais para objeto {parcela: decimal}. Dois formatos aceitos:
+      //  - com "%": "24,18%,28,86%,100,00%" (vírgula decimal, como o resto do app) → separa pelo "%", único
+      //    caractere que não aparece dentro de um número nesse formato (a vírgula aqui é decimal).
+      //  - sem "%": "24.18,28.09,32.72" (ponto decimal) → vírgula é o separador da lista.
+      // Sem essa distinção, "24,18%,28,86%" virava 10 valores (24, 18, 28, 86...) em vez de 2 (24.18, 28.86)
+      // — e a última parcela, que devia fechar o saldo, nunca ficava marcada como 100%.
       let amortizationSchedule = null;
       let percentageBase = "saldo_devedor";
       if (formData.calculation_system === "PERCENTAGE_RESIDUAL" && formData.amortization_percentages) {
-        const percentages = formData.amortization_percentages.split(',').map(p => parseFloat(p.trim()) / 100);
+        const raw = formData.amortization_percentages;
+        const percentages = raw.includes('%')
+          ? raw.split('%').map((s) => s.replace(/^[,;\s]+/, '').trim()).filter(Boolean).map((s) => parseFloat(s.replace(',', '.')) / 100)
+          : raw.split(',').map((p) => parseFloat(p.trim()) / 100);
         amortizationSchedule = {};
         percentages.forEach((pct, idx) => {
           amortizationSchedule[idx + 1] = pct;
