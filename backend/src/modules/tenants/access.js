@@ -88,11 +88,13 @@ export function scopedGroupSql(column, startIndex = 1, { allowUnscopedMaster = f
   return { sql: `${column} = $${startIndex}`, params: [groupIdOrThrow()] };
 }
 
+const TENANT_FOR_EMAIL_COLUMNS = `t.id, t.group_id, t.tenant_name, t.domain, t.billing_status, t.lifecycle_status, t.plan, t.trial_ends_at,
+            t.onboarding_completed_at, tu.role AS tenant_role`;
+
 export async function loadTenantForEmail(email, client = pool) {
   if (!email) return null;
   const result = await client.query(
-    `SELECT t.id, t.group_id, t.tenant_name, t.domain, t.billing_status, t.lifecycle_status, t.plan, t.trial_ends_at,
-            t.onboarding_completed_at, tu.role AS tenant_role
+    `SELECT ${TENANT_FOR_EMAIL_COLUMNS}
      FROM tenant_users tu
      JOIN tenants t ON t.id = tu.tenant_id
      WHERE lower(tu.user_email) = lower($1)
@@ -101,6 +103,46 @@ export async function loadTenantForEmail(email, client = pool) {
     [email]
   );
   return result.rows[0] || null;
+}
+
+// O tenant ESPECÍFICO que o token/sessão já escolheu (login com seleção, ou token antigo de usuário
+// single-tenant emitido com o tenant_id certo) — confirma de novo que o vínculo ainda existe (pode ter
+// sido removido depois do token emitido) em vez de confiar cegamente na claim. `attachTenant` usa isso
+// primeiro; só recalcula pelo e-mail (loadTenantForEmail) se não houver tenant_id na sessão ou ele não
+// bater mais com nenhum vínculo — assim quem escolheu um tenant continua nele requisição após requisição,
+// em vez de a cada chamada recalcular do zero e sempre cair no mesmo (o mais antigo/de maior papel).
+export async function loadTenantForEmailAndId(email, tenantId, client = pool) {
+  if (!email || !tenantId) return null;
+  const result = await client.query(
+    `SELECT ${TENANT_FOR_EMAIL_COLUMNS}
+     FROM tenant_users tu
+     JOIN tenants t ON t.id = tu.tenant_id
+     WHERE lower(tu.user_email) = lower($1) AND tu.tenant_id = $2
+     LIMIT 1`,
+    [email, tenantId]
+  );
+  return result.rows[0] || null;
+}
+
+// Todos os tenants desse e-mail (um consultor externo pode atender mais de um cliente da plataforma) —
+// usado no login para saber se precisa perguntar qual tenant a pessoa quer, em vez de escolher sozinho.
+export async function loadAllTenantsForEmail(email, client = pool) {
+  if (!email) return [];
+  const result = await client.query(
+    `SELECT ${TENANT_FOR_EMAIL_COLUMNS}
+     FROM tenant_users tu
+     JOIN tenants t ON t.id = tu.tenant_id
+     WHERE lower(tu.user_email) = lower($1)
+     ORDER BY tu.created_date ASC`,
+    [email]
+  );
+  return result.rows;
+}
+
+export function isTenantBlocked(tenant) {
+  if (!tenant) return false;
+  const lifecycle = tenant.lifecycle_status || (tenant.billing_status === "suspended" ? "SUSPENDED" : "ACTIVE");
+  return ["SUSPENDED", "DISABLED", "CANCELLED"].includes(lifecycle) || tenant.billing_status === "suspended";
 }
 
 export async function loadTenantByGroupId(groupId, client = pool) {

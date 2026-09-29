@@ -5,8 +5,8 @@ import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { writeAudit } from "../../middleware/audit.js";
-import { loadTenantForEmail } from "../tenants/access.js";
-import { issueAuthResponse } from "./token.js";
+import { loadTenantForEmail, loadTenantForEmailAndId, loadAllTenantsForEmail, isTenantBlocked } from "../tenants/access.js";
+import { issueAuthResponse, issuePendingTenantSelectionToken, verifyPendingTenantSelectionToken } from "./token.js";
 import { writeAccessLog } from "../platform/service.js";
 import { markFirstLoginIfNeeded } from "../firstAccess/service.js";
 
@@ -24,6 +24,41 @@ const loginSchema = z.object({
   password: z.string().min(8),
 });
 
+// Finaliza o login (ou a seleção de tenant): emite o token, registra a auditoria e o primeiro acesso.
+// Compartilhado entre /login (caminho direto, um só tenant possível) e /select-tenant (depois de escolher).
+async function finalizeLogin(req, res, user, tenant) {
+  await pool.query("UPDATE users SET last_login_at = now() WHERE id = $1", [user.id]);
+  const auth = issueAuthResponse(user, tenant);
+  req.user = {
+    sub: user.id,
+    email: user.email,
+    role: user.role,
+    full_name: user.full_name,
+    tenant_id: tenant?.id || null,
+    group_id: tenant?.group_id || null,
+    platform_admin: user.platform_admin === true,
+  };
+  await writeAudit({
+    req,
+    action: user.platform_admin ? "PLATFORM_MASTER_LOGIN" : "LOGIN",
+    resourceType: "User",
+    resourceId: user.id,
+    registro: user.email,
+    after: {
+      email: user.email,
+      full_name: user.full_name,
+      role: user.role,
+      tenant_id: tenant?.id || null,
+      platform_admin: user.platform_admin === true,
+    },
+  });
+  await markFirstLoginIfNeeded(req, user.id);
+  if (user.platform_admin) {
+    await writeAccessLog({ req, action: "PLATFORM_MASTER_LOGIN", tenant: null, purpose: "seguranca" });
+  }
+  res.json(auth);
+}
+
 authRouter.post("/login", loginLimiter, async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
@@ -40,53 +75,92 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
       err.code = "AUTH_FAILED";
       throw err;
     }
-    await pool.query("UPDATE users SET last_login_at = now() WHERE id = $1", [user.id]);
-    const tenant = user.platform_admin ? null : await loadTenantForEmail(user.email);
-    if (!user.platform_admin && tenant) {
-      const lifecycle = tenant.lifecycle_status || (
-        tenant.billing_status === "suspended" ? "SUSPENDED" : "ACTIVE"
-      );
-      if (["SUSPENDED", "DISABLED", "CANCELLED"].includes(lifecycle) || tenant.billing_status === "suspended") {
-        const err = new Error("O acesso da sua organização ao AllDebt está temporariamente suspenso.");
-        err.status = 403;
-        err.code = "TENANT_SUSPENDED";
-        throw err;
-      }
-    }
-    const auth = issueAuthResponse(user, tenant);
-    req.user = {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-      full_name: user.full_name,
-      tenant_id: tenant?.id || null,
-      group_id: tenant?.group_id || null,
-      platform_admin: user.platform_admin === true,
-    };
-    await writeAudit({
-      req,
-      action: user.platform_admin ? "PLATFORM_MASTER_LOGIN" : "LOGIN",
-      resourceType: "User",
-      resourceId: user.id,
-      registro: user.email,
-      after: {
-        email: user.email,
-        full_name: user.full_name,
-        role: user.role,
-        tenant_id: tenant?.id || null,
-        platform_admin: user.platform_admin === true,
-      },
-    });
-    await markFirstLoginIfNeeded(req, user.id);
+
     if (user.platform_admin) {
-      await writeAccessLog({ req, action: "PLATFORM_MASTER_LOGIN", tenant: null, purpose: "seguranca" });
+      await finalizeLogin(req, res, user, null);
+      return;
     }
-    res.json(auth);
+
+    // Login com mais de um tenant (ex.: consultor externo que atende mais de um cliente da plataforma):
+    // não escolhe mais sozinho — pergunta. Tenant suspenso/desabilitado nem entra na lista; só bloqueia de
+    // verdade (como sempre) quando não sobra nenhum utilizável.
+    const allTenants = await loadAllTenantsForEmail(user.email);
+    const usable = allTenants.filter((t) => !isTenantBlocked(t));
+    if (allTenants.length && !usable.length) {
+      const err = new Error("O acesso da sua organização ao AllDebt está temporariamente suspenso.");
+      err.status = 403;
+      err.code = "TENANT_SUSPENDED";
+      throw err;
+    }
+    if (usable.length > 1) {
+      res.json({
+        tenant_selection_required: true,
+        pending_token: issuePendingTenantSelectionToken(user.id),
+        tenants: usable.map((t) => ({ tenant_id: t.id, tenant_name: t.tenant_name, tenant_role: t.tenant_role })),
+      });
+      return;
+    }
+    await finalizeLogin(req, res, user, usable[0] || null);
   } catch (error) {
     if (error instanceof z.ZodError) {
       // `message` é getter-only em ZodError (zod >=3.25) — atribuir direto
       // lança TypeError e derruba a resposta para 500 em vez do 400 esperado.
       const validationError = new Error("Payload de login inválido");
+      validationError.status = 400;
+      validationError.code = "VALIDATION";
+      next(validationError);
+      return;
+    }
+    next(error);
+  }
+});
+
+const selectTenantSchema = z.object({
+  pending_token: z.string().min(1),
+  tenant_id: z.string().min(1),
+});
+
+// Segundo passo do login com mais de um tenant: confirma o token de seleção (curtíssimo, 5min, emitido só
+// no /login acima) e que o tenant escolhido realmente pertence a esse usuário — nunca confia cegamente na
+// escolha vinda do cliente.
+authRouter.post("/select-tenant", loginLimiter, async (req, res, next) => {
+  try {
+    const body = selectTenantSchema.parse(req.body);
+    const userId = verifyPendingTenantSelectionToken(body.pending_token);
+    if (!userId) {
+      const err = new Error("Sessão de login expirada — faça login novamente.");
+      err.status = 401;
+      err.code = "AUTH_INVALID";
+      throw err;
+    }
+    const result = await pool.query(
+      "SELECT id, email, full_name, role, approval_level, status, blocked, platform_admin FROM users WHERE id = $1",
+      [userId]
+    );
+    const user = result.rows[0];
+    if (!user || user.status !== "active" || user.blocked === true || user.platform_admin) {
+      const err = new Error("Usuário bloqueado");
+      err.status = 401;
+      err.code = "AUTH_INVALID";
+      throw err;
+    }
+    const tenant = await loadTenantForEmailAndId(user.email, body.tenant_id);
+    if (!tenant) {
+      const err = new Error("Você não tem mais acesso a este cliente.");
+      err.status = 403;
+      err.code = "TENANT_FORBIDDEN";
+      throw err;
+    }
+    if (isTenantBlocked(tenant)) {
+      const err = new Error("O acesso da sua organização ao AllDebt está temporariamente suspenso.");
+      err.status = 403;
+      err.code = "TENANT_SUSPENDED";
+      throw err;
+    }
+    await finalizeLogin(req, res, user, tenant);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const validationError = new Error("Payload inválido");
       validationError.status = 400;
       validationError.code = "VALIDATION";
       next(validationError);
@@ -109,7 +183,13 @@ authRouter.get("/me", requireAuth, async (req, res, next) => {
       throw err;
     }
     const platformAdmin = me.platform_admin === true;
-    const tenant = platformAdmin ? null : await loadTenantForEmail(me.email);
+    // Mesma prioridade do attachTenant: o tenant que o token já fixou, não o recálculo do zero — senão
+    // quem tem login em mais de um tenant veria o nome errado aqui mesmo estando corretamente escopado
+    // nas chamadas de dados (que passam pelo attachTenant).
+    const tenant = platformAdmin ? null : (
+      (req.user?.tenant_id && await loadTenantForEmailAndId(me.email, req.user.tenant_id))
+      || (await loadTenantForEmail(me.email))
+    );
     res.json({
       id: me.id,
       email: me.email,

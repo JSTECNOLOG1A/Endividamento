@@ -1,6 +1,7 @@
 import {
   loadTenantById,
   loadTenantForEmail,
+  loadTenantForEmailAndId,
   loadUserById,
   runWithTenant,
 } from "../modules/tenants/access.js";
@@ -119,7 +120,13 @@ export async function attachTenant(req, res, next) {
       return;
     }
 
-    const tenant = await loadTenantForEmail(dbUser.email);
+    // O tenant que o login (ou a escolha em /select-tenant) já fixou nessa sessão tem prioridade — sem
+    // isso, quem tem login em mais de um tenant (ex.: consultor externo) recalcularia do zero a cada
+    // requisição e cairia sempre no mesmo (o de vínculo mais antigo), não importa qual tenha escolhido.
+    // Cai no cálculo de sempre (loadTenantForEmail) se a sessão não tiver tenant_id, ou se o vínculo tiver
+    // sido removido depois que o token foi emitido.
+    const tenant = (req.user?.tenant_id && await loadTenantForEmailAndId(dbUser.email, req.user.tenant_id))
+      || (await loadTenantForEmail(dbUser.email));
     if (!tenant) {
       res.status(403).json({
         error: "Usuário sem tenant. Conclua o cadastro da empresa ou peça acesso ao administrador.",

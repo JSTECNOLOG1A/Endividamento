@@ -65,7 +65,18 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (email, password) => {
-    const currentUser = await base44.auth.login(email, password);
+    const result = await base44.auth.login(email, password);
+    // Login em mais de um tenant: ainda não autenticou de verdade, devolve pra tela decidir o que mostrar
+    // (ver TenantSelect) em vez de já marcar isAuthenticated.
+    if (result?.tenantSelectionRequired) return result;
+    setUser(result);
+    setIsAuthenticated(true);
+    setAuthError(null);
+    return result;
+  };
+
+  const selectTenant = async (pendingToken, tenantId) => {
+    const currentUser = await base44.auth.selectTenant(pendingToken, tenantId);
     setUser(currentUser);
     setIsAuthenticated(true);
     setAuthError(null);
@@ -103,6 +114,7 @@ export const AuthProvider = ({ children }) => {
       authError,
       appPublicSettings,
       login,
+      selectTenant,
       acceptSession,
       logout,
       navigateToLogin,

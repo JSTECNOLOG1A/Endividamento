@@ -127,6 +127,19 @@ export const base44 = {
         method: "POST",
         body: { email, password },
       });
+      // Login em mais de um tenant (ex.: consultor externo de mais de um cliente): o backend ainda não
+      // emitiu token nenhum, só pediu pra escolher. Quem chama decide como mostrar isso (ver AuthContext).
+      if (result.tenant_selection_required) {
+        return { tenantSelectionRequired: true, pendingToken: result.pending_token, tenants: result.tenants };
+      }
+      setToken(result.token);
+      return result.user;
+    },
+    async selectTenant(pendingToken, tenantId) {
+      const result = await request("/auth/select-tenant", {
+        method: "POST",
+        body: { pending_token: pendingToken, tenant_id: tenantId },
+      });
       setToken(result.token);
       return result.user;
     },

@@ -12,6 +12,7 @@ import { GroupProvider } from '@/lib/GroupContext';
 import { LayoutProvider } from '@/lib/LayoutContext';
 import { ProcessingProvider } from '@/lib/ProcessingContext';
 import Login from '@/components/Login';
+import TenantSelect from '@/components/TenantSelect';
 import Signup from '@/components/Signup';
 import CompleteSignup from '@/components/CompleteSignup';
 import ForgotPassword from '@/components/ForgotPassword';
@@ -43,9 +44,12 @@ function isPublicAccountTokenPath(pathname) {
 
 const AuthenticatedApp = () => {
   const location = useLocation();
-  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, login, logout } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, login, selectTenant, logout } = useAuth();
   const [loginError, setLoginError] = React.useState(null);
   const [loginLoading, setLoginLoading] = React.useState(false);
+  // Preenchido quando o login informa mais de um tenant possível (ver TenantSelect) — até escolher, o
+  // usuário ainda não está autenticado de verdade (nenhum token foi emitido).
+  const [tenantChoice, setTenantChoice] = React.useState(null);
 
   // Convite / reset de senha devem funcionar mesmo com sessão master aberta.
   React.useEffect(() => {
@@ -82,6 +86,31 @@ const AuthenticatedApp = () => {
   }
 
   if (!isAuthenticated) {
+    if (tenantChoice) {
+      return (
+        <TenantSelect
+          tenants={tenantChoice.tenants}
+          error={loginError}
+          loading={loginLoading}
+          onBack={() => {
+            setTenantChoice(null);
+            setLoginError(null);
+          }}
+          onSelect={async (tenantId) => {
+            setLoginError(null);
+            setLoginLoading(true);
+            try {
+              await selectTenant(tenantChoice.pendingToken, tenantId);
+              setTenantChoice(null);
+            } catch (error) {
+              setLoginError(error.message || "Não foi possível entrar nesse cliente");
+            } finally {
+              setLoginLoading(false);
+            }
+          }}
+        />
+      );
+    }
     return (
       <Routes>
         <Route path="/criar-conta" element={<Signup />} />
@@ -99,7 +128,10 @@ const AuthenticatedApp = () => {
                 setLoginError(null);
                 setLoginLoading(true);
                 try {
-                  await login(email, password);
+                  const result = await login(email, password);
+                  if (result?.tenantSelectionRequired) {
+                    setTenantChoice({ pendingToken: result.pendingToken, tenants: result.tenants });
+                  }
                 } catch (error) {
                   setLoginError(error.message || "Falha no login");
                 } finally {
