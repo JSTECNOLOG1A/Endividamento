@@ -3,6 +3,7 @@ import {
   Database,
   Building,
   BarChart3,
+  LayoutDashboard,
   BookOpen,
   Settings,
   Wallet,
@@ -19,10 +20,12 @@ import { SETTINGS_SECTIONS } from "./settingsNavigation";
 
 /** Navegação do layout Classic — links diretos (sem submenu). */
 export const NAV_ITEMS = [
+  // Tela inicial do sistema (ver pages.config.js: mainPage) — primeira onda do Dashboard executivo
+  // (2026-09-29): CFO cai aqui antes da listagem de contratos.
+  { name: "Dashboard", page: "Consolidation", icon: LayoutDashboard },
   { name: "Contratos", page: "Contracts", icon: FolderOpen },
   { name: "Governança", page: "Governance", icon: Building },
   { name: "Contabilidade", page: "Accounting", icon: BarChart3 },
-  { name: "Consolidação", page: "Consolidation", icon: BarChart3 },
   {
     name: "Financeiro",
     icon: Wallet,

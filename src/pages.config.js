@@ -122,7 +122,9 @@ export const PAGES = {
 }
 
 export const pagesConfig = {
-    mainPage: "Simulator",
+    // Dashboard executivo (2026-09-29): virou a tela inicial do sistema, antes da listagem de contratos —
+    // ver src/config/navigation.js (posição na sidebar) e src/components/dashboard/DashboardView.jsx.
+    mainPage: "Consolidation",
     Pages: PAGES,
     Layout: __Layout,
 };

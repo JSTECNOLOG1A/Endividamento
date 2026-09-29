@@ -168,6 +168,14 @@ export const base44 = {
       return { data };
     },
   },
+  dashboard: {
+    // Livre pra qualquer usuário do tenant (sem exigir permissão de escrita) — por isso é uma rota própria,
+    // fora do dispatcher /functions (ver backend/src/modules/accounting/dashboardRoutes.js).
+    getSummary(entityId, dataBase) {
+      const params = new URLSearchParams({ entity_id: entityId || "all", data_base: dataBase });
+      return request(`/dashboard/summary?${params}`);
+    },
+  },
   integrations: {
     Core: {
       async UploadFile({ file }) {

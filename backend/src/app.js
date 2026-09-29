@@ -16,6 +16,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { healthRouter } from "./modules/health/routes.js";
 import { authRouter } from "./modules/auth/routes.js";
 import { entitiesRouter } from "./modules/entities/routes.js";
+import { dashboardRouter } from "./modules/accounting/dashboardRoutes.js";
 import { functionsRouter } from "./modules/functions/routes.js";
 import { auditRouter } from "./modules/audit/routes.js";
 import { integrationsRouter } from "./modules/integrations/routes.js";
@@ -138,6 +139,7 @@ export function createApp() {
   app.use("/api/me", meFirstAccessRouter);
   app.use("/api/legal", legalRouter);
   app.use("/api/entities", entitiesRouter);
+  app.use("/api/dashboard", dashboardRouter);
   app.use("/api/functions", functionsRouter);
   app.use("/api/audit-events", auditRouter);
   app.use("/api/integrations", integrationsRouter);

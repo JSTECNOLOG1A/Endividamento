@@ -38,7 +38,9 @@ function parseOpen(value) {
 
 // PTAX da data-base para contratos em moeda estrangeira: a cotação mais recente até a data-base (fim de
 // semana e feriado usam a última cotação anterior), aceitando no máximo 7 dias de defasagem.
-async function loadDataBasePtax(currencyId, dataBase) {
+// Exportada porque `dashboardSummary.js` reusa a mesma busca de PTAX (contratos em moeda estrangeira,
+// numa data-base qualquer) — não faz sentido duas implementações da mesma consulta.
+export async function loadDataBasePtax(currencyId, dataBase) {
   const code = (await pool.query(`SELECT currency_code FROM currencies WHERE id = $1`, [currencyId])).rows[0]?.currency_code;
   if (!code) return null;
   const found = await pool.query(

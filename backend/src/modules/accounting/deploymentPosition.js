@@ -5,6 +5,13 @@
 // parcelas informadas como vencidas em aberto. O cronograma serve de base de comparação.
 //
 // Não grava nada e não altera o cronograma.
+//
+// `computeContractPositionAsOf`, mais abaixo, generaliza essa mesma conta para uso recorrente (Dashboard):
+// em vez de receber manualmente quais parcelas até a data-base estão em aberto (só faz sentido numa
+// implantação, onde o histórico é externo ao sistema), deriva isso dos títulos reais do contrato — e,
+// diferente da implantação, respeita `deployment_mode`/`payoff_date` do próprio contrato (aqui já pode ter
+// passado por uma virada ou uma quitação antecipada de verdade).
+import { pool } from "../../db/pool.js";
 import { reconcileContractForCompetencia, toForeignView } from "./closingEngine.js";
 
 const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
@@ -55,10 +62,10 @@ export function computeDeploymentPosition(contract, cutoffIso, openParcelas = []
   const ptax = Number(options.ptax) || 0;
   if (foreign) {
     const sched = parseSchedule(contract);
-    if (!sched.length) return computeDeploymentPosition({ ...contract, currency_id: null }, cutoffIso, openParcelas);
+    if (!sched.length) return computeDeploymentPosition({ ...contract, currency_id: null }, cutoffIso, openParcelas, options);
     if (!ptax) {
       // Sem PTAX da data-base não há posição em reais confiável: devolve zerado e bloqueia a aprovação.
-      const base = computeDeploymentPosition(toForeignView(contract, sched), cutoffIso, openParcelas);
+      const base = computeDeploymentPosition(toForeignView(contract, sched), cutoffIso, openParcelas, options);
       return {
         ...base,
         position: { ...base.position, foreignUnitsOnly: true },
@@ -66,7 +73,7 @@ export function computeDeploymentPosition(contract, cutoffIso, openParcelas = []
         missingPtax: true,
       };
     }
-    const base = computeDeploymentPosition(toForeignView(contract, sched), cutoffIso, openParcelas);
+    const base = computeDeploymentPosition(toForeignView(contract, sched), cutoffIso, openParcelas, options);
     const conv = (v) => r2((Number(v) || 0) * ptax);
     // Converte o total e o circulante; o não circulante é o resto — assim as partes somam exatamente o
     // total em reais (a conversão de cada parte separada poderia divergir em centavos).
@@ -110,7 +117,13 @@ export function computeDeploymentPosition(contract, cutoffIso, openParcelas = []
     .map((r) => ({ id: `implantacao-${r.parcela}`, parcela: r.parcela, status: "baixado", principal_paid: 0, interest_paid: 0 }));
 
   const [y, m] = cutoffIso.split("-").map(Number);
-  const rec = reconcileContractForCompetencia({ ...contract, deployment_mode: false, payoff_date: null }, y, m, synthetic);
+  // Implantação (padrão): força a ignorar deployment_mode/payoff_date do contrato — nesse fluxo o contrato
+  // ainda nem tem esses campos definidos. Uso recorrente (Dashboard, respectContractLifecycle): respeita os
+  // dois, porque aqui o contrato já pode ter passado por uma virada ou uma quitação antecipada de verdade.
+  const rec = reconcileContractForCompetencia(
+    options.respectContractLifecycle ? contract : { ...contract, deployment_mode: false, payoff_date: null },
+    y, m, synthetic
+  );
   const principalTotal = Math.max(0, r2(rec.closing.principal));
   const jurosTotal = Math.max(0, r2(rec.closing.interest));
 
@@ -146,4 +159,31 @@ export function computeDeploymentPosition(contract, cutoffIso, openParcelas = []
     parcelasAteDataBase,
     warnings,
   };
+}
+
+// Parcelas do contrato, com vencimento até a data-base, que continuam sem baixa — a mesma informação que na
+// implantação vem de fora (o histórico é anterior ao sistema); aqui já é o próprio AllDebt que sabe.
+// `cancelado` e `ignorado_implantacao` não contam como "em aberto": o primeiro não é dívida, o segundo já
+// está coberto pela abertura da virada.
+async function loadOpenParcelasAsOf(contractId, cutoffIso) {
+  const result = await pool.query(
+    `SELECT parcela FROM payable_titles WHERE contract_id = $1 AND vencimento <= $2::date AND status = 'aberto'`,
+    [contractId, cutoffIso]
+  );
+  return result.rows.map((r) => r.parcela);
+}
+
+/**
+ * Posição de um contrato JÁ APROVADO E EM VIDA (não a implantação) numa data-base qualquer — pensado para
+ * reuso recorrente (ex.: Dashboard), não para uma foto única. Mesma conta de `computeDeploymentPosition`,
+ * mas deriva sozinho quais parcelas até a data-base estão em aberto (a partir dos títulos reais) e respeita
+ * `deployment_mode`/`payoff_date` do contrato.
+ *
+ * @param {object} contract linha de loan_contracts
+ * @param {string} cutoffIso data-base (AAAA-MM-DD, recomendado fim de mês)
+ * @param {{ptax?: number, ptaxDate?: string}} options PTAX da data-base (contrato em moeda estrangeira)
+ */
+export async function computeContractPositionAsOf(contract, cutoffIso, options = {}) {
+  const openParcelas = await loadOpenParcelasAsOf(contract.id, cutoffIso);
+  return computeDeploymentPosition(contract, cutoffIso, openParcelas, { ...options, respectContractLifecycle: true });
 }

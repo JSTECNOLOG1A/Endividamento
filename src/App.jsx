@@ -22,6 +22,7 @@ import LegalFirstAccessModal from '@/components/firstAccess/LegalFirstAccessModa
 import ProductTour from '@/components/firstAccess/ProductTour';
 import { FirstAccessBootScreen, FirstAccessProvider, useFirstAccess } from '@/lib/FirstAccessContext';
 import SupportAccessModal from '@/components/platform/SupportAccessModal';
+import { createPageUrl } from '@/utils';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -174,6 +175,7 @@ function TenantAccessHost() {
 
 function AuthenticatedShell() {
   const { loading, needsLegal, tourMode } = useFirstAccess();
+  const { user } = useAuth();
 
   if (loading) {
     return <FirstAccessBootScreen />;
@@ -183,9 +185,16 @@ function AuthenticatedShell() {
     <>
       <Routes>
         <Route path="/" element={
-          <LayoutWrapper currentPageName={mainPageKey}>
-            <MainPage />
-          </LayoutWrapper>
+          // Platform Admin não tem tenant/grupo fora de uma sessão de suporte — o Dashboard (mainPage)
+          // depende dos dois pra calcular qualquer número, então cairia num erro sem sentido pra esse
+          // perfil. A tela dele continua sendo a administração da plataforma.
+          user?.platform_admin ? (
+            <Navigate to={createPageUrl("PlatformTenants")} replace />
+          ) : (
+            <LayoutWrapper currentPageName={mainPageKey}>
+              <MainPage />
+            </LayoutWrapper>
+          )
         } />
         {Object.entries(Pages).map(([path, Page]) => (
           <Route
