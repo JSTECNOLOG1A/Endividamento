@@ -781,6 +781,51 @@ export async function calculateAmortizationSchedule(params) {
     usingOperationDateFallback: !hasFirstPaymentDate
   });
 
+  // 🔐 CARÊNCIA COM CAPITALIZAÇÃO + 1ª PARCELA INFORMADA NA MÃO: sem isso, os juros do
+  // período inteiro entre a liberação e a 1ª parcela (que pode ser de vários meses) somem
+  // sem capitalizar — a linha 1 nasce com o saldo original, como se a carência não tivesse
+  // acontecido. É o caso de qualquer usuário que copia a "Data de Vencimento da 1ª Parcela"
+  // direto do contrato do banco em vez de deixar o campo em branco (o motor então calcularia
+  // a data sozinho a partir da carência, e capitalizaria corretamente mês a mês).
+  //
+  // Escopo desta correção: taxa prefixada (indexer === "NA") — mesma limitação do "dias=30"
+  // do PRICE prefixado logo abaixo — e graceInterestBehavior === "CAPITALIZAR". BALLOON e
+  // INTEREST_ONLY combinados com 1ª Parcela explícita têm o mesmo problema de fundo (a
+  // carência inteira também "desaparece" em vez de virar um evento próprio), mas pedem um
+  // desenho de correção diferente (o juro não deveria entrar como saldo, e sim como evento
+  // de pagamento periódico ou de balão) — não corrigido aqui.
+  //
+  // Mecânica: a linha 1 (na data informada) sempre cobra juros de UM período normal
+  // (interestFreqMonths, tipicamente 1 mês) — igual a qualquer outra linha da tabela. O que
+  // sobra do intervalo (liberação até "1ª parcela menos um período normal") é a carência de
+  // verdade, e é isso que capitaliza em `principal` aqui. Não usa o número de meses de
+  // carência informado (`interestGraceMonths`) como ponto de corte — ele é só o GATILHO
+  // (indica que o usuário quis dizer que existe carência) — porque o significado exato desse
+  // campo (meses até a 1ª parcela, ou meses até o período normal anterior a ela) varia
+  // conforme quem preencheu, e usar a data de verdade evita essa ambiguidade.
+  // Só entra pelo interestGraceMonths (não principalGraceMonths): um contrato pode ter
+  // carência SÓ de principal, com juros pagos mês a mês desde o início (interestGraceMonths=0)
+  // — nesse caso não há nada pra capitalizar, os juros já são cobrados normalmente todo mês,
+  // carência ou não. Capitalizar aqui seria inventar um problema onde não existe um.
+  let graceCapitalizationEndDate = null;
+  if (
+    hasFirstPaymentDate && !hasStagedDisbursement && indexer === "NA" &&
+    effectiveGraceInterestBehavior === "CAPITALIZAR" && Number(interestGraceMonths) > 0
+  ) {
+    const graceEndDate = addMonths(dueAnchorDate, -interestFreqMonths);
+    if (graceEndDate > startDate) {
+      const dias = daysBetween(startDate, graceEndDate);
+      const du = businessDaysBetween(startDate, graceEndDate, holidays);
+      const dias30 = days30360(startDate, graceEndDate);
+      const capRate = remuneratoryRateForPeriod(fixedRate, { dias, du, dias30360: dias30 }, interestDayCountConvention);
+      if (Number.isFinite(capRate) && capRate > 0) {
+        principal = roundTo(principal * (1 + capRate), 2);
+        sdInicialUSD = principal;
+        graceCapitalizationEndDate = graceEndDate;
+      }
+    }
+  }
+
   // Quando o Primeiro Vencimento é preenchido explicitamente, a linha 1 da
   // tabela JÁ É essa data (dueAnchorDate = firstPaymentDate) — a carência já
   // foi "consumida" posicionando esse vencimento. As fórmulas de offset
@@ -1024,7 +1069,10 @@ export async function calculateAmortizationSchedule(params) {
     });
   }
   // prevDate sempre começa da data de operação
-  let prevDate = startDate;
+  // Se a carência antes da 1ª parcela já foi capitalizada em `principal` acima (ver
+  // graceCapitalizationEndDate), a linha 1 deve cobrar juros só do que sobrou depois da
+  // carência — não do intervalo inteiro desde a liberação de novo (contaria em dobro).
+  let prevDate = graceCapitalizationEndDate || startDate;
   let lastInterestPaymentDate = startDate; // Rastreia último pagamento de juros
   let parcela = 0;
   let acumulatedUnpaidInterest = 0; // Juros acumulados não pagos
