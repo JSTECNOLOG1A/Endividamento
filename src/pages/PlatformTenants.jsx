@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
-import { MoreHorizontal, Plus, Search } from "lucide-react";
+import { Info, MoreHorizontal, Plus, Search } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/AuthContext";
 import { usePlatform } from "@/lib/PlatformContext";
 import { platformApi } from "@/api/platform";
@@ -229,14 +230,9 @@ export default function PlatformTenants() {
 function CreateTenantModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
     legal_name: "",
-    trade_name: "",
-    document: "",
     admin_email: "",
-    phone: "",
     responsible_name: "",
     plan: "STARTER",
-    trial: true,
-    trial_days: 14,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -321,15 +317,37 @@ function CreateTenantModal({ onClose, onCreated }) {
       <form onSubmit={submit} className="w-full max-w-lg rounded-2xl border bg-white p-6 shadow-xl space-y-3" style={{ borderColor: LOGIN.border }}>
         <h2 className="text-lg font-bold text-slate-900">Novo tenant</h2>
         <p className="text-sm text-slate-500">
-          O e-mail administrativo receberá um link para confirmar a conta e definir a senha.
+          O e-mail do contato receberá um link para confirmar a conta e definir a senha.
         </p>
+        <label className="block text-sm">
+          <span className="font-medium text-slate-700">
+            Nome do grupo/Organização
+            <TooltipProvider>
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <Info className="w-3.5 h-3.5 inline-block ml-1 text-slate-500 cursor-help align-[-2px]" />
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs">
+                  <p className="text-xs">
+                    Coloque aqui o nome do grupo ou organização que servirá como guarda-chuva de inclusão de
+                    todas as empresas e seus respectivos contratos.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </span>
+          <input
+            required
+            type="text"
+            className="mt-1 h-10 w-full rounded-lg border px-3"
+            style={{ borderColor: LOGIN.border }}
+            value={form.legal_name}
+            onChange={(e) => setForm((f) => ({ ...f, legal_name: e.target.value }))}
+          />
+        </label>
         {[
-          ["legal_name", "Razão social", true],
-          ["trade_name", "Nome fantasia", false],
-          ["document", "CNPJ", false],
-          ["admin_email", "E-mail administrativo", true],
-          ["responsible_name", "Responsável", false],
-          ["phone", "Telefone", false],
+          ["responsible_name", "Nome do contato", false],
+          ["admin_email", "E-mail do contato", true],
         ].map(([key, label, required]) => (
           <label key={key} className="block text-sm">
             <span className="font-medium text-slate-700">{label}</span>
@@ -363,10 +381,6 @@ function CreateTenantModal({ onClose, onCreated }) {
               {planMeta(form.plan).tagline}. {planMeta(form.plan).highlights.join(" · ")}
             </p>
           ) : null}
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.trial} onChange={(e) => setForm((f) => ({ ...f, trial: e.target.checked }))} />
-          Iniciar em trial ({form.trial_days} dias)
         </label>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         <div className="flex justify-end gap-2 pt-2">
