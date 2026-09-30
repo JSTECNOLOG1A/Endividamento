@@ -26,10 +26,10 @@ import ProposalEmailDialog from "@/components/commercialProposals/ProposalEmailD
 import ProposalTimeline from "@/components/commercialProposals/ProposalTimeline";
 import ProposalSummary from "@/components/commercialProposals/ProposalSummary";
 import ProposalAcceptedSeal from "@/components/commercialProposals/ProposalAcceptedSeal";
-import ProposalOutcome from "@/components/commercialProposals/ProposalOutcome";
+import ProposalOutcome from "@/components/commercialProposals/ProposalOutcome.jsx";
 import ProposalAcceptDialog from "@/components/commercialProposals/ProposalAcceptDialog";
 import ProposalRejectDialog from "@/components/commercialProposals/ProposalRejectDialog";
-import { PROPOSAL_STATUS_LABELS, isProposalClosed, isProposalClosedError } from "@/components/commercialProposals/proposalOutcome";
+import { PROPOSAL_STATUS_LABELS, isProposalClosed, isProposalClosedError } from "@/components/commercialProposals/proposalOutcome.js";
 import { Save, Loader2, Eye, Download, Search, Pencil, FilePlus2, Plus, ArrowLeft, Mail, CheckCircle2, XCircle, FileText, Lock } from "lucide-react";
 
 const PAGAMENTO_IMPLANTACAO_OPTIONS = [
