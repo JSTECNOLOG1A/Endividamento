@@ -772,7 +772,31 @@ export async function calculateAmortizationSchedule(params) {
   const startDate = parseLocalDate(operationDate);
   const hasFirstPaymentDate = !!(firstPaymentDate && String(firstPaymentDate).trim());
   const dueAnchorDate = hasFirstPaymentDate ? parseLocalDate(firstPaymentDate) : startDate;
-  
+
+  const strategyWarnings = [];
+
+  // 🔐 CARÊNCIA INCOERENTE: quando a "Data de Vencimento da 1ª Parcela" é preenchida
+  // à mão, a carência REAL é a distância entre a liberação e essa data — o campo
+  // "Carência de Juros/Principal" vira só um gatilho (ver comentário abaixo), não o
+  // valor usado no cálculo. Se os dois números destoarem muito, é sinal de erro de
+  // digitação (ex.: usuário copiou a data do contrato do banco mas deixou o campo de
+  // carência com um valor antigo/errado) — avisa sem bloquear, porque descompasso
+  // proposital também é possível.
+  if (hasFirstPaymentDate) {
+    const mesesReais = Math.round(
+      (dueAnchorDate.getFullYear() - startDate.getFullYear()) * 12 +
+      (dueAnchorDate.getMonth() - startDate.getMonth()) +
+      (dueAnchorDate.getDate() >= startDate.getDate() ? 0 : -1)
+    );
+    const carenciaInformada = Math.max(Number(principalGraceMonths) || 0, Number(interestGraceMonths) || 0);
+    if (Math.abs(mesesReais - carenciaInformada) > 1) {
+      strategyWarnings.push({
+        type: "GRACE_DATE_MISMATCH",
+        message: `⚠️ Carência incoerente: a Data de Vencimento da 1ª Parcela implica ~${mesesReais} meses de carência, mas o campo de carência informa ${carenciaInformada} meses. Confira se a data ou a carência estão certas.`,
+      });
+    }
+  }
+
   console.log('🔍 Debug startDate:', {
     operationDate,
     startDate: toISODateLocal(startDate),
@@ -795,14 +819,22 @@ export async function calculateAmortizationSchedule(params) {
   // desenho de correção diferente (o juro não deveria entrar como saldo, e sim como evento
   // de pagamento periódico ou de balão) — não corrigido aqui.
   //
-  // Mecânica: a linha 1 (na data informada) sempre cobra juros de UM período normal
-  // (interestFreqMonths, tipicamente 1 mês) — igual a qualquer outra linha da tabela. O que
-  // sobra do intervalo (liberação até "1ª parcela menos um período normal") é a carência de
-  // verdade, e é isso que capitaliza em `principal` aqui. Não usa o número de meses de
-  // carência informado (`interestGraceMonths`) como ponto de corte — ele é só o GATILHO
-  // (indica que o usuário quis dizer que existe carência) — porque o significado exato desse
-  // campo (meses até a 1ª parcela, ou meses até o período normal anterior a ela) varia
-  // conforme quem preencheu, e usar a data de verdade evita essa ambiguidade.
+  // Mecânica: o cronograma inteiro é sempre MENSAL (ver comentário da seção 2, "Gerar
+  // cronograma MENSAL"), mesmo quando os pagamentos são trimestrais/anuais — os meses sem
+  // pagamento só capitalizam por baixo dos panos. A linha 1 (na data informada) precisa se
+  // comportar exatamente como qualquer outra linha desse grid mensal: cobrar juros de UM MÊS
+  // (o último antes do vencimento), não de um `interestFreqMonths` inteiro — usar
+  // interestFreqMonths aqui reservava um ANO inteiro de juros pra cobrar de uma vez na 1ª
+  // parcela sempre que os pagamentos eram trimestrais/anuais (ex.: % Residual anual), quando
+  // o correto é capitalizar mês a mês IGUAL aos meses "vazios" entre parcelas — e só o mês
+  // final vira juros cobrado à vista, exatamente como confirmado contra planilha bancária real
+  // (ver validação do contrato 164240078: a carência inteira capitaliza mês a mês, a 1ª
+  // parcela só cobra os ~30 dias finais). O que sobra do intervalo (liberação até "1ª parcela
+  // menos 1 mês") é a carência de verdade, e é isso que capitaliza em `principal` aqui. Não
+  // usa o número de meses de carência informado (`interestGraceMonths`) como ponto de corte —
+  // ele é só o GATILHO (indica que o usuário quis dizer que existe carência) — porque o
+  // significado exato desse campo varia conforme quem preencheu, e usar a data de verdade
+  // evita essa ambiguidade.
   // Só entra pelo interestGraceMonths (não principalGraceMonths): um contrato pode ter
   // carência SÓ de principal, com juros pagos mês a mês desde o início (interestGraceMonths=0)
   // — nesse caso não há nada pra capitalizar, os juros já são cobrados normalmente todo mês,
@@ -812,7 +844,7 @@ export async function calculateAmortizationSchedule(params) {
     hasFirstPaymentDate && !hasStagedDisbursement && indexer === "NA" &&
     effectiveGraceInterestBehavior === "CAPITALIZAR" && Number(interestGraceMonths) > 0
   ) {
-    const graceEndDate = addMonths(dueAnchorDate, -interestFreqMonths);
+    const graceEndDate = addMonths(dueAnchorDate, -1);
     if (graceEndDate > startDate) {
       const dias = daysBetween(startDate, graceEndDate);
       const du = businessDaysBetween(startDate, graceEndDate, holidays);
@@ -1149,8 +1181,6 @@ export async function calculateAmortizationSchedule(params) {
     );
   }
 
-  const strategyWarnings = [];
-  
   // Adicionar warning de anatocismo se CAPITALIZAR (na carência) ou
   // CAPITALIZAR_PERIODICO (na carência e/ou entre parcelas, quando a
   // periodicidade é maior que mensal)
