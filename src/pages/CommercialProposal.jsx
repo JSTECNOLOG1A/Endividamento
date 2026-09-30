@@ -23,8 +23,14 @@ import {
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import ProposalEmailDialog from "@/components/commercialProposals/ProposalEmailDialog";
-import ProposalSendHistory from "@/components/commercialProposals/ProposalSendHistory";
-import { Save, Loader2, Eye, Download, Search, Pencil, FilePlus2, Plus, ArrowLeft, Mail } from "lucide-react";
+import ProposalTimeline from "@/components/commercialProposals/ProposalTimeline";
+import ProposalSummary from "@/components/commercialProposals/ProposalSummary";
+import ProposalAcceptedSeal from "@/components/commercialProposals/ProposalAcceptedSeal";
+import ProposalOutcome from "@/components/commercialProposals/ProposalOutcome";
+import ProposalAcceptDialog from "@/components/commercialProposals/ProposalAcceptDialog";
+import ProposalRejectDialog from "@/components/commercialProposals/ProposalRejectDialog";
+import { PROPOSAL_STATUS_LABELS, isProposalClosed, isProposalClosedError } from "@/components/commercialProposals/proposalOutcome";
+import { Save, Loader2, Eye, Download, Search, Pencil, FilePlus2, Plus, ArrowLeft, Mail, CheckCircle2, XCircle, FileText, Lock } from "lucide-react";
 
 const PAGAMENTO_IMPLANTACAO_OPTIONS = [
   { value: "avista", label: "À vista" },
@@ -101,13 +107,6 @@ function formatDateTimeBR(isoTimestamp) {
   return date.toLocaleDateString("pt-BR");
 }
 
-const PROPOSAL_STATUS_LABELS = {
-  elaborando: "Elaborando",
-  enviada: "Enviada",
-  aceita: "Aceita",
-  recusada: "Recusada",
-};
-
 // "Expirada" nunca é gravada no banco — é só um rótulo calculado na hora de
 // exibir, pra não travar o status real caso a proposta seja aceita/recusada
 // depois do prazo de validade.
@@ -123,6 +122,17 @@ function proposalStatusLabel(record) {
   }
   return base;
 }
+
+// Filtro da lista por situação. "Expirada" não entra: é um rótulo calculado
+// na tela, e o servidor filtra só pela situação gravada.
+const STATUS_FILTER_OPTIONS = [
+  { value: "todas", label: "Todas", status: "" },
+  { value: "em_aberto", label: "Em aberto", status: "elaborando,enviada" },
+  { value: "elaborando", label: "Elaborando", status: "elaborando" },
+  { value: "enviada", label: "Enviada", status: "enviada" },
+  { value: "aceita", label: "Aceita", status: "aceita" },
+  { value: "recusada", label: "Recusada", status: "recusada" },
+];
 
 function proposalStatusVariant(label) {
   if (label === "Aceita") return "default";
@@ -291,6 +301,8 @@ export default function CommercialProposal() {
   const [currentProposalId, setCurrentProposalId] = useState(null);
   const [proposalSearchInput, setProposalSearchInput] = useState("");
   const [proposalSearch, setProposalSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("todas");
+  const statusFilterParam = STATUS_FILTER_OPTIONS.find((o) => o.value === statusFilter)?.status || "";
   const [pendingAction, setPendingAction] = useState(null); // { type: "open"|"new"|"back", record? }
   const [viewingProposal, setViewingProposal] = useState(null);
   const savedSnapshotRef = useRef(null);
@@ -301,8 +313,8 @@ export default function CommercialProposal() {
   }, [proposalSearchInput]);
 
   const { data: savedProposals, isLoading: loadingProposals } = useQuery({
-    queryKey: ["commercial-proposals", proposalSearch],
-    queryFn: () => commercialProposalsApi.list({ q: proposalSearch }),
+    queryKey: ["commercial-proposals", "list", { q: proposalSearch, status: statusFilterParam }],
+    queryFn: () => commercialProposalsApi.list({ q: proposalSearch, status: statusFilterParam }),
     enabled: isMaster,
     initialData: [],
   });
@@ -314,7 +326,24 @@ export default function CommercialProposal() {
     queryKey: proposalDetailKey,
     queryFn: () => commercialProposalsApi.get(currentProposalId),
     enabled: isMaster && view === "form" && Boolean(currentProposalId),
+    // Enquanto a versão gravada carrega, a da lista já diz se a proposta está
+    // travada — sem isso o formulário apareceria editável por um instante.
+    placeholderData: () => savedProposals.find((p) => p.id === currentProposalId),
   });
+  // Aceita ou recusada: o formulário vira somente leitura.
+  const isFormClosed = Boolean(currentProposalId) && isProposalClosed(savedProposalDetail);
+
+  // A janela de visualização acompanha a versão gravada, para refletir na hora
+  // um aceite ou recusa registrado ali mesmo.
+  const { data: viewingProposalDetail } = useQuery({
+    queryKey: ["commercial-proposals", "detail", viewingProposal?.id],
+    queryFn: () => commercialProposalsApi.get(viewingProposal.id),
+    enabled: isMaster && Boolean(viewingProposal?.id),
+  });
+  const viewedProposal = viewingProposalDetail || viewingProposal;
+
+  // Janela de desfecho aberta: { kind: "accept" | "reject", proposal }.
+  const [outcomeDialog, setOutcomeDialog] = useState(null);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [preparingEmail, setPreparingEmail] = useState(false);
   const [emailRecipientName, setEmailRecipientName] = useState("");
@@ -400,7 +429,11 @@ export default function CommercialProposal() {
       queryClient.invalidateQueries({ queryKey: ["commercial-proposals"] });
       toast.success("Proposta salva com sucesso.");
     },
-    onError: (error) => toast.error(error.data?.error || error.message || "Erro ao salvar proposta"),
+    onError: (error) => {
+      toast.error(error.data?.error || error.message || "Erro ao salvar proposta");
+      // Aceita ou recusada em outra tela: recarregar mostra o formulário travado.
+      if (isProposalClosedError(error)) queryClient.invalidateQueries({ queryKey: ["commercial-proposals"] });
+    },
   });
 
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -493,6 +526,7 @@ export default function CommercialProposal() {
   };
 
   const handleSaveProposal = () => {
+    if (isFormClosed) return;
     // O erro já é exibido pelo onError da mutação.
     saveProposal().catch(() => {});
   };
@@ -970,6 +1004,11 @@ export default function CommercialProposal() {
 
   // Conferências sobre a versão gravada, comuns aos dois envios.
   const openEmailDialogFor = (record, documentKind) => {
+    if (isProposalClosed(record)) {
+      toast.error("Esta proposta já tem a resposta do cliente registrada e não pode mais ser enviada por e-mail.");
+      queryClient.invalidateQueries({ queryKey: ["commercial-proposals"] });
+      return;
+    }
     if (!String(record.client_name || "").trim()) {
       toast.warning("Informe a razão social do cliente e salve a proposta antes de enviar.");
       return;
@@ -986,7 +1025,7 @@ export default function CommercialProposal() {
   // Termo completo (quadro do Termo): exige a proposta já salva, sem
   // alterações pendentes.
   const openEmailDialog = async () => {
-    if (!currentProposalId || preparingEmail) return;
+    if (!currentProposalId || preparingEmail || isFormClosed) return;
     if (isProposalDirty) {
       toast.warning("Salve as alterações antes de enviar — o cliente precisa receber a proposta igual à que está salva.");
       return;
@@ -1005,7 +1044,7 @@ export default function CommercialProposal() {
   // antes e abre a janela na mesma ação — exceto quando salvar trocaria
   // valores já combinados por preços de planos que mudaram depois.
   const saveAndOpenQuickEmailDialog = async () => {
-    if (preparingEmail || isSavingProposal) return;
+    if (preparingEmail || isSavingProposal || isFormClosed) return;
     if (!clientName.trim()) {
       toast.warning("Informe a razão social do cliente antes de enviar.");
       return;
@@ -1042,6 +1081,65 @@ export default function CommercialProposal() {
     queryClient.invalidateQueries({ queryKey: ["commercial-proposals"] });
   };
 
+  // Aceite ou recusa gravado (ou recusado pelo servidor porque a proposta já
+  // estava encerrada): lista, detalhe e envios são recarregados.
+  const handleOutcomeDone = (updated) => {
+    if (updated?.id) queryClient.setQueryData(["commercial-proposals", "detail", updated.id], updated);
+    queryClient.invalidateQueries({ queryKey: ["commercial-proposals"] });
+  };
+
+  const openOutcomeDialog = (kind, record) => {
+    if (!record || isProposalClosed(record)) return;
+    setOutcomeDialog({ kind, proposal: record });
+  };
+
+  // No formulário, o desfecho vale para a versão salva — alterações pendentes
+  // ficariam de fora sem que a pessoa percebesse.
+  const openOutcomeFromForm = (kind) => {
+    if (isProposalDirty) {
+      toast.warning("Salve as alterações antes de registrar a resposta do cliente — ela vale para a proposta como está salva.");
+      return;
+    }
+    openOutcomeDialog(kind, savedProposalDetail);
+  };
+
+  const outcomeDialogs = (
+    <>
+      <ProposalAcceptDialog
+        open={outcomeDialog?.kind === "accept"}
+        onOpenChange={(open) => { if (!open) setOutcomeDialog(null); }}
+        proposal={outcomeDialog?.proposal}
+        expired={outcomeDialog?.proposal ? proposalStatusLabel(outcomeDialog.proposal) === "Expirada" : false}
+        onDone={handleOutcomeDone}
+      />
+      <ProposalRejectDialog
+        open={outcomeDialog?.kind === "reject"}
+        onOpenChange={(open) => { if (!open) setOutcomeDialog(null); }}
+        proposal={outcomeDialog?.proposal}
+        onDone={handleOutcomeDone}
+      />
+    </>
+  );
+
+  // Botões de desfecho de uma proposta ainda aberta; encerrada, mostra o
+  // desfecho registrado.
+  const renderClientResponse = (record, onOpen = (kind) => openOutcomeDialog(kind, record)) => {
+    if (isProposalClosed(record)) return <ProposalOutcome proposal={record} />;
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-slate-500">Quando o cliente responder, registre aqui se ele aceitou ou recusou a proposta.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={!record} onClick={() => onOpen("accept")}>
+            <CheckCircle2 className="w-3.5 h-3.5" /> Registrar aceite
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5 text-red-700 hover:text-red-800" disabled={!record} onClick={() => onOpen("reject")}>
+            <XCircle className="w-3.5 h-3.5" /> Recusar
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   // Compartilhado entre as duas telas: "new" pode ser disparado tanto pela
   // listagem quanto pelo botão rápido dentro do formulário; "open" só pela
   // listagem; "back" só pelo formulário.
@@ -1074,16 +1172,30 @@ export default function CommercialProposal() {
           </Button>
         </div>
 
+        <ProposalSummary />
+
         <Card>
           <CardHeader className="pb-3">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <Input
-                className="h-8 text-sm pl-8"
-                value={proposalSearchInput}
-                onChange={(e) => setProposalSearchInput(e.target.value)}
-                placeholder="Buscar por cliente, CNPJ ou número..."
-              />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Input
+                  className="h-8 text-sm pl-8"
+                  value={proposalSearchInput}
+                  onChange={(e) => setProposalSearchInput(e.target.value)}
+                  placeholder="Buscar por cliente, CNPJ ou número..."
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-8 w-full sm:w-44 text-sm" aria-label="Filtrar por situação">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_FILTER_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.value === "todas" ? "Todas as situações" : o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -1091,7 +1203,7 @@ export default function CommercialProposal() {
               <div className="text-sm text-slate-500 py-10 text-center">Carregando...</div>
             ) : !savedProposals.length ? (
               <div className="text-sm text-slate-500 py-10 text-center">
-                {proposalSearch ? "Nenhuma proposta encontrada." : "Nenhuma proposta salva ainda."}
+                {proposalSearch || statusFilterParam ? "Nenhuma proposta encontrada." : "Nenhuma proposta salva ainda."}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -1122,13 +1234,23 @@ export default function CommercialProposal() {
                           <TableCell className="text-right whitespace-nowrap">{formatCurrency(p.valor_mensalidade)}</TableCell>
                           <TableCell className="text-right whitespace-nowrap">{formatCurrency(p.valor_implantacao)}</TableCell>
                           <TableCell>
-                            <Badge variant={proposalStatusVariant(label)}>{label}</Badge>
+                            {p.status === "aceita" ? (
+                              <ProposalAcceptedSeal proposal={p} />
+                            ) : (
+                              <Badge variant={proposalStatusVariant(label)}>{label}</Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
-                              <Button variant="ghost" size="icon" className="h-7 w-7" title="Abrir/Editar" onClick={() => openSavedProposal(p)}>
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
+                              {isProposalClosed(p) ? (
+                                <Button variant="ghost" size="icon" className="h-7 w-7" title="Abrir (somente leitura)" onClick={() => openSavedProposal(p)}>
+                                  <FileText className="w-3.5 h-3.5" />
+                                </Button>
+                              ) : (
+                                <Button variant="ghost" size="icon" className="h-7 w-7" title="Abrir/Editar" onClick={() => openSavedProposal(p)}>
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
                               <Button variant="ghost" size="icon" className="h-7 w-7" title="Visualizar" onClick={() => setViewingProposal(p)}>
                                 <Eye className="w-3.5 h-3.5" />
                               </Button>
@@ -1145,41 +1267,41 @@ export default function CommercialProposal() {
         </Card>
 
         <Dialog open={!!viewingProposal} onOpenChange={(v) => { if (!v) setViewingProposal(null); }}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Proposta {viewingProposal?.numero}</DialogTitle>
+              <DialogTitle>Proposta {viewedProposal?.numero}</DialogTitle>
             </DialogHeader>
-            {viewingProposal && (
+            {viewedProposal && (
               <div className="space-y-4 text-sm">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <div className="text-xs text-slate-500">Cliente</div>
-                    <div className="font-medium">{viewingProposal.client_name || "—"}</div>
+                    <div className="font-medium">{viewedProposal.client_name || "—"}</div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">CNPJ</div>
-                    <div className="font-medium">{viewingProposal.client_cnpj || "—"}</div>
+                    <div className="font-medium">{viewedProposal.client_cnpj || "—"}</div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">Responsável</div>
-                    <div className="font-medium">{viewingProposal.contact_name || "—"}</div>
+                    <div className="font-medium">{viewedProposal.contact_name || "—"}</div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">Plano</div>
-                    <div className="font-medium">{TIERS.find((t) => t.value === viewingProposal.tier)?.label || viewingProposal.tier}</div>
+                    <div className="font-medium">{TIERS.find((t) => t.value === viewedProposal.tier)?.label || viewedProposal.tier}</div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">Data de criação</div>
-                    <div className="font-medium">{formatDateTimeBR(viewingProposal.created_date)}</div>
+                    <div className="font-medium">{formatDateTimeBR(viewedProposal.created_date)}</div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">Validade</div>
-                    <div className="font-medium">{viewingProposal.validity_days ? `${viewingProposal.validity_days} dias` : "—"}</div>
+                    <div className="font-medium">{viewedProposal.validity_days ? `${viewedProposal.validity_days} dias` : "—"}</div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">Status</div>
-                    <Badge variant={proposalStatusVariant(proposalStatusLabel(viewingProposal))}>
-                      {proposalStatusLabel(viewingProposal)}
+                    <Badge variant={proposalStatusVariant(proposalStatusLabel(viewedProposal))}>
+                      {proposalStatusLabel(viewedProposal)}
                     </Badge>
                   </div>
                 </div>
@@ -1187,31 +1309,36 @@ export default function CommercialProposal() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <div className="text-xs text-slate-500">Implantação</div>
-                    <div className="font-medium">{formatCurrency(viewingProposal.valor_implantacao)}</div>
+                    <div className="font-medium">{formatCurrency(viewedProposal.valor_implantacao)}</div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">Mensalidade</div>
-                    <div className="font-medium">{formatCurrency(viewingProposal.valor_mensalidade)}</div>
+                    <div className="font-medium">{formatCurrency(viewedProposal.valor_mensalidade)}</div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">Cadastramento assistido</div>
-                    <div className="font-medium">{formatCurrency(viewingProposal.valor_cadastramento_total)}</div>
+                    <div className="font-medium">{formatCurrency(viewedProposal.valor_cadastramento_total)}</div>
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">Total no 1º mês</div>
-                    <div className="font-semibold text-cyan-700">{formatCurrency(viewingProposal.valor_total_primeiro_mes)}</div>
+                    <div className="font-semibold text-cyan-700">{formatCurrency(viewedProposal.valor_total_primeiro_mes)}</div>
                   </div>
                 </div>
                 <div className="h-px bg-slate-200" />
                 <div>
-                  <div className="text-xs text-slate-500 mb-1.5">Envios por e-mail</div>
-                  <ProposalSendHistory proposalId={viewingProposal.id} />
+                  <div className="text-xs text-slate-500 mb-1.5">Resposta do cliente</div>
+                  {renderClientResponse(viewedProposal)}
+                </div>
+                <div className="h-px bg-slate-200" />
+                <div>
+                  <div className="text-xs text-slate-500 mb-1.5">Histórico</div>
+                  <ProposalTimeline proposalId={viewedProposal.id} />
                 </div>
                 <div className="h-px bg-slate-200" />
                 <div className="text-xs text-slate-500">
-                  Criada por {viewingProposal.created_by || "—"} em {formatDateTimeBR(viewingProposal.created_date)}
-                  {viewingProposal.updated_by ? (
-                    <> • Última atualização por {viewingProposal.updated_by} em {formatDateTimeBR(viewingProposal.updated_date)}</>
+                  Criada por {viewedProposal.created_by || "—"} em {formatDateTimeBR(viewedProposal.created_date)}
+                  {viewedProposal.updated_by ? (
+                    <> • Última atualização por {viewedProposal.updated_by} em {formatDateTimeBR(viewedProposal.updated_date)}</>
                   ) : null}
                 </div>
               </div>
@@ -1221,15 +1348,17 @@ export default function CommercialProposal() {
               <Button
                 type="button"
                 className="gap-1.5"
-                onClick={() => { const r = viewingProposal; setViewingProposal(null); openSavedProposal(r); }}
+                disabled={!viewedProposal}
+                onClick={() => { const r = viewedProposal; setViewingProposal(null); openSavedProposal(r); }}
               >
-                <Pencil className="w-3.5 h-3.5" />
-                Abrir/Editar
+                {isProposalClosed(viewedProposal) ? <FileText className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
+                {isProposalClosed(viewedProposal) ? "Abrir" : "Abrir/Editar"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
+        {outcomeDialogs}
         {pendingActionDialog}
       </div>
     );
@@ -1252,6 +1381,17 @@ export default function CommercialProposal() {
         <p className="text-sm text-slate-600 mt-0.5">
           Simule a mensalidade por tier e carteira de contratos, e emita a proposta / termo de contratação SaaS em PDF.
         </p>
+        {isFormClosed && (
+          <div role="status" className="mt-3 flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <Lock className="w-4 h-4 mt-0.5 shrink-0 text-slate-500" />
+            <span>
+              {savedProposalDetail.status === "aceita"
+                ? "Esta proposta foi aceita pelo cliente e não pode mais ser alterada nem enviada por e-mail."
+                : "Esta proposta foi recusada pelo cliente e não pode mais ser alterada nem enviada por e-mail."}
+              {" "}Os dados abaixo são somente para consulta.
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-6 items-stretch">
@@ -1308,7 +1448,7 @@ export default function CommercialProposal() {
             <div className="flex items-center gap-2 shrink-0">
               {currentProposalId && (
                 <Badge variant="outline" className="text-[10px] font-medium whitespace-nowrap">
-                  Editando {propostaNumero || "proposta salva"}
+                  {isFormClosed ? "Consultando" : "Editando"} {propostaNumero || "proposta salva"}
                 </Badge>
               )}
               {currentProposalId && savedProposalDetail && (
@@ -1325,10 +1465,11 @@ export default function CommercialProposal() {
             </div>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col space-y-4">
+            <fieldset disabled={isFormClosed} className="m-0 min-w-0 border-0 p-0 space-y-4">
             <div className="grid grid-cols-4 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs text-slate-500">Tier</Label>
-                <Select value={tier} onValueChange={setTier}>
+                <Select value={tier} onValueChange={setTier} disabled={isFormClosed}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {TIERS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
@@ -1371,7 +1512,7 @@ export default function CommercialProposal() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs text-slate-500">Pagamento da implantação</Label>
-                <Select value={pagamentoImplantacao} onValueChange={setPagamentoImplantacao}>
+                <Select value={pagamentoImplantacao} onValueChange={setPagamentoImplantacao} disabled={isFormClosed}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {PAGAMENTO_IMPLANTACAO_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -1380,7 +1521,7 @@ export default function CommercialProposal() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-slate-500">Pagamento da mensalidade</Label>
-                <Select value={pagamentoMensalidade} onValueChange={setPagamentoMensalidade}>
+                <Select value={pagamentoMensalidade} onValueChange={setPagamentoMensalidade} disabled={isFormClosed}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {PAGAMENTO_MENSALIDADE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -1390,7 +1531,7 @@ export default function CommercialProposal() {
               {precisaVencimento && (
                 <div className="space-y-1">
                   <Label className="text-xs text-slate-500">Dia de vencimento</Label>
-                  <Select value={diaVencimento} onValueChange={setDiaVencimento}>
+                  <Select value={diaVencimento} onValueChange={setDiaVencimento} disabled={isFormClosed}>
                     <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {DIA_VENCIMENTO_OPTIONS.map((d) => <SelectItem key={d} value={d}>Dia {d}</SelectItem>)}
@@ -1403,6 +1544,7 @@ export default function CommercialProposal() {
               <Label className="text-xs text-slate-500">Outros valores (opcional)</Label>
               <Textarea className="min-h-[60px] text-sm" value={outrosValores} onChange={(e) => setOutrosValores(e.target.value)} placeholder="Ex.: taxa de setup de integração, etc." />
             </div>
+            </fieldset>
 
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-1.5 text-sm">
               {renegCount > 0 && (
@@ -1428,15 +1570,17 @@ export default function CommercialProposal() {
                 <Eye className="w-4 h-4" />
                 Visualizar Proposta Comercial (resumo)
               </Button>
-              <Button
-                type="button"
-                className="gap-1.5 flex-1"
-                disabled={isSavingProposal}
-                onClick={handleSaveProposal}
-              >
-                <Save className="w-4 h-4" />
-                {saveProposalLabel}
-              </Button>
+              {!isFormClosed && (
+                <Button
+                  type="button"
+                  className="gap-1.5 flex-1"
+                  disabled={isSavingProposal}
+                  onClick={handleSaveProposal}
+                >
+                  <Save className="w-4 h-4" />
+                  {saveProposalLabel}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1450,6 +1594,7 @@ export default function CommercialProposal() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <fieldset disabled={isFormClosed} className="m-0 min-w-0 border-0 p-0 space-y-4">
           <div>
             <p className="text-xs font-semibold text-slate-800 mb-2 uppercase tracking-wide">Partes — Contratante (Cliente)</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -1581,13 +1726,14 @@ export default function CommercialProposal() {
               </div>
             </div>
           </div>
+          </fieldset>
 
           <div className="flex flex-col sm:flex-row gap-2">
             <Button type="button" className="gap-1.5 flex-1" onClick={openPreview}>
               <Eye className="w-4 h-4" />
               Visualizar Termo de Contratação Completo
             </Button>
-            {currentProposalId && (
+            {currentProposalId && !isFormClosed && (
               <Button
                 type="button"
                 variant="outline"
@@ -1606,11 +1752,23 @@ export default function CommercialProposal() {
       {currentProposalId && (
         <Card className="mt-6">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Envios por e-mail</CardTitle>
-            <CardDescription>Para quem esta proposta já foi enviada.</CardDescription>
+            <CardTitle className="text-base">Histórico da proposta</CardTitle>
+            <CardDescription>O que aconteceu com esta proposta, do mais recente para o mais antigo — inclusive os envios por e-mail.</CardDescription>
           </CardHeader>
           <CardContent>
-            <ProposalSendHistory proposalId={currentProposalId} />
+            <ProposalTimeline proposalId={currentProposalId} />
+          </CardContent>
+        </Card>
+      )}
+
+      {currentProposalId && (
+        <Card className="mt-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Resposta do cliente</CardTitle>
+            <CardDescription>Aceite ou recusa da proposta pelo cliente.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {renderClientResponse(savedProposalDetail, openOutcomeFromForm)}
           </CardContent>
         </Card>
       )}
@@ -1623,6 +1781,7 @@ export default function CommercialProposal() {
         fileName={emailDocument === "resumo" ? quickProposalPdfFileName : proposalPdfFileName}
         buildPdf={emailDocument === "resumo" ? buildQuickProposalDoc : buildProposalDoc}
         onSent={handleProposalSent}
+        onFailed={() => queryClient.invalidateQueries({ queryKey: ["commercial-proposals"] })}
       />
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
@@ -1661,29 +1820,34 @@ export default function CommercialProposal() {
               <Download className="w-4 h-4" />
               Baixar PDF
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-1.5"
-              disabled={isSavingProposal || preparingEmail}
-              onClick={handleSaveProposal}
-            >
-              {isSavingProposal && !preparingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {saveProposalLabel}
-            </Button>
-            <Button
-              type="button"
-              className="gap-1.5"
-              disabled={isSavingProposal || preparingEmail}
-              onClick={saveAndOpenQuickEmailDialog}
-            >
-              {preparingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-              Enviar por e-mail
-            </Button>
+            {!isFormClosed && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={isSavingProposal || preparingEmail}
+                  onClick={handleSaveProposal}
+                >
+                  {isSavingProposal && !preparingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {saveProposalLabel}
+                </Button>
+                <Button
+                  type="button"
+                  className="gap-1.5"
+                  disabled={isSavingProposal || preparingEmail}
+                  onClick={saveAndOpenQuickEmailDialog}
+                >
+                  {preparingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                  Enviar por e-mail
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {outcomeDialogs}
       {pendingActionDialog}
     </div>
   );

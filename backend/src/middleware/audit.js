@@ -22,6 +22,9 @@ export async function writeAudit({
   after,
   payload,
   origem,
+  // undefined = escopo da requisição; null = registro da plataforma, que não
+  // pertence ao cliente aberto em sessão de suporte.
+  groupId,
 } = {}) {
   try {
     const safeBefore = before ? sanitizeRecord(before) : null;
@@ -53,7 +56,9 @@ export async function writeAudit({
         recordLabel,
         safeBefore,
         safeAfter,
-        req?.user?.group_id || req?.tenant?.group_id || getTenantScope()?.groupId || null,
+        groupId !== undefined
+          ? groupId
+          : req?.user?.group_id || req?.tenant?.group_id || getTenantScope()?.groupId || null,
       ]
     );
   } catch (error) {

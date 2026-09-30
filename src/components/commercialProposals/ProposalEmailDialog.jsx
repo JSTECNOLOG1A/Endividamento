@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Loader2, Mail, Paperclip, Send } from "lucide-react";
+import { isProposalClosedError } from "./proposalOutcome";
 
 const MESSAGE_MAX_LENGTH = 2000;
 const RECIPIENT_NAME_MAX_LENGTH = 120;
@@ -32,7 +33,9 @@ function pdfToBase64(doc) {
 // Janela de envio da proposta comercial salva ao cliente, com o PDF completo
 // anexado. `buildPdf` devolve o documento jsPDF já montado — o mesmo usado no
 // botão "Baixar PDF" — e só é chamado no clique em "Enviar".
-export default function ProposalEmailDialog({ open, onOpenChange, proposalId, defaultRecipientName, fileName, buildPdf, onSent }) {
+// `onFailed` avisa que a tentativa não deu certo — ela também entra no
+// histórico da proposta.
+export default function ProposalEmailDialog({ open, onOpenChange, proposalId, defaultRecipientName, fileName, buildPdf, onSent, onFailed }) {
   const [recipientName, setRecipientName] = useState("");
   const [to, setTo] = useState("");
   const [message, setMessage] = useState("");
@@ -87,6 +90,15 @@ export default function ProposalEmailDialog({ open, onOpenChange, proposalId, de
         onOpenChange(false);
         return;
       }
+      if (isProposalClosedError(error)) {
+        // Aceita ou recusada enquanto a janela estava aberta: nada foi
+        // enviado; a tela recarrega para mostrar a proposta travada.
+        toast.error(text);
+        onSent?.(null);
+        onOpenChange(false);
+        return;
+      }
+      onFailed?.();
       setServerError(text);
     },
   });

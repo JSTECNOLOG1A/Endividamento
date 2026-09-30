@@ -75,6 +75,8 @@ const ACTION_LABELS = {
   SUPPORT_ACCESS_STARTED: "Suporte iniciado",
   SUPPORT_ACCESS_ENDED: "Suporte encerrado",
   SUPPORT_ACCESS_EXPIRED: "Suporte expirado",
+  COMMERCIAL_PROPOSAL_ACCEPTED: "Proposta comercial aceita",
+  COMMERCIAL_PROPOSAL_REJECTED: "Proposta comercial recusada",
 };
 
 const LABEL_FIELDS = [
