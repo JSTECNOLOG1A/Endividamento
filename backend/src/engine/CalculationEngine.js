@@ -1111,6 +1111,12 @@ export async function calculateAmortizationSchedule(params) {
     //  - sem "%": "24.18,28.09,32.72" (ponto decimal) → vírgula é o separador da lista, como antes.
     // Sem essa distinção, "24,18%,28,86%" vira 10 valores (24, 18, 28, 86...) em vez de 2 (24.18, 28.86) —
     // e a última parcela, que devia fechar o saldo, nunca fica marcada como 100%.
+    // O Simulator (tela) já manda isso pronto como objeto {1: 0.2418, 2: 0.2886, ...} — só
+    // chamada direta do motor (scripts/testes) manda a string crua. Sem aceitar os dois
+    // formatos, todo cálculo feito pela tela caía no ramo "string" (falso), ficava com
+    // parsedSchedule vazio, e TODAS as parcelas amortizavam 0% até a última (que fecha o
+    // saldo inteiro sozinha via "regra de ouro") — a distribuição parecia simplesmente não
+    // ter sido aplicada.
     const parsedSchedule = {};
     if (amortizationSchedule && typeof amortizationSchedule === 'string') {
       const percentages = amortizationSchedule.includes('%')
@@ -1118,6 +1124,10 @@ export async function calculateAmortizationSchedule(params) {
         : amortizationSchedule.split(',').map(p => parseFloat(p.trim()) / 100);
       percentages.forEach((p, idx) => {
         parsedSchedule[idx + 1] = p;
+      });
+    } else if (amortizationSchedule && typeof amortizationSchedule === 'object') {
+      Object.entries(amortizationSchedule).forEach(([idx, p]) => {
+        parsedSchedule[idx] = Number(p);
       });
     }
     // Mapear percentageBase para calcBase com nomes corretos
@@ -1405,12 +1415,6 @@ export async function calculateAmortizationSchedule(params) {
       precisionAudit.logIfDifferent("sdAtualizadoUSD", sdAtualizadoUSD, sdAtualizadoUSD_decimal, parcela);
     }
 
-    // Coletar avisos da estratégia
-    const warnings = strategy.getWarnings();
-    if (warnings.length > 0) {
-      strategyWarnings.push(...warnings);
-    }
-
     // SD Final USD = SD Atualizado - Amortização (respeita comportamento de carência)
     let sdFinalUSD = sdAtualizadoUSD - amortizacaoUSD;
     if (sdFinalUSD < 0.01) sdFinalUSD = 0;
@@ -1575,6 +1579,16 @@ export async function calculateAmortizationSchedule(params) {
     sdInicialUSD = sdFinalUSD;
     prevPtaxRate = currentPtaxRate; // Guardar PTAX para próximo cálculo de varCambial
     prevDate = evt.date;
+  }
+
+  // Coletar avisos da estratégia — UMA vez, depois do loop. getWarnings() retorna o
+  // array interno inteiro (acumulado a cada calculatePayment); chamar isso dentro do
+  // loop duplicava cada aviso a cada linha seguinte (aviso da parcela 1 reaparecia em
+  // toda linha depois dela, etc.) — a "Memória de Cálculo" mostrava a mesma mensagem
+  // dezenas de vezes em vez de uma.
+  const strategyOwnWarnings = strategy.getWarnings();
+  if (strategyOwnWarnings.length > 0) {
+    strategyWarnings.push(...strategyOwnWarnings);
   }
 
   // 🔐 FASE 1.3: VALIDAÇÃO FINAL
