@@ -1,0 +1,1 @@
+- [Teste de navegador no AllDebt](reference_browser_testing_alldebt.md) — Playwright via Docker, --headless=new para PDF, modal legal/tour, seed rebaixa platform_admin, stub de e-mail

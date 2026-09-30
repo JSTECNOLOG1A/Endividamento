@@ -12,8 +12,8 @@ export function setToken(token) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
-async function request(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
+function buildHeaders(extra = {}) {
+  const headers = { ...extra };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   const supportId = getSupportSessionId();
@@ -22,6 +22,37 @@ async function request(path, options = {}) {
     const tenantId = getPlatformTenantId();
     if (tenantId) headers["X-Tenant-Id"] = tenantId;
   }
+  return { headers, hadToken: Boolean(token) };
+}
+
+async function readPayload(response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function handleUnauthorized(response, hadToken) {
+  if (response.status !== 401) return;
+  setToken(null);
+  if (hadToken) {
+    window.dispatchEvent(new Event("auth:session-expired"));
+  }
+}
+
+function httpError(response, payload) {
+  const error = new Error(payload?.error || `HTTP ${response.status}`);
+  error.status = response.status;
+  error.code = payload?.code;
+  error.data = payload;
+  return error;
+}
+
+async function request(path, options = {}) {
+  const { headers, hadToken } = buildHeaders(options.headers);
   const isForm = options.body instanceof FormData;
   if (!isForm && options.body && typeof options.body !== "string") {
     headers["Content-Type"] = "application/json";
@@ -29,36 +60,26 @@ async function request(path, options = {}) {
   }
 
   const response = await fetch(`${API}${path}`, { ...options, headers });
-  const text = await response.text();
-  let payload = null;
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = text;
-    }
-  }
-
-  if (response.status === 401) {
-    const hadToken = Boolean(token);
-    setToken(null);
-    if (hadToken) {
-      window.dispatchEvent(new Event("auth:session-expired"));
-    }
-  }
-
-  if (!response.ok) {
-    const error = new Error(payload?.error || `HTTP ${response.status}`);
-    error.status = response.status;
-    error.code = payload?.code;
-    error.data = payload;
-    throw error;
-  }
-
+  const payload = await readPayload(response);
+  handleUnauthorized(response, hadToken);
+  if (!response.ok) throw httpError(response, payload);
   return payload;
 }
 
-export { request as apiRequest };
+// Arquivo protegido (PDF etc.) baixado com o mesmo header de autenticação das
+// demais chamadas — nunca com o token na URL, que ficaria gravado em log.
+async function requestBlob(path) {
+  const { headers, hadToken } = buildHeaders();
+  const response = await fetch(`${API}${path}`, { headers });
+  if (!response.ok) {
+    const payload = await readPayload(response);
+    handleUnauthorized(response, hadToken);
+    throw httpError(response, payload);
+  }
+  return response.blob();
+}
+
+export { request as apiRequest, requestBlob as apiRequestBlob };
 
 function entityApi(name) {
   return {

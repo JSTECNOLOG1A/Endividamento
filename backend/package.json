@@ -17,7 +17,7 @@
     "test:first-access": "node src/modules/firstAccess/firstAccess.test.js",
     "test:platform-master": "node src/modules/platform/platformMaster.test.js",
     "test:layout": "node ../src/lib/layoutMode.test.mjs",
-    "test:commercial-proposals": "node src/modules/commercialProposals/sendEmail.test.js",
+    "test:commercial-proposals": "node src/modules/commercialProposals/sendEmail.test.js && node src/modules/commercialProposals/outcome.test.js && node src/modules/commercialProposals/storage.test.js && node src/modules/commercialProposals/history.test.js",
     "cleanup:local": "node src/db/cleanupLocal.js"
   },
   "dependencies": {
