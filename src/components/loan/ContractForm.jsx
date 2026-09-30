@@ -923,85 +923,88 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <TabsContent value="composicao" className="p-5 space-y-5 mt-0">
           {/* Moeda e Defasagem PTAX - Primeiro Bloco */}
           <SubsectionHeading icon={Banknote}>Moeda e Câmbio</SubsectionHeading>
-          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-            <div className="sm:col-span-1 space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Moeda (Opcional)</Label>
-              <Select value={form.currency_id || ""} onValueChange={(v) => update("currency_id", v)}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="BRL (Padrão)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={null}>BRL (Padrão)</SelectItem>
-                  {currencies?.map((c) => (<SelectItem key={c.id} value={c.id}>{c.currency_code} - {c.currency_name}</SelectItem>))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="sm:col-span-2 space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Valor da Operação (R$) *
-                {(form.currency_id || form.disbursement_mode === "parcelada") && (
-                  <span className="ml-1 text-xs text-cyan-600 font-normal">(Calculado automaticamente)</span>
-                )}
-              </Label>
-              <CurrencyInput
-                type="currency"
-                value={form.disbursement_mode === "parcelada" ? trancheTotal.toFixed(2).replace(".", ",") : form.operation_value}
-                onChange={(e) => update("operation_value", e.target.value)}
-                placeholder="0,00"
-                className="h-9"
-                disabled={!!form.currency_id || form.disbursement_mode === "parcelada"}
-                required
-              />
-              {form.currency_id && (
-                <p className="text-xs text-slate-600">
-                  Este campo é somente leitura quando operação em moeda estrangeira
-                </p>
-              )}
-              {form.disbursement_mode === "parcelada" && (
-                <p className="text-xs text-slate-600">Soma das tranches de liberação abaixo</p>
-              )}
-            </div>
-            <div className="sm:col-span-2 space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">(-) Sinal do Negócio (R$)</Label>
-              <CurrencyInput type="currency" value={form.signal_value} onChange={(e) => update("signal_value", e.target.value)} className="h-9" />
-            </div>
-          </div>
-          {form.currency_id && (
-            <div className={gridCols2Tight}>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-                  Defasagem PTAX
-                  <TooltipProvider>
-                    <Tooltip delayDuration={200}>
-                      <TooltipTrigger asChild>
-                        <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="max-w-xs">
-                        <p className="text-xs">
-                          Quantos dias antes da data de cada evento (vencimento, apropriação) o sistema busca a
-                          cotação PTAX usada na variação cambial. "D" usa a cotação do próprio dia.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </Label>
-                <Select value={form.exchange_lag} onValueChange={(v) => update("exchange_lag", v)}>
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+          {!form.currency_id ? (
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+              <div className="sm:col-span-1 space-y-1.5">
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Moeda (Opcional)</Label>
+                <Select value={form.currency_id || ""} onValueChange={(v) => update("currency_id", v)}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="BRL (Padrão)" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="0">D (Mesma data)</SelectItem>
-                    <SelectItem value="1">D-1 (Dia anterior)</SelectItem>
-                    <SelectItem value="2">D-2 (Dois dias antes)</SelectItem>
+                    <SelectItem value={null}>BRL (Padrão)</SelectItem>
+                    {currencies?.map((c) => (<SelectItem key={c.id} value={c.id}>{c.currency_code} - {c.currency_name}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
+              <div className="sm:col-span-2 space-y-1.5">
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                  Valor da Operação (R$) *
+                  {form.disbursement_mode === "parcelada" && (
+                    <span className="ml-1 text-xs text-cyan-600 font-normal">(Calculado automaticamente)</span>
+                  )}
+                </Label>
+                <CurrencyInput
+                  type="currency"
+                  value={form.disbursement_mode === "parcelada" ? trancheTotal.toFixed(2).replace(".", ",") : form.operation_value}
+                  onChange={(e) => update("operation_value", e.target.value)}
+                  placeholder="0,00"
+                  className="h-9"
+                  disabled={form.disbursement_mode === "parcelada"}
+                  required
+                />
+                {form.disbursement_mode === "parcelada" && (
+                  <p className="text-xs text-slate-600">Soma das tranches de liberação abaixo</p>
+                )}
+              </div>
+              <div className="sm:col-span-2 space-y-1.5">
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">(-) Sinal do Negócio (R$)</Label>
+                <CurrencyInput type="currency" value={form.signal_value} onChange={(e) => update("signal_value", e.target.value)} className="h-9" />
+              </div>
             </div>
-          )}
-
-          {/* Campos de Moeda Estrangeira */}
-          {form.currency_id && (
+          ) : (
             <>
+              <div className={gridCols2Tight}>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Moeda (Opcional)</Label>
+                  <Select value={form.currency_id || ""} onValueChange={(v) => update("currency_id", v)}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="BRL (Padrão)" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={null}>BRL (Padrão)</SelectItem>
+                      {currencies?.map((c) => (<SelectItem key={c.id} value={c.id}>{c.currency_code} - {c.currency_name}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                    Defasagem PTAX
+                    <TooltipProvider>
+                      <Tooltip delayDuration={200}>
+                        <TooltipTrigger asChild>
+                          <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs">
+                          <p className="text-xs">
+                            Quantos dias antes da data de cada evento (vencimento, apropriação) o sistema busca a
+                            cotação PTAX usada na variação cambial. "D" usa a cotação do próprio dia.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                  <Select value={form.exchange_lag} onValueChange={(v) => update("exchange_lag", v)}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">D (Mesma data)</SelectItem>
+                      <SelectItem value="1">D-1 (Dia anterior)</SelectItem>
+                      <SelectItem value="2">D-2 (Dois dias antes)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div className={gridCols2}>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-                    Valor em Moeda Estrangeira * 
+                    Valor em Moeda Estrangeira *
                     <TooltipProvider>
                       <Tooltip delayDuration={200}>
                         <TooltipTrigger asChild>
@@ -1013,9 +1016,9 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                       </Tooltip>
                     </TooltipProvider>
                   </Label>
-                  <CurrencyInput 
-                    type="currency" 
-                    value={form.amount_foreign} 
+                  <CurrencyInput
+                    type="currency"
+                    value={form.amount_foreign}
                     onChange={(e) => {
                       update("amount_foreign", e.target.value);
                       // Calcular operation_value em tempo real
@@ -1026,8 +1029,8 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                         update("operation_value", brl);
                       }
                     }}
-                    placeholder="0,00" 
-                    className="h-9" 
+                    placeholder="0,00"
+                    className="h-9"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1044,13 +1047,13 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                       </Tooltip>
                     </TooltipProvider>
                   </Label>
-                  <CurrencyInput 
-                    type="exchange_rate" 
-                    value={form.exchange_rate_closing} 
+                  <CurrencyInput
+                    type="exchange_rate"
+                    value={form.exchange_rate_closing}
                     onChange={(e) => {
                       const newRate = e.target.value;
                       update("exchange_rate_closing", newRate);
-                      
+
                       // Calcular operation_value em tempo real
                       const foreign = parseBRNumber(form.amount_foreign);
                       const rate = parseBRNumber(newRate);
@@ -1059,8 +1062,8 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                         update("operation_value", brl);
                       }
                     }}
-                    placeholder="0,0000" 
-                    className="h-9" 
+                    placeholder="0,0000"
+                    className="h-9"
                   />
                   {(() => {
                     const rate = parseFloat(form.exchange_rate_closing || '0');
@@ -1076,25 +1079,31 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                   })()}
                 </div>
               </div>
-              
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-                  Valor Convertido (R$) - Calculado Automaticamente
-                </Label>
-                <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm text-slate-600">
-                  {(() => {
-                    const foreign = parseBRNumber(form.amount_foreign);
-                    const rate = parseBRNumber(form.exchange_rate_closing);
-                    if (foreign > 0 && rate > 0) {
-                      const brl = foreign * rate;
-                      return `R$ ${brl.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`;
-                    }
-                    return "—";
-                  })()}
+
+              <div className={gridCols2Tight}>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                    Valor da Operação (R$) — Convertido
+                  </Label>
+                  <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm text-slate-600">
+                    {(() => {
+                      const foreign = parseBRNumber(form.amount_foreign);
+                      const rate = parseBRNumber(form.exchange_rate_closing);
+                      if (foreign > 0 && rate > 0) {
+                        const brl = foreign * rate;
+                        return `R$ ${brl.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`;
+                      }
+                      return "—";
+                    })()}
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Valor em Moeda Estrangeira × Cotação — calculado automaticamente
+                  </p>
                 </div>
-                <p className="text-xs text-slate-600">
-                  Este valor será usado como "Valor da Operação" (R$)
-                </p>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">(-) Sinal do Negócio (R$)</Label>
+                  <CurrencyInput type="currency" value={form.signal_value} onChange={(e) => update("signal_value", e.target.value)} className="h-9" />
+                </div>
               </div>
             </>
           )}
@@ -1128,39 +1137,6 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 </Tooltip>
               </TooltipProvider>
             </Label>
-          </div>
-
-          {/* Valor da Operação e Sinal */}
-          <div className={gridCols2Tight}>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Valor da Operação (R$) *
-                {(form.currency_id || form.disbursement_mode === "parcelada") && (
-                  <span className="ml-1 text-xs text-cyan-600 font-normal">(Calculado automaticamente)</span>
-                )}
-              </Label>
-              <CurrencyInput
-                type="currency"
-                value={form.disbursement_mode === "parcelada" ? trancheTotal.toFixed(2).replace(".", ",") : form.operation_value}
-                onChange={(e) => update("operation_value", e.target.value)}
-                placeholder="0,00"
-                className="h-9"
-                disabled={!!form.currency_id || form.disbursement_mode === "parcelada"}
-                required
-              />
-              {form.currency_id && (
-                <p className="text-xs text-slate-600">
-                  Este campo é somente leitura quando operação em moeda estrangeira
-                </p>
-              )}
-              {form.disbursement_mode === "parcelada" && (
-                <p className="text-xs text-slate-600">Soma das tranches de liberação abaixo</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">(-) Sinal do Negócio (R$)</Label>
-              <CurrencyInput type="currency" value={form.signal_value} onChange={(e) => update("signal_value", e.target.value)} className="h-9" />
-            </div>
           </div>
 
           {form.disbursement_mode === "parcelada" && (

@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RotateCcw, X, FileText, Trash2, AlertTriangle, ArrowLeft, UploadCloud, ExternalLink } from "lucide-react";
+import { RotateCcw, X, FileText, Trash2, AlertTriangle, ArrowLeft, UploadCloud, ExternalLink, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "../utils";
 import { withAuthToken } from "../lib/documentActions";
@@ -104,6 +104,11 @@ export default function Simulator() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [uploadedPdfUrl, setUploadedPdfUrl] = useState(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  // Oculta o painel de contrato (drag-and-drop/PDF) pra quem não trabalha em tela dupla —
+  // a Calculadora ocupa a largura inteira e os campos dos 3 menus ganham espaço pra ficar
+  // lado a lado em vez de empilhados numa coluna estreita.
+  const [hidePreviewPanel, setHidePreviewPanel] = useState(false);
+  const showFullWidthForm = isModernLayout && hidePreviewPanel && !result;
   // Arrastar o PDF em qualquer lugar do painel de resultado (enquanto não há
   // cálculo) já anexa e mostra o contrato ali mesmo — mesmo upload de sempre
   // (handlePdfUpload), só que também aceita "solto" na tela, não só o botão.
@@ -1024,7 +1029,7 @@ export default function Simulator() {
         }
       >
         {/* Left — Form (mesma ordem de campos do clássico) */}
-        <div className={isModernLayout ? "lg:col-span-4 flex flex-col min-h-0" : "xl:col-span-4"}>
+        <div className={isModernLayout ? `flex flex-col min-h-0 ${showFullWidthForm ? "lg:col-span-12" : "lg:col-span-4"}` : "xl:col-span-4"}>
           <div
             className={
               isModernLayout
@@ -1041,11 +1046,27 @@ export default function Simulator() {
               <div>
                 <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Calculadora</h1>
               </div>
-              {result && (
-                <Button variant="ghost" size="sm" onClick={handleReset} className="text-xs gap-1.5">
-                  <RotateCcw className="w-3.5 h-3.5" /> Limpar
-                </Button>
-              )}
+              <div className="flex items-center gap-1.5">
+                {isModernLayout && !result && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setHidePreviewPanel((v) => !v)}
+                    className="text-xs gap-1.5"
+                  >
+                    {hidePreviewPanel ? (
+                      <><PanelRightOpen className="w-3.5 h-3.5" /> Mostrar painel do contrato</>
+                    ) : (
+                      <><PanelRightClose className="w-3.5 h-3.5" /> Ocultar painel do contrato</>
+                    )}
+                  </Button>
+                )}
+                {result && (
+                  <Button variant="ghost" size="sm" onClick={handleReset} className="text-xs gap-1.5">
+                    <RotateCcw className="w-3.5 h-3.5" /> Limpar
+                  </Button>
+                )}
+              </div>
             </div>
             {editingContractMeta?.status === "devolvido" && (
               <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -1067,7 +1088,7 @@ export default function Simulator() {
             ) : (
             <ContractForm
               key={editingContractId || "new"}
-              narrowColumn={isModernLayout}
+              narrowColumn={isModernLayout && !showFullWidthForm}
               onCalculate={handleCalculate}
               onIdentificationChange={(fields) =>
                 setFormParams((prev) => (prev ? { ...prev, ...fields } : prev))
@@ -1093,7 +1114,9 @@ export default function Simulator() {
           </div>
         </div>
 
-        {/* Right — Results */}
+        {/* Right — Results (some por completo quando o painel de contrato está oculto e ainda
+            não há resultado — a Calculadora ocupa a largura inteira nesse caso) */}
+        {showFullWidthForm ? null : (
         <div
           className={
             isModernLayout
@@ -1131,10 +1154,19 @@ export default function Simulator() {
               onDragOver={handlePdfDragOver}
               onDragLeave={handlePdfDragLeave}
               onDrop={handlePdfDrop}
-              className={`flex flex-1 flex-col min-h-[320px] ${isModernLayout ? "lg:min-h-full" : "h-full min-h-[400px]"} rounded-xl border-2 border-dashed transition-colors overflow-hidden ${
+              className={`relative flex flex-1 flex-col min-h-[320px] ${isModernLayout ? "lg:min-h-full" : "h-full min-h-[400px]"} rounded-xl border-2 border-dashed transition-colors overflow-hidden ${
                 isDraggingPdf ? "border-cyan-400 bg-cyan-50/60" : "border-[#E5E7EB] bg-white"
               }`}
             >
+              {isModernLayout && !uploadedPdfUrl && (
+                <button
+                  type="button"
+                  onClick={() => setHidePreviewPanel(true)}
+                  className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 bg-white/90 hover:bg-white border border-slate-200 rounded-md px-2 py-1 shadow-sm"
+                >
+                  <PanelRightClose className="w-3.5 h-3.5" /> Ocultar
+                </button>
+              )}
               {uploadedPdfUrl ? (
                 <div className="flex flex-col flex-1 min-h-0">
                   <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 shrink-0">
@@ -1159,6 +1191,15 @@ export default function Simulator() {
                       >
                         <Trash2 className="w-3 h-3" /> Remover
                       </button>
+                      {isModernLayout && (
+                        <button
+                          type="button"
+                          onClick={() => setHidePreviewPanel(true)}
+                          className="text-xs text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1"
+                        >
+                          <PanelRightClose className="w-3 h-3" /> Ocultar
+                        </button>
+                      )}
                     </div>
                   </div>
                   <iframe
@@ -1195,6 +1236,7 @@ export default function Simulator() {
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );
