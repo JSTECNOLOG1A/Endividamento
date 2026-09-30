@@ -32,6 +32,14 @@ import {
   GUARANTEE_PERSONAL_TYPES,
 } from "@/lib/contractOptions";
 
+// Só letras e números — sem espaço, hífen, acento ou cedilha — pra não travar a localização do
+// título na integração com o ERP (o Protheus casa o número do contrato literalmente).
+function alphanumericOnly(value) {
+  return String(value || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // remove acentos (ç -> c, ã -> a, etc.)
+    .replace(/[^a-zA-Z0-9]/g, "");
+}
+
 const defaultForm = {
   group_id: "",
   entity_id: "",
@@ -793,8 +801,22 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </div>
           <div className={gridCols2}>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Nº Contrato *</Label>
-              <Input value={form.contract_number} onChange={(e) => update("contract_number", e.target.value)} placeholder="000.000.000" className="h-9" required />
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Nº Contrato *
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p className="text-xs">
+                        Só letras e números — sem espaço, hífen, ponto ou acento. Facilita a integração com o ERP.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <Input value={form.contract_number} onChange={(e) => update("contract_number", alphanumericOnly(e.target.value))} placeholder="000000000" className="h-9" required />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Conta Bancária de Liberação *</Label>

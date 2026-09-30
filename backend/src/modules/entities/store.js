@@ -417,6 +417,15 @@ async function syncBankAccountsForBank(bankId, bankCode) {
   );
 }
 
+// Só letras e números — sem espaço, hífen, acento ou cedilha — pra não travar a localização do
+// título na integração com o ERP (o Protheus casa o número do contrato literalmente). A tela já
+// filtra ao digitar; aqui é a garantia de verdade, pra qualquer chamada de API não passar por trás.
+function alphanumericContractNumber(value) {
+  return String(value || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "");
+}
+
 export async function create(name, data, createdBy) {
   if (CREATE_BLOCKED.has(name)) {
     throw httpError(403, "Este cadastro não pode ser criado por esta via");
@@ -435,6 +444,7 @@ export async function create(name, data, createdBy) {
   if (name === "LoanContract") {
     for (const key of CONTRACT_WORKFLOW_FIELDS) delete row[key];
     row.status = "rascunho";
+    if (row.contract_number != null) row.contract_number = alphanumericContractNumber(row.contract_number);
   }
   if (row.entity_id) await assertEntityInTenant(row.entity_id);
   if (row.contract_id && (name === "AccountMovement" || name === "NotificationLog" || name === "CalculationSnapshot")) {
@@ -621,6 +631,9 @@ export async function update(name, id, data) {
   if (name === "CompanyEntity") normalizeCompanyEntityRow(row);
   if (name === "Bank" && row.bank_code !== undefined) {
     row.bank_code = normalizeBankCode(row.bank_code);
+  }
+  if (name === "LoanContract" && row.contract_number != null) {
+    row.contract_number = alphanumericContractNumber(row.contract_number);
   }
   if (name === "Nature") await stampNatureFromEntity(row);
   if (name === "BankAccount") await stampBankAccountFromEntity(row);

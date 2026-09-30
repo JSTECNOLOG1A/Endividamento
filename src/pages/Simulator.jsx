@@ -159,7 +159,9 @@ export default function Simulator() {
     try {
       const contract = await base44.entities.LoanContract.get(contractId);
       if (duplicate) {
-        contract.contract_number = `${contract.contract_number || ""} (contrato duplicado)`.trim();
+        // Sem espaço/parênteses: o campo só aceita letras e números (facilita a integração com o
+        // ERP) — o texto ainda deixa claro que precisa ser trocado antes de salvar.
+        contract.contract_number = `${contract.contract_number || ""}DUPLICADO`.trim();
       }
       // schedule_data / exchange_rates vêm do Postgres como JSONB — o driver
       // já devolve objeto. JSON.parse(objeto) vira "[object Object]" e quebra

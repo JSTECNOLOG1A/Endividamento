@@ -111,6 +111,11 @@ function NavGroup({ item, currentPageName, collapsed }) {
   );
 }
 
+// Recolhida (pino "Recolher menu"), a sidebar some automaticamente pra icon-only
+// e reaparece sozinha ao passar o mouse, recolhendo de novo com um pequeno atraso
+// ao tirar o mouse — evita "piscar" ao passar entre os itens do menu.
+const AUTO_HIDE_DELAY_MS = 250;
+
 export default function ModernSidebar({ currentPageName, collapsed, onToggleCollapse }) {
   const { user, logout } = useAuth();
   const { layoutMode } = useLayoutMode();
@@ -119,20 +124,41 @@ export default function ModernSidebar({ currentPageName, collapsed, onToggleColl
     [layoutMode, user]
   );
 
+  const [hovering, setHovering] = React.useState(false);
+  const hideTimerRef = React.useRef(null);
+
+  React.useEffect(() => () => clearTimeout(hideTimerRef.current), []);
+
+  const handleMouseEnter = () => {
+    if (!collapsed) return;
+    clearTimeout(hideTimerRef.current);
+    setHovering(true);
+  };
+
+  const handleMouseLeave = () => {
+    if (!collapsed) return;
+    clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setHovering(false), AUTO_HIDE_DELAY_MS);
+  };
+
+  const expanded = !collapsed || hovering;
+
   return (
     <TooltipProvider delayDuration={200}>
       <aside
         data-tour="nav-main"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         className={cn(
           "hidden md:flex flex-col shrink-0 h-full min-h-0 sticky top-0 self-start",
           "bg-[#071A2F] text-white transition-[width] duration-200 ease-out",
-          collapsed ? "w-[72px]" : "w-[260px]"
+          expanded ? "w-[260px]" : "w-[72px]"
         )}
       >
         <div
           className={cn(
             "border-b border-white/10 shrink-0 flex items-center",
-            collapsed ? "h-[72px] px-2 justify-center" : "h-[88px] px-4 py-5 justify-start"
+            expanded ? "h-[88px] px-4 py-5 justify-start" : "h-[72px] px-2 justify-center"
           )}
         >
           <Link
@@ -140,15 +166,15 @@ export default function ModernSidebar({ currentPageName, collapsed, onToggleColl
             className="flex items-center min-w-0 rounded-xl transition-transform duration-150 hover:scale-[1.03]"
             aria-label="AllDebt BACEN"
           >
-            {collapsed ? (
-              <AllDebtLogoModern
-                variant="icon"
-                className="drop-shadow-[0_0_18px_rgba(6,182,212,0.35)] h-9 w-9"
-              />
-            ) : (
+            {expanded ? (
               <AllDebtLogoModern
                 variant="brand"
                 className="drop-shadow-[0_0_18px_rgba(6,182,212,0.35)]"
+              />
+            ) : (
+              <AllDebtLogoModern
+                variant="icon"
+                className="drop-shadow-[0_0_18px_rgba(6,182,212,0.35)] h-9 w-9"
               />
             )}
           </Link>
@@ -161,14 +187,14 @@ export default function ModernSidebar({ currentPageName, collapsed, onToggleColl
                 key={item.name}
                 item={item}
                 currentPageName={currentPageName}
-                collapsed={collapsed}
+                collapsed={!expanded}
               />
             ) : (
               <NavLink
                 key={item.page}
                 item={item}
                 currentPageName={currentPageName}
-                collapsed={collapsed}
+                collapsed={!expanded}
               />
             )
           ))}
@@ -181,16 +207,16 @@ export default function ModernSidebar({ currentPageName, collapsed, onToggleColl
             className={cn(
               "w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-slate-400",
               "hover:bg-white/[0.06] hover:text-white transition-colors duration-150",
-              collapsed && "justify-center"
+              !expanded && "justify-center"
             )}
-            aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
+            aria-label={collapsed ? "Fixar menu expandido" : "Recolher menu (some automático ao tirar o mouse)"}
           >
-            {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-            {!collapsed ? <span>Recolher menu</span> : null}
+            {expanded ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            {expanded ? <span>Recolher menu</span> : null}
           </button>
         </div>
 
-        <ModernSidebarFooter collapsed={collapsed} onLogout={logout} />
+        <ModernSidebarFooter collapsed={!expanded} onLogout={logout} />
       </aside>
     </TooltipProvider>
   );

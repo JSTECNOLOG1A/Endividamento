@@ -68,7 +68,8 @@ export async function renegotiateContract(payload = {}, actor = "system") {
       bank_id: oldContract.bank_id,
       creditor_cnpj: oldContract.creditor_cnpj || null,
       disbursement_bank_account_id: oldContract.disbursement_bank_account_id,
-      contract_number: `${oldContract.contract_number}-REN${Date.now().toString().slice(-4)}`,
+      // Sem hífen: contract_number só aceita letras e números (facilita a integração com o ERP).
+      contract_number: `${oldContract.contract_number}REN${Date.now().toString().slice(-4)}`,
       operation_category: oldContract.operation_category,
       operation_type: oldContract.operation_type,
       operation_value: novoPrincipal,

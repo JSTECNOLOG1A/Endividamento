@@ -1156,9 +1156,22 @@ export async function calculateAmortizationSchedule(params) {
   
   // Contador de parcelas de principal (para PERCENTAGE_RESIDUAL)
   let principalPaymentIndex = 0;
-  
+
   // Acumulador de juros balloon (separado do SD)
   let totalJurosAcruados = 0;
+
+  // 🔐 ÚLTIMA PARCELA DE VERDADE (não a última linha da tabela): quando o Prazo Total passa
+  // do fim das parcelas de principal (ex.: carência de meses só de juros gerando linhas vazias
+  // no fim, ou qualquer diferença entre totalTermMonths e o alcance real das parcelas), a
+  // ÚLTIMA linha do array pode ser uma linha vazia (sem principal nem juros) — não a parcela
+  // que de fato precisa fechar o saldo em zero. SAC se autocorrige (sdInicial ÷ parcelas
+  // restantes já fecha certo sozinho), mas SACRE e Percentual Customizado depende do "isLast"
+  // pra forçar o fechamento exato — sem essa correção, sobra ou falta centavos (ou muito mais
+  // que centavos) e o motor acusa FINANCIAL_INTEGRITY_ERROR sem pista do motivo real.
+  let lastPrincipalIndex = -1;
+  for (let j = mergedEvents.length - 1; j >= 0; j--) {
+    if (mergedEvents[j].hasPrincipal) { lastPrincipalIndex = j; break; }
+  }
 
   for (let i = 0; i < mergedEvents.length; i++) {
     const evt = mergedEvents[i];
@@ -1330,7 +1343,9 @@ export async function calculateAmortizationSchedule(params) {
     }
 
     // Delegar cálculo de amortização e prestação à estratégia (em USD)
-    const isLastPayment = i === mergedEvents.length - 1;
+    // A "última parcela" é a última linha com PRINCIPAL de verdade (lastPrincipalIndex acima),
+    // não necessariamente a última linha da tabela — ver comentário onde ele é calculado.
+    const isLastPayment = lastPrincipalIndex >= 0 ? i === lastPrincipalIndex : i === mergedEvents.length - 1;
     // Na última parcela, a correção do indexador capitalizada NESTE mesmo
     // período (indexerCapitalizationMode === "capitaliza_saldo") precisa
     // entrar no saldo que a estratégia usa pra liquidar tudo — senão o
