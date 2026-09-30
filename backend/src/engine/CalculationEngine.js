@@ -300,6 +300,16 @@ function daysBetween(d1, d2) {
   return days;
 }
 
+// Meses decorridos entre duas datas, em dias corridos/30 (aproximação suficiente pra
+// posicionar um fluxo de caixa no "mês N" da TIR do CET — não precisa da precisão de
+// dias corridos exata que o resto do motor usa pra juros).
+function monthsBetweenDates(d1, d2) {
+  const a = d1 instanceof Date ? d1 : parseLocalDate(d1);
+  const b = d2 instanceof Date ? d2 : parseLocalDate(d2);
+  const days = (b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24);
+  return Math.max(0, Math.round(days / 30.4368));
+}
+
 // Conta dias úteis entre duas datas (exclui fins de semana e feriados)
 function businessDaysBetween(d1, d2, holidays = []) {
   let count = 0;
@@ -1288,15 +1298,22 @@ export async function calculateAmortizationSchedule(params) {
     // incomum (DU/252 normalmente é convenção do próprio indexador), não
     // resolvida nesta entrega.
     const priceFixedNoIndexer = calculationSystem === "PRICE" && indexer === "NA";
-    const fixedInterestRate = remuneratoryRateForPeriod(
-      fixedRate,
-      {
-        dias: priceFixedNoIndexer ? 30 : dias,
-        du,
-        dias30360: priceFixedNoIndexer ? 30 : days30360(prevDate, evt.date),
-      },
-      interestDayCountConvention
-    );
+    // Com indexador (CDI/SELIC), o custo do dinheiro é o indexador + spread (calculado logo
+    // abaixo) — Taxa Fixa não se aplica. Sem essa trava, um valor esquecido/errado no campo
+    // Taxa Fixa (a tela ainda o exige preenchido mesmo com indexador selecionado — fonte
+    // comum de confusão: usuário digita ali o que devia ir no Spread) somava juros fixos
+    // POR CIMA do juro indexado, cobrando duas vezes.
+    const fixedInterestRate = indexer === "NA"
+      ? remuneratoryRateForPeriod(
+          fixedRate,
+          {
+            dias: priceFixedNoIndexer ? 30 : dias,
+            du,
+            dias30360: priceFixedNoIndexer ? 30 : days30360(prevDate, evt.date),
+          },
+          interestDayCountConvention
+        )
+      : 0;
     const jurosFixosMes = sdInicialUSD * fixedInterestRate;
 
     let jurosVariaveisMes = 0;
@@ -1788,7 +1805,9 @@ export async function calculateAmortizationSchedule(params) {
     schedule,
     insuranceEmbeddedPerInstallment,
     isUSD ? "USD" : "BRL",
-    false // Sem conversão PTAX
+    false, // Sem conversão PTAX
+    1,
+    operationDate
   );
 
   // CET Projetado em BRL: considera conversão cambial sobre todo o fluxo futuro
@@ -1801,7 +1820,8 @@ export async function calculateAmortizationSchedule(params) {
         insuranceEmbeddedPerInstallment,
         "BRL",
         true, // Com conversão PTAX
-        (effectiveExchangeRates && effectiveExchangeRates.length > 0) ? effectiveExchangeRates[effectiveExchangeRates.length - 1].ptax_rate : 1
+        (effectiveExchangeRates && effectiveExchangeRates.length > 0) ? effectiveExchangeRates[effectiveExchangeRates.length - 1].ptax_rate : 1,
+        operationDate
       )
     : cetNominalUSD; // Se não for USD, ambos são iguais
 
@@ -2360,34 +2380,47 @@ function roundTo(num, decimals) {
  * @returns {Object} { cetAnnual, cetMonthly, tirEffective }
  */
 function calculateCET(
-  operationValue, 
-  upFrontFees, 
-  financedFeesImpactOnCash, 
-  schedule, 
-  insurancePerInstallment = 0, 
+  operationValue,
+  upFrontFees,
+  financedFeesImpactOnCash,
+  schedule,
+  insurancePerInstallment = 0,
   currency = "BRL",
   convertedByPTAX = false,
-  projectedPTAX = 1
+  projectedPTAX = 1,
+  referenceDate = null // NOVO: data de desembolso (mês 0 da TIR)
 ) {
   if (!schedule || schedule.length === 0) {
     return { cetAnnual: 0, cetMonthly: 0, tirEffective: 0 };
   }
-  
+
   // 🔐 MOMENTO ZERO: Desembolso Líquido Real (Regime de Caixa)
   // = Valor Operação - Taxas Antecipadas - IOF Balcão - Taxas/IOF Financiados (impactam caixa agora)
   const netValue = operationValue - upFrontFees - financedFeesImpactOnCash;
-  
-  // 🔐 FLUXO DE CAIXA: Parcela + Seguros Embutidos (Recorrentes)
-  const cashFlow = [netValue];
-  
-  schedule.forEach(item => {
+
+  // 🔐 FLUXO DE CAIXA: Parcela + Seguros Embutidos (Recorrentes), indexado pelo MÊS REAL
+  // decorrido desde o desembolso — não pela posição da linha no array de `schedule`.
+  // Contratos com carência + "Data de Vencimento da 1ª Parcela" explícita têm um
+  // `schedule` que já começa DIRETO na 1ª parcela (as linhas "vazias" da carência nem
+  // existem no array — ver comentário da seção de carência mais acima) — tratar a
+  // primeira linha do array como "mês 1" fazia a TIR achar que o dinheiro só ficou
+  // emprestado por poucos meses quando na real ficou por toda a carência (24+ meses),
+  // inflando o CET pra valores absurdos (ex.: 72% a.a. num contrato de 12% nominal).
+  // Sem `referenceDate` (chamada antiga/testes), cai de volta no índice do array.
+  const cashFlowByMonth = new Map([[0, netValue]]);
+  schedule.forEach((item, idx) => {
     // Se for CET Projetado BRL (convertedByPTAX), usar prestação convertida
     // Se for CET Nominal USD, usar prestação em USD
     const prestacaoBase = convertedByPTAX ? item.prestacao : (item.prestacao_USD || item.prestacao);
-    
     const totalOutflow = prestacaoBase + insurancePerInstallment;
-    cashFlow.push(-totalOutflow);
+    const monthIndex = referenceDate && item.dataVencimento
+      ? Math.max(1, monthsBetweenDates(referenceDate, item.dataVencimento))
+      : idx + 1;
+    cashFlowByMonth.set(monthIndex, (cashFlowByMonth.get(monthIndex) || 0) - totalOutflow);
   });
+  const maxMonth = Math.max(...cashFlowByMonth.keys());
+  const cashFlow = [];
+  for (let m = 0; m <= maxMonth; m++) cashFlow.push(cashFlowByMonth.get(m) || 0);
   
   // 🔐 FUNÇÃO VPL (Valor Presente Líquido)
   const getNPV = (rate) => {

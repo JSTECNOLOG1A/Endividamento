@@ -1344,20 +1344,6 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <SubsectionHeading icon={Percent}>Taxa e Indexação</SubsectionHeading>
           <div className={gridCols2Tight}>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Taxa Fixa (% a.a.) *</Label>
-              <CurrencyInput type="percent" value={form.fixed_rate} onChange={(e) => update("fixed_rate", e.target.value)} placeholder="0,0000" className="h-9" required />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Taxa Mensal Equivalente</Label>
-              <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm text-slate-600">
-                {form.fixed_rate && !isNaN(parseFloat(form.fixed_rate)) 
-                  ? `${((Math.pow(1 + parseFloat(form.fixed_rate) / 100, 1/12) - 1) * 100).toFixed(4)}% a.m.`
-                  : "—"}
-              </div>
-            </div>
-          </div>
-          <div className={gridCols2}>
-            <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Indexador</Label>
               <Select value={form.indexer} onValueChange={(v) => update("indexer", v)}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
@@ -1368,13 +1354,45 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 </SelectContent>
               </Select>
             </div>
-            {form.indexer !== "NA" && (
+            {form.indexer === "NA" ? (
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Spread (% a.a.)</Label>
-                <CurrencyInput type="percent" value={form.indexer_spread} onChange={(e) => update("indexer_spread", e.target.value)} className="h-9" />
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Taxa Fixa (% a.a.) *</Label>
+                <CurrencyInput type="percent" value={form.fixed_rate} onChange={(e) => update("fixed_rate", e.target.value)} placeholder="0,0000" className="h-9" required />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                  Spread (% a.a.)
+                  <TooltipProvider>
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <Info className="w-3 h-3 inline-block ml-1 text-slate-500 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <p className="text-xs">
+                          Juros somados ao {form.indexer} (ex.: {form.indexer} + 1,10% a.a.). Com indexador
+                          selecionado, a Taxa Fixa não se aplica — não precisa preencher.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+                <CurrencyInput type="percent" value={form.indexer_spread} onChange={(e) => update("indexer_spread", e.target.value)} placeholder="0,0000" className="h-9" />
               </div>
             )}
           </div>
+          {form.indexer === "NA" && (
+            <div className={gridCols2Tight}>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Taxa Mensal Equivalente</Label>
+                <div className="h-9 px-3 rounded-md border border-slate-200 bg-slate-50 flex items-center text-sm text-slate-600">
+                  {form.fixed_rate && !isNaN(parseFloat(form.fixed_rate))
+                    ? `${((Math.pow(1 + parseFloat(form.fixed_rate) / 100, 1/12) - 1) * 100).toFixed(4)}% a.m.`
+                    : "—"}
+                </div>
+              </div>
+            </div>
+          )}
           <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">

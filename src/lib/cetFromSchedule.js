@@ -11,17 +11,33 @@ import { roundMoney } from "@engine/roundMoney.js";
 // exibido durante o cálculo/edição do contrato — o campo `cetAnnual` do
 // disclosure regulatório). Qualquer alteração na fórmula do motor deve ser
 // espelhada aqui.
-function calculateCET(operationValue, upFrontFees, financedFeesImpactOnCash, schedule, insurancePerInstallment = 0) {
+// Meses decorridos entre duas datas (mesma aproximação de monthsBetweenDates() no motor).
+function monthsBetweenDates(d1, d2) {
+  const a = new Date(d1);
+  const b = new Date(d2);
+  const days = (b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24);
+  return Math.max(0, Math.round(days / 30.4368));
+}
+
+function calculateCET(operationValue, upFrontFees, financedFeesImpactOnCash, schedule, insurancePerInstallment = 0, referenceDate = null) {
   if (!schedule || schedule.length === 0) {
     return { cetAnnual: 0, cetMonthly: 0 };
   }
 
   const netValue = operationValue - upFrontFees - financedFeesImpactOnCash;
-  const cashFlow = [netValue];
-  schedule.forEach((item) => {
+  // Fluxo de caixa indexado pelo MÊS REAL decorrido desde o desembolso, não pela posição
+  // no array — ver comentário equivalente em calculateCET() no motor (mesma correção).
+  const cashFlowByMonth = new Map([[0, netValue]]);
+  schedule.forEach((item, idx) => {
     const prestacao = item.prestacao || 0;
-    cashFlow.push(-(prestacao + insurancePerInstallment));
+    const monthIndex = referenceDate && item.dataVencimento
+      ? Math.max(1, monthsBetweenDates(referenceDate, item.dataVencimento))
+      : idx + 1;
+    cashFlowByMonth.set(monthIndex, (cashFlowByMonth.get(monthIndex) || 0) - (prestacao + insurancePerInstallment));
   });
+  const maxMonth = Math.max(...cashFlowByMonth.keys());
+  const cashFlow = [];
+  for (let m = 0; m <= maxMonth; m++) cashFlow.push(cashFlowByMonth.get(m) || 0);
 
   const getNPV = (rate) => cashFlow.reduce((acc, val, i) => acc + val / Math.pow(1 + rate, i), 0);
 
@@ -91,7 +107,8 @@ export function computeContractCET(contract, schedule) {
     upFrontFees,
     financedFeesImpactOnCash,
     schedule,
-    insuranceEmbeddedPerInstallment
+    insuranceEmbeddedPerInstallment,
+    contract.operation_date
   );
 
   return {
