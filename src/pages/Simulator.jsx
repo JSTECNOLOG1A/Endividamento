@@ -1024,7 +1024,7 @@ export default function Simulator() {
       <div
         className={
           isModernLayout
-            ? "grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0 lg:min-h-[calc(100dvh-10.5rem)]"
+            ? "grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0 lg:min-h-[calc(100dvh-4rem)]"
             : "grid grid-cols-1 xl:grid-cols-12 gap-8"
         }
       >
@@ -1033,7 +1033,7 @@ export default function Simulator() {
           <div
             className={
               isModernLayout
-                ? "lg:sticky lg:top-0 lg:max-h-[calc(100dvh-10.5rem)] overflow-y-auto pr-1"
+                ? "lg:sticky lg:top-0 lg:max-h-[calc(100dvh-4rem)] overflow-y-auto pr-1"
                 // top-[4.5rem]: o header do layout clássico é fixo (sticky
                 // top-0) com 57px de altura (h-14 + borda) — um offset menor
                 // deixava o topo do painel (título/abas) renderizar por
@@ -1120,7 +1120,7 @@ export default function Simulator() {
         <div
           className={
             isModernLayout
-              ? "lg:col-span-8 flex flex-col min-h-[320px] lg:min-h-[calc(100dvh-10.5rem)]"
+              ? "lg:col-span-8 flex flex-col min-h-[320px] lg:min-h-[calc(100dvh-4rem)]"
               : "xl:col-span-8"
           }
         >

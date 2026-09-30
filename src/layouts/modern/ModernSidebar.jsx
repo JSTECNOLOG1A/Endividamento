@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 
 function itemClass(active, collapsed) {
   return cn(
-    "flex items-center gap-3 rounded-xl text-sm font-medium transition-colors duration-150",
+    "flex items-center gap-3 rounded-xl text-sm font-medium transition-all duration-150 ease-out hover:translate-x-0.5 active:scale-[0.98]",
     collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5",
     active ? modernActiveItem : modernInactiveItem
   );
@@ -54,28 +54,21 @@ function NavGroup({ item, currentPageName, collapsed }) {
     }
   }, [currentPageName, item.children]);
 
+  // Recolhida, mostra só o ícone do grupo (mesma contagem de ícones da barra
+  // expandida, onde os filhos só aparecem se o grupo estiver aberto) — listar
+  // cada filho como ícone próprio espalhava a barra bem além do que a versão
+  // expandida mostra por padrão. Passar o mouse já reabre a barra inteira
+  // (ver handleMouseEnter em ModernSidebar), onde o grupo funciona normal.
   if (collapsed) {
     return (
-      <div className="space-y-1">
-        {item.children.map((child) => {
-          const isActive = currentPageName === child.page;
-          const link = (
-            <Link
-              key={child.page}
-              to={createPageUrl(child.page)}
-              className={itemClass(isActive, true)}
-            >
-              <child.icon className="w-[18px] h-[18px]" />
-            </Link>
-          );
-          return (
-            <Tooltip key={child.page}>
-              <TooltipTrigger asChild>{link}</TooltipTrigger>
-              <TooltipContent side="right">{child.name}</TooltipContent>
-            </Tooltip>
-          );
-        })}
-      </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={itemClass(childActive, true)}>
+            <item.icon className="w-[18px] h-[18px]" />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="right">{item.name}</TooltipContent>
+      </Tooltip>
     );
   }
 

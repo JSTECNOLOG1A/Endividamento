@@ -29,10 +29,12 @@ export default function EmailDialog({ open, onOpenChange, document }) {
         document_id: document.id,
         to_email: email.trim(),
       });
-      if (data?.status === "simulado") {
-        toast.success("Registrado. O envio real de e-mail ainda não está configurado neste sistema — nenhum e-mail foi disparado de fato.");
-      } else {
+      if (data?.status === "enviado") {
         toast.success("E-mail enviado.");
+      } else if (data?.status === "falhou") {
+        toast.error("Não foi possível enviar o e-mail agora. O pedido ficou registrado; tente novamente em alguns minutos.");
+      } else {
+        toast.success("Registrado. O envio real de e-mail ainda não está configurado neste sistema — nenhum e-mail foi disparado de fato.");
       }
       onOpenChange(false);
       setEmail("");
@@ -55,9 +57,9 @@ export default function EmailDialog({ open, onOpenChange, document }) {
             <Label className="text-xs">E-mail do destinatário</Label>
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@empresa.com" />
           </div>
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-            O envio real de e-mail ainda não está configurado neste sistema — por enquanto, isso só registra o
-            pedido (visível em auditoria) com um link pro documento.
+          <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
+            O e-mail traz um link pro documento (não o PDF anexado). O pedido fica registrado em auditoria,
+            enviado ou não.
           </p>
         </div>
         <DialogFooter>

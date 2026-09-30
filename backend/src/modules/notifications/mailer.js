@@ -1,33 +1,51 @@
 import { logger } from "../../logger.js";
 import * as entityStore from "../entities/store.js";
+import { sendMail } from "../signup/mailer.js";
 
-// Nenhum provedor de e-mail está configurado ainda (Microsoft 365/Graph API
-// ou SMTP — ver README/.env.example). Enquanto isso, toda notificação fica
-// registrada em NotificationLog com status "simulado": dá pra auditar
-// exatamente o que teria sido enviado, pra quem e com qual texto, sem
-// nenhum risco de disparo real antes das credenciais existirem.
-//
-// Quando o provedor for definido, o envio de verdade entra aqui dentro
-// (branch por config.graph/config.smtp) e passa a gravar status
-// "enviado"/"falhou" — o resto do sistema (quem chama sendNotification, os
-// gatilhos de status do contrato, o botão de enviar PDF) não muda nada.
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+// Envia de verdade via SMTP (sendMail(), o mesmo transporte já usado pelos
+// e-mails de cadastro/reset de senha — ver modules/signup/mailer.js) quando
+// SMTP_HOST estiver configurado. Sem isso, sendMail() já devolve
+// { sent: false } sem tentar nada (comportamento seguro de sempre) e cai
+// pra status "simulado" — dá pra auditar exatamente o que teria sido
+// enviado, pra quem e com qual texto, sem risco de disparo indevido antes
+// das credenciais existirem.
 export async function sendNotification({ eventType, contractId, to, subject, body }) {
   const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean);
   const results = [];
   for (const toEmail of recipients) {
+    const html = `<p>${escapeHtml(body).replaceAll("\n", "<br/>")}</p>`;
+    const { sent, error } = await sendMail({ to: toEmail, subject, text: body, html });
+    const status = sent ? "enviado" : error ? "falhou" : "simulado";
+    if (status === "simulado") {
+      logger.info({ toEmail, subject, eventType, contractId }, "notificação simulada — SMTP não configurado");
+    } else if (status === "falhou") {
+      logger.error({ toEmail, subject, eventType, contractId, error }, "falha ao enviar notificação por e-mail");
+    }
     try {
-      logger.info(
-        { toEmail, subject, eventType, contractId },
-        "notificação simulada — envio de e-mail ainda não configurado"
-      );
       const saved = await entityStore.create(
         "NotificationLog",
-        { event_type: eventType, contract_id: contractId || null, to_email: toEmail, subject, body, status: "simulado" },
+        {
+          event_type: eventType,
+          contract_id: contractId || null,
+          to_email: toEmail,
+          subject,
+          body,
+          status,
+          error_message: status === "falhou" ? error : null,
+        },
         "system"
       );
       results.push(saved);
-    } catch (error) {
-      logger.error({ err: error, toEmail, subject, eventType }, "falha ao registrar notificação");
+    } catch (logError) {
+      logger.error({ err: logError, toEmail, subject, eventType }, "falha ao registrar notificação");
     }
   }
   return results;
