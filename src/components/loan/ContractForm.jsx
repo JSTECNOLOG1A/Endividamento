@@ -773,7 +773,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               />
             </div>
           </div>
-          <div className={gridCols2}>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Banco Credor *</Label>
               <Combobox
@@ -784,6 +784,21 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 searchPlaceholder="Buscar banco..."
               />
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Conta Bancária de Liberação *</Label>
+              <Combobox
+                value={form.disbursement_bank_account_id || ""}
+                onChange={(v) => update("disbursement_bank_account_id", v || "")}
+                options={(bankAccounts || [])
+                  .filter((a) => !form.bank_id || a.bank_id === form.bank_id)
+                  .map((a) => ({ value: a.id, label: `${a.nome} — Ag ${a.agencia}, CC ${a.conta}${a.digito ? `-${a.digito}` : ""}` }))}
+                placeholder="Em qual conta o recurso cai"
+                searchPlaceholder="Buscar conta bancária..."
+                disabled={!form.bank_id}
+              />
+            </div>
+          </div>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">CNPJ da Instituição Financeira do contrato</Label>
               <Input
@@ -798,8 +813,6 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 Usado na geração dos títulos para localizar o fornecedor (código e loja) no ERP.
               </p>
             </div>
-          </div>
-          <div className={gridCols2}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Nº Contrato *
@@ -817,19 +830,6 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 </TooltipProvider>
               </Label>
               <Input value={form.contract_number} onChange={(e) => update("contract_number", alphanumericOnly(e.target.value))} placeholder="000000000" className="h-9" required />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Conta Bancária de Liberação *</Label>
-              <Combobox
-                value={form.disbursement_bank_account_id || ""}
-                onChange={(v) => update("disbursement_bank_account_id", v || "")}
-                options={(bankAccounts || [])
-                  .filter((a) => !form.bank_id || a.bank_id === form.bank_id)
-                  .map((a) => ({ value: a.id, label: `${a.nome} — Ag ${a.agencia}, CC ${a.conta}${a.digito ? `-${a.digito}` : ""}` }))}
-                placeholder="Em qual conta o recurso cai"
-                searchPlaceholder="Buscar conta bancária..."
-                disabled={!form.bank_id}
-              />
             </div>
           </div>
           <div className={gridCols2}>
@@ -866,7 +866,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
               </Select>
             </div>
           </div>
-          <div className={gridCols2}>
+          <div className={gridCols2Tight}>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                 Garantia Real
@@ -923,8 +923,8 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           <TabsContent value="composicao" className="p-5 space-y-5 mt-0">
           {/* Moeda e Defasagem PTAX - Primeiro Bloco */}
           <SubsectionHeading icon={Banknote}>Moeda e Câmbio</SubsectionHeading>
-          <div className={gridCols2}>
-            <div className="space-y-1.5">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+            <div className="sm:col-span-1 space-y-1.5">
               <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">Moeda (Opcional)</Label>
               <Select value={form.currency_id || ""} onValueChange={(v) => update("currency_id", v)}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="BRL (Padrão)" /></SelectTrigger>
@@ -934,7 +934,38 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 </SelectContent>
               </Select>
             </div>
-            {form.currency_id && (
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Valor da Operação (R$) *
+                {(form.currency_id || form.disbursement_mode === "parcelada") && (
+                  <span className="ml-1 text-xs text-cyan-600 font-normal">(Calculado automaticamente)</span>
+                )}
+              </Label>
+              <CurrencyInput
+                type="currency"
+                value={form.disbursement_mode === "parcelada" ? trancheTotal.toFixed(2).replace(".", ",") : form.operation_value}
+                onChange={(e) => update("operation_value", e.target.value)}
+                placeholder="0,00"
+                className="h-9"
+                disabled={!!form.currency_id || form.disbursement_mode === "parcelada"}
+                required
+              />
+              {form.currency_id && (
+                <p className="text-xs text-slate-600">
+                  Este campo é somente leitura quando operação em moeda estrangeira
+                </p>
+              )}
+              {form.disbursement_mode === "parcelada" && (
+                <p className="text-xs text-slate-600">Soma das tranches de liberação abaixo</p>
+              )}
+            </div>
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">(-) Sinal do Negócio (R$)</Label>
+              <CurrencyInput type="currency" value={form.signal_value} onChange={(e) => update("signal_value", e.target.value)} className="h-9" />
+            </div>
+          </div>
+          {form.currency_id && (
+            <div className={gridCols2Tight}>
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                   Defasagem PTAX
@@ -961,9 +992,9 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                   </SelectContent>
                 </Select>
               </div>
-            )}
-          </div>
-          
+            </div>
+          )}
+
           {/* Campos de Moeda Estrangeira */}
           {form.currency_id && (
             <>
@@ -1186,12 +1217,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                      </Tooltip>
                    </TooltipProvider>
                  </Label>
-                 <CurrencyInput type="currency" value={form.iof_value} onChange={(e) => update("iof_value", e.target.value)} className="h-9" />
+                 <div className="flex items-center gap-2">
+                   <CurrencyInput type="currency" value={form.iof_value} onChange={(e) => update("iof_value", e.target.value)} className="h-9 flex-1 min-w-0" />
+                   <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
+                     <Switch checked={form.iof_financed} onCheckedChange={(v) => update("iof_financed", v)} />
+                     <span className="text-xs text-slate-600 whitespace-nowrap">Financiado</span>
+                   </label>
+                 </div>
                </div>
-              <div className="flex items-start gap-2">
-                <Switch className="shrink-0 mt-0.5" checked={form.iof_financed} onCheckedChange={(v) => update("iof_financed", v)} />
-                <Label className="text-xs text-slate-600 leading-snug min-w-0">IOF financiado (somar ao principal)</Label>
-              </div>
             </div>
             <div className="space-y-3">
               <div className="space-y-1.5">
@@ -1211,12 +1244,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                      </Tooltip>
                    </TooltipProvider>
                  </Label>
-                 <CurrencyInput type="currency" value={form.encargo_garantia_value} onChange={(e) => update("encargo_garantia_value", e.target.value)} className="h-9" />
+                 <div className="flex items-center gap-2">
+                   <CurrencyInput type="currency" value={form.encargo_garantia_value} onChange={(e) => update("encargo_garantia_value", e.target.value)} className="h-9 flex-1 min-w-0" />
+                   <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
+                     <Switch checked={form.encargo_garantia_financed} onCheckedChange={(v) => update("encargo_garantia_financed", v)} />
+                     <span className="text-xs text-slate-600 whitespace-nowrap">Financiado</span>
+                   </label>
+                 </div>
                </div>
-              <div className="flex items-start gap-2">
-                <Switch className="shrink-0 mt-0.5" checked={form.encargo_garantia_financed} onCheckedChange={(v) => update("encargo_garantia_financed", v)} />
-                <Label className="text-xs text-slate-600 leading-snug min-w-0">ECG financiado (somar ao principal)</Label>
-              </div>
             </div>
             <div className="space-y-3">
               <div className="space-y-1.5">
@@ -1236,12 +1271,14 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                      </Tooltip>
                    </TooltipProvider>
                  </Label>
-                 <CurrencyInput type="currency" value={form.other_fees} onChange={(e) => update("other_fees", e.target.value)} className="h-9" />
+                 <div className="flex items-center gap-2">
+                   <CurrencyInput type="currency" value={form.other_fees} onChange={(e) => update("other_fees", e.target.value)} className="h-9 flex-1 min-w-0" />
+                   <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
+                     <Switch checked={form.other_fees_financed} onCheckedChange={(v) => update("other_fees_financed", v)} />
+                     <span className="text-xs text-slate-600 whitespace-nowrap">Financiadas</span>
+                   </label>
+                 </div>
                </div>
-              <div className="flex items-start gap-2">
-                <Switch className="shrink-0 mt-0.5" checked={form.other_fees_financed} onCheckedChange={(v) => update("other_fees_financed", v)} />
-                <Label className="text-xs text-slate-600 leading-snug min-w-0">Taxas financiadas</Label>
-              </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">
                   Reconhecimento do Custo de Transação
