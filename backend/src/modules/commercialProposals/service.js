@@ -27,20 +27,36 @@ const TEXT_FIELDS = [
   "vigencia_duracao", "vigencia_inicio", "vigencia_renovacao", "foro_comarca", "foro_estado",
   "assinatura_cidade", "contratada_representante", "contratada_cargo",
 ];
-const BOOLEAN_FIELDS = ["want_cadastro"];
+const BOOLEAN_FIELDS = ["want_cadastro", "cobrar_implantacao"];
 const NUMERIC_FIELDS = ["valor_implantacao", "valor_mensalidade", "valor_cadastramento_total", "valor_total_primeiro_mes"];
 const INT_FIELDS = ["blocos_count", "carteira_total"];
 const JSON_FIELDS = ["pricing_snapshot"];
+// Diferente de NUMERIC_FIELDS/INT_FIELDS: ausente vira NULL (= "usa o valor
+// automático do plano" / "usa o nº de parcelas padrão da forma de
+// pagamento"), não 0 — 0 seria um valor manual de verdade.
+const NULLABLE_NUMERIC_FIELDS = ["implantacao_valor_manual"];
+const NULLABLE_INT_FIELDS = ["implantacao_parcelas"];
 
 // Campos graváveis tanto na criação quanto na atualização — "numero" e
 // "status" ficam fora: numero é imutável após criado, status não é
 // alterado por este fluxo (ver regra de "Expirada" calculada em runtime).
-const WRITABLE_FIELDS = [...TEXT_FIELDS, ...BOOLEAN_FIELDS, ...NUMERIC_FIELDS, ...INT_FIELDS, ...JSON_FIELDS];
+const WRITABLE_FIELDS = [
+  ...TEXT_FIELDS, ...BOOLEAN_FIELDS, ...NUMERIC_FIELDS, ...NULLABLE_NUMERIC_FIELDS,
+  ...INT_FIELDS, ...NULLABLE_INT_FIELDS, ...JSON_FIELDS,
+];
 
 function pickValue(body, field) {
   if (BOOLEAN_FIELDS.includes(field)) return Boolean(body[field]);
   if (NUMERIC_FIELDS.includes(field)) return Number(body[field]) || 0;
+  if (NULLABLE_NUMERIC_FIELDS.includes(field)) {
+    const value = body[field];
+    return value === undefined || value === null || value === "" ? null : Number(value);
+  }
   if (INT_FIELDS.includes(field)) return Math.max(0, Math.round(Number(body[field]) || 0));
+  if (NULLABLE_INT_FIELDS.includes(field)) {
+    const value = body[field];
+    return value === undefined || value === null || value === "" ? null : Math.max(1, Math.round(Number(value)));
+  }
   if (JSON_FIELDS.includes(field)) return JSON.stringify(body[field] || {});
   const value = body[field];
   return value === undefined || value === null ? null : String(value);
