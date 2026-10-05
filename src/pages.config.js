@@ -78,6 +78,7 @@ import {
   SettingsPrivacy,
 } from './pages/settingsPages';
 import Simulator from './pages/Simulator';
+import { TaxOverview, TaxFederal, TaxState, TaxPlanning } from './pages/taxPages';
 import UserManual from './pages/UserManual';
 import Platform from './pages/Platform';
 import PlatformTenants from './pages/PlatformTenants';
@@ -118,6 +119,10 @@ export const PAGES = {
     "SettingsAccount": SettingsAccount,
     "SettingsPrivacy": SettingsPrivacy,
     "Simulator": Simulator,
+    "TaxOverview": TaxOverview,
+    "TaxFederal": TaxFederal,
+    "TaxState": TaxState,
+    "TaxPlanning": TaxPlanning,
     "UserManual": UserManual,
 }
 

@@ -139,6 +139,8 @@ export const base44 = {
     BalanceDeploymentConfig: entityApi("BalanceDeploymentConfig"),
     AccountingJournalEntry: entityApi("AccountingJournalEntry"),
     NotificationLog: entityApi("NotificationLog"),
+    TaxAgreement: entityApi("TaxAgreement"),
+    TaxInstallment: entityApi("TaxInstallment"),
     Tenant: entityApi("Tenant"),
     TenantUser: entityApi("TenantUser"),
   },

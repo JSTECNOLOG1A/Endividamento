@@ -26,6 +26,8 @@ export const TENANT_TABLES = {
   natures: { notFound: "Natureza não encontrada" },
   bank_accounts: { notFound: "Conta bancária não encontrada" },
   chart_of_accounts: { notFound: "Conta contábil não encontrada" },
+  tax_agreements: { notFound: "Parcelamento não encontrado" },
+  tax_installments: { notFound: "Parcela não encontrada" },
   tenants: { notFound: "Cliente não encontrado" },
   tenant_users: { notFound: "Vínculo não encontrado" },
 };
@@ -50,6 +52,8 @@ export const ENTITY_SCOPE = {
   AccountingJournalEntry: { type: "column" },
   AccountMovement: { type: "column" },
   NotificationLog: { type: "column" },
+  TaxAgreement: { type: "column" },
+  TaxInstallment: { type: "column" },
   Bank: { type: "shared" },
   Currency: { type: "shared" },
   Holiday: { type: "shared" },

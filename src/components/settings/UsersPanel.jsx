@@ -3,6 +3,7 @@ import { MailPlus, Pencil, Plus } from "lucide-react";
 import { toast } from "@/lib/notify";
 import { useAuth } from "@/lib/AuthContext";
 import { usePlatform } from "@/lib/PlatformContext";
+import { MODULES } from "@/lib/modules";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,6 +49,7 @@ function emptyForm() {
     setor: "",
     role: "user",
     approval_level: 0,
+    permissions: {},
     password: "",
     password_confirm: "",
     blocked: false,
@@ -127,6 +129,7 @@ export default function UsersPanel() {
       setor: item.setor || "",
       role: item.role || "user",
       approval_level: Number(item.approval_level || 0),
+      permissions: item.permissions || {},
       tenant_role: item.tenant_role || null,
       is_owner: Boolean(item.is_owner),
       password: "",
@@ -157,6 +160,7 @@ export default function UsersPanel() {
         setor: form.setor.trim(),
         role: form.role,
         approval_level: Number(form.approval_level || 0),
+        permissions: form.permissions || {},
         blocked: Boolean(form.blocked),
       };
       if (form.password) {
@@ -369,6 +373,25 @@ export default function UsersPanel() {
                   Controla quem pode aprovar contratos: nível 1 e nível 2 são etapas sequenciais
                   da aprovação — nível 2 também pode registrar a etapa de nível 1.
                 </p>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Módulos liberados</Label>
+                {MODULES.map((moduleDef) => (
+                  <label key={moduleDef.key} className="flex items-start gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={editor.form.permissions?.[moduleDef.key] === true}
+                      onChange={(event) => setEditor((current) => patchForm(current, {
+                        permissions: { ...(current.form.permissions || {}), [moduleDef.key]: event.target.checked },
+                      }))}
+                    />
+                    <span>
+                      <span className="font-medium">{moduleDef.label}</span>
+                      <span className="block text-xs text-slate-500">{moduleDef.description}</span>
+                    </span>
+                  </label>
+                ))}
               </div>
               {editor.mode === "edit" ? (
                 <>

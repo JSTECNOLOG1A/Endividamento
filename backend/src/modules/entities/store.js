@@ -111,6 +111,13 @@ const DATE_FIELDS = new Set([
   "operation_date", "first_payment_date", "final_maturity_date", "rate_date",
   "holiday_date", "trial_ends_at", "emissao", "vencimento", "approved_date",
   "integrado_erp_em", "erp_consultado_em", "payoff_date", "deployment_cutoff", "baixa_data", "data_base", "data_virada", "mirror_date",
+  "data_adesao", "saldo_data_base", "ultima_conferencia", "data_pagamento",
+]);
+
+// Colunas DATE que voltam como "AAAA-MM-DD" (sem horário nem fuso). Vencimento de tributo é data civil.
+const PLAIN_DATE_FIELDS = new Set([
+  "operation_date", "first_payment_date", "final_maturity_date", "rate_date", "holiday_date", "trial_ends_at", "emissao", "vencimento",
+  "data_adesao", "saldo_data_base", "ultima_conferencia", "data_pagamento",
 ]);
 
 function toDbValue(entity, key, value) {
@@ -131,7 +138,7 @@ function toDbValue(entity, key, value) {
 function fromDbValue(entity, key, value) {
   if (value === null || value === undefined) return value;
   if (value instanceof Date) {
-    if (["operation_date", "first_payment_date", "final_maturity_date", "rate_date", "holiday_date", "trial_ends_at", "emissao", "vencimento"].includes(key)) {
+    if (PLAIN_DATE_FIELDS.has(key)) {
       return value.toISOString().slice(0, 10);
     }
     return value.toISOString();

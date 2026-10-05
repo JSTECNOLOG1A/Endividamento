@@ -154,6 +154,7 @@ export async function attachTenant(req, res, next) {
     req.user.tenant_id = tenant.id;
     req.user.group_id = tenant.group_id;
     req.user.tenant_role = tenant.tenant_role;
+    req.user.permissions = tenant.module_permissions || {};
     runWithTenant(
       {
         userId: dbUser.id,
@@ -164,6 +165,7 @@ export async function attachTenant(req, res, next) {
         role: dbUser.role,
         tenantRole: tenant.tenant_role,
         approvalLevel: dbUser.approval_level,
+        permissions: tenant.module_permissions,
       },
       () => next()
     );

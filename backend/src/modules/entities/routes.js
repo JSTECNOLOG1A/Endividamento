@@ -1,9 +1,22 @@
 import { Router } from "express";
 import * as store from "./store.js";
 import { writeAudit } from "../../middleware/audit.js";
-import { requireCanWrite } from "../../middleware/rbac.js";
+import { requireCanWrite, requireModule } from "../../middleware/rbac.js";
 
 export const entitiesRouter = Router();
+
+// Entidades de módulos opcionais: o CRUD genérico não tem controle por entidade, então o acesso é barrado
+// aqui (esconder o menu no front não protege o dado).
+const MODULE_BY_ENTITY = {
+  TaxAgreement: "tax",
+  TaxInstallment: "tax",
+};
+
+entitiesRouter.use("/:name", (req, res, next) => {
+  const moduleKey = MODULE_BY_ENTITY[req.params.name];
+  if (!moduleKey) return next();
+  return requireModule(moduleKey)(req, res, next);
+});
 
 function actor(req) {
   return req.user?.email || "system";

@@ -1,8 +1,20 @@
 import {
   assertCanWrite,
+  assertModule,
   assertOwner,
   isViewer,
 } from "../modules/tenants/policy.js";
+
+export function requireModule(key) {
+  return (req, res, next) => {
+    try {
+      assertModule(key);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
 
 export function requireCanWrite(req, res, next) {
   assertCanWrite().then(() => next()).catch(next);

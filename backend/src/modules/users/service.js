@@ -30,6 +30,27 @@ const optionalText = z.string().trim().max(255).optional().transform((value) => 
 
 const approvalLevelSchema = z.union([z.literal(0), z.literal(1), z.literal(2)]);
 
+// Módulos liberados ao usuário (ver MODULE_KEYS em tenants/policy.js). Chave desconhecida é descartada.
+const permissionsSchema = z.object({ tax: z.boolean().optional() }).optional();
+
+function normalizePermissions(input) {
+  const out = {};
+  for (const key of MODULE_KEYS) {
+    if (input?.[key] === true) out[key] = true;
+  }
+  return out;
+}
+
+async function savePermissions(email, permissions) {
+  const normalized = normalizePermissions(permissions);
+  await pool.query(
+    `UPDATE tenant_users SET permissions = $1::jsonb, updated_date = now()
+     WHERE lower(user_email) = lower($2) AND group_id = $3`,
+    [JSON.stringify(normalized), email, groupIdOrThrow()]
+  );
+  return normalized;
+}
+
 export const createSchema = z.object({
   email: z.string().trim().email("Informe um e-mail válido").max(255),
   full_name: z.string().trim().min(2, "Informe o nome completo").max(255),
@@ -38,6 +59,7 @@ export const createSchema = z.object({
   role: z.enum(ROLES),
   approval_level: approvalLevelSchema.optional().default(0),
   blocked: z.boolean().optional().default(false),
+  permissions: permissionsSchema,
 });
 
 export const updateSchema = z.object({
@@ -48,6 +70,7 @@ export const updateSchema = z.object({
   role: z.enum(ROLES).optional(),
   approval_level: approvalLevelSchema.optional(),
   blocked: z.boolean().optional(),
+  permissions: permissionsSchema,
   password: z.string().min(8, "A senha deve ter ao menos 8 caracteres").max(128).optional(),
   password_confirm: z.string().optional(),
 }).superRefine((data, ctx) => {
@@ -84,6 +107,7 @@ function publicUser(row) {
     tenant_role: row.tenant_role || null,
     is_owner: row.tenant_role === "OWNER",
     invite_pending: Boolean(row.invite_pending),
+    permissions: row.module_permissions || {},
   };
 }
 
@@ -116,7 +140,7 @@ async function countActiveAdmins(excludeId = null) {
 export async function list() {
   const scope = scopedGroupSql("tu.group_id");
   const result = await pool.query(
-    `SELECT ${USER_COLUMNS}, t.id AS tenant_id, t.tenant_name, tu.role AS tenant_role,
+    `SELECT ${USER_COLUMNS}, t.id AS tenant_id, t.tenant_name, tu.role AS tenant_role, tu.permissions AS module_permissions,
             EXISTS (
               SELECT 1 FROM account_tokens at
               WHERE at.user_id = u.id AND at.kind = 'invite'
@@ -135,7 +159,7 @@ export async function list() {
 export async function getById(id) {
   const scope = scopedGroupSql("tu.group_id", 2);
   const result = await pool.query(
-    `SELECT ${USER_COLUMNS}, t.id AS tenant_id, t.tenant_name, tu.role AS tenant_role,
+    `SELECT ${USER_COLUMNS}, t.id AS tenant_id, t.tenant_name, tu.role AS tenant_role, tu.permissions AS module_permissions,
             EXISTS (
               SELECT 1 FROM account_tokens at
               WHERE at.user_id = u.id AND at.kind = 'invite'
@@ -185,8 +209,9 @@ export async function create(data, createdBy) {
        VALUES ($1, $2, $3, $4, $5, now(), $6)`,
       [`tuser_${existing.rows[0].id.replaceAll("-", "").slice(0, 12)}_${groupId.slice(-6)}`, scope?.tenantId, groupId, email, tenantRole, createdBy || email]
     );
+    const linkedPermissions = data.permissions ? await savePermissions(email, data.permissions) : {};
     return {
-      ...publicUser({ ...existing.rows[0], tenant_role: tenantRole, tenant_id: scope?.tenantId, invite_pending: false }),
+      ...publicUser({ ...existing.rows[0], tenant_role: tenantRole, tenant_id: scope?.tenantId, invite_pending: false, module_permissions: linkedPermissions }),
       email_sent: false,
       invite_pending: false,
       linked_existing: true,
@@ -236,11 +261,13 @@ export async function create(data, createdBy) {
       createdBy || email,
     ]
   );
+  const newPermissions = data.permissions ? await savePermissions(email, data.permissions) : {};
   const user = publicUser({
     ...result.rows[0],
     tenant_role: tenantRole,
     tenant_id: scope?.tenantId,
     invite_pending: true,
+    module_permissions: newPermissions,
   });
   return { ...user, ...(await sendInvite({ userId: id, email, fullName: data.full_name, createdBy })) };
 }
@@ -364,10 +391,14 @@ export async function update(id, data, actorId) {
       [next.email, current.email, groupIdOrThrow()]
     );
   }
+  const permissions = data.permissions !== undefined
+    ? await savePermissions(next.email, data.permissions)
+    : current.permissions;
   return publicUser({
     ...result.rows[0],
     tenant_role: current.tenant_role,
     tenant_id: current.tenant_id,
     tenant_name: current.tenant_name,
+    module_permissions: permissions,
   });
 }

@@ -194,6 +194,25 @@ export const ENTITIES = {
     booleans: [],
     numbers: [],
   },
+  TaxAgreement: {
+    table: "tax_agreements",
+    columns: [
+      "group_id", "entity_id", "esfera", "orgao", "uf", "modalidade", "tributo", "codigo_parcelamento",
+      "data_adesao", "qtd_parcelas", "saldo_oficial", "saldo_data_base", "situacao", "origem_dado",
+      "ultima_conferencia", "observacoes",
+    ],
+    booleans: [],
+    numbers: ["qtd_parcelas", "saldo_oficial"],
+  },
+  TaxInstallment: {
+    table: "tax_installments",
+    columns: [
+      "group_id", "agreement_id", "numero_parcela", "vencimento", "valor", "situacao",
+      "data_pagamento", "valor_pago", "origem_dado", "observacoes",
+    ],
+    booleans: [],
+    numbers: ["numero_parcela", "valor", "valor_pago"],
+  },
   Tenant: {
     table: "tenants",
     columns: [

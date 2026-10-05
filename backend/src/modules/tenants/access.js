@@ -51,6 +51,7 @@ export function runWithTenant(scope, fn) {
     platformAdmin: Boolean(scope.platformAdmin),
     supportSessionId: scope.supportSessionId || null,
     approvalLevel: Number(scope.approvalLevel || 0),
+    permissions: scope.permissions && typeof scope.permissions === "object" ? scope.permissions : {},
   }, fn);
 }
 
@@ -89,7 +90,7 @@ export function scopedGroupSql(column, startIndex = 1, { allowUnscopedMaster = f
 }
 
 const TENANT_FOR_EMAIL_COLUMNS = `t.id, t.group_id, t.tenant_name, t.domain, t.billing_status, t.lifecycle_status, t.plan, t.trial_ends_at,
-            t.onboarding_completed_at, tu.role AS tenant_role`;
+            t.onboarding_completed_at, tu.role AS tenant_role, tu.permissions AS module_permissions`;
 
 export async function loadTenantForEmail(email, client = pool) {
   if (!email) return null;

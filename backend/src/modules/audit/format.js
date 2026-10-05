@@ -25,6 +25,8 @@ const ROTINA_BY_RESOURCE = {
   ReceivableTitle: "Contas a receber",
   LoanContract: "Contratos",
   CalculationSnapshot: "Contratos",
+  TaxAgreement: "Gestão Tributária",
+  TaxInstallment: "Gestão Tributária",
   CDIRate: "Indexadores",
   Holiday: "Indexadores",
   Currency: "Indexadores",

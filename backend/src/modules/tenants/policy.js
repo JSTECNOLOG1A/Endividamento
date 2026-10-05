@@ -53,6 +53,20 @@ export function isTenantAdmin() {
   return userRole() === "admin";
 }
 
+// Módulos liberados por usuário (tenant_users.permissions, ex.: {"tax": true}). Master e execuções do
+// sistema sempre têm acesso; todos os demais, inclusive o proprietário, só com a chave ligada no cadastro de
+// usuários — módulo opcional não aparece sozinho para ninguém.
+export const MODULE_KEYS = ["tax"];
+
+export function hasModule(key) {
+  if (isPlatformAdmin() || isSystemActor()) return true;
+  return getTenantScope()?.permissions?.[key] === true;
+}
+
+export function assertModule(key, message = "Seu perfil não tem acesso a este módulo.") {
+  if (!hasModule(key)) throw httpError(403, message, "MODULE_FORBIDDEN");
+}
+
 export function actorApprovalLevel() {
   if (isSystemActor() || isOwner()) return 2;
   return Number(getTenantScope()?.approvalLevel || 0);

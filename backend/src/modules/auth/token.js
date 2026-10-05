@@ -49,6 +49,7 @@ export function issueAuthResponse(user, tenant) {
       tenant_name: tenant?.tenant_name || null,
       tenant_domain: tenant?.domain || null,
       tenant_role: platformAdmin ? "PLATFORM" : (tenant?.tenant_role || null),
+      permissions: tenant?.module_permissions || {},
       billing_status: tenant?.billing_status || null,
       plan: tenant?.plan || null,
       trial_ends_at: tenant?.trial_ends_at || null,

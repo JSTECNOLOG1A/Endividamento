@@ -14,9 +14,14 @@ import {
   Activity,
   FileSignature,
   ClipboardCheck,
+  Landmark,
+  ShieldCheck,
+  MapPinned,
+  CalendarClock,
 } from "lucide-react";
 import { GOVERNANCE_SECTIONS } from "./governanceNavigation";
 import { SETTINGS_SECTIONS } from "./settingsNavigation";
+import { hasModule } from "@/lib/modules";
 
 /** Navegação do layout Classic — links diretos (sem submenu). */
 export const NAV_ITEMS = [
@@ -32,6 +37,18 @@ export const NAV_ITEMS = [
     children: [
       { name: "Contas a pagar", page: "AccountsPayable", icon: Receipt },
       { name: "Contas a receber", page: "AccountsReceivable", icon: Banknote },
+    ],
+  },
+  // Gestão Tributária: só aparece para quem tem o módulo liberado no cadastro de usuários (src/lib/modules.js).
+  {
+    name: "Gestão Tributária",
+    icon: Landmark,
+    module: "tax",
+    children: [
+      { name: "Visão geral", page: "TaxOverview", icon: ShieldCheck },
+      { name: "Parcelamentos Federais", page: "TaxFederal", icon: Landmark },
+      { name: "Parcelamentos Estaduais", page: "TaxState", icon: MapPinned },
+      { name: "Planejamento", page: "TaxPlanning", icon: CalendarClock },
     ],
   },
   { name: "Indexadores e Feriados", page: "CDIManager", icon: Database },
@@ -150,6 +167,7 @@ export function filterNavItemsForUser(items, user) {
   const isMaster = Boolean(user?.platform_admin);
   return items
     .filter((item) => !item.platformAdminOnly || isMaster)
+    .filter((item) => !item.module || hasModule(user, item.module))
     .map((item) => {
       if (item.masterOnly && !isMaster) return null;
       if (!item.children) return item;
