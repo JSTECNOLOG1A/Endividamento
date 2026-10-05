@@ -4,7 +4,7 @@ import { jsPDF } from "jspdf";
 import { usePlatform } from "@/lib/PlatformContext";
 import { toast } from "@/lib/notify";
 import { implementationsApi } from "@/api/implementations";
-import { BRAND_CYAN, createPdfHelpers, drawFooterPages, slugify } from "@/lib/pdfBrand";
+import { createPdfHelpers, drawFooterPages, slugify } from "@/lib/pdfBrand";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -92,12 +92,12 @@ function buildImplementationDoc(detail, mode) {
 
   addValueRow("Data de início", formatDateBR(detail.data_inicio));
   if (detail.previsao_conclusao) addValueRow("Previsão de conclusão", formatDateBR(detail.previsao_conclusao));
-  addValueRow("Percentual geral", `${detail.progress.percentual}%`, { bold: true, size: 12, color: BRAND_CYAN });
+  addValueRow("Percentual geral", `${detail.progress.percentual}%`, { bold: true });
   addValueRow("Status", IMPLEMENTATION_STATUS_LABELS[detail.status] || detail.status);
   addDivider();
 
   if (mode === "andamento") {
-    addTitle("Resumo do andamento", 12);
+    addTitle("Resumo do andamento");
     addValueRow("Atividades concluídas", `${detail.progress.concluidas} de ${detail.progress.total}`);
     addValueRow("Atividades atrasadas", String(detail.progress.atrasadas));
     addValueRow("Atividades pendentes", String(detail.progress.pendentes));
@@ -105,28 +105,20 @@ function buildImplementationDoc(detail, mode) {
   }
 
   for (const stage of detail.stages) {
-    addTitle(stage.stage_name, 12.5);
+    addTitle(stage.stage_name);
     addValueRow(
       "Progresso da etapa",
-      `${stage.progress.percentual}% (${stage.progress.concluidas}/${stage.progress.total})`,
-      { size: 9.5 }
+      `${stage.progress.percentual}% (${stage.progress.concluidas}/${stage.progress.total})`
     );
     addGap(2);
     for (const activity of stage.activities) {
       ensureSpace(70);
-      addBoldLine(`${activity.activity_code}  ${activity.activity_name}`, 10);
+      addBoldLine(`${activity.activity_code}  ${activity.activity_name}`);
       const statusLabel = ACTIVITY_STATUS_LABELS[activity.display_status] || activity.display_status;
-      const statusColor = mode === "andamento"
-        ? (activity.display_status === "concluida" ? [22, 101, 52]
-          : activity.display_status === "atrasada" ? [185, 28, 28]
-            : [71, 85, 105])
-        : [71, 85, 105];
       addParagraph(
-        `Status: ${statusLabel}   |   Responsável: ${activity.responsavel || "—"}   |   Prazo: ${activity.prazo ? formatDateBR(activity.prazo) : "—"}   |   Concluído em: ${activity.data_conclusao ? formatDateTimeBR(activity.data_conclusao) : "—"}`,
-        9,
-        statusColor
+        `Status: ${statusLabel}   |   Responsável: ${activity.responsavel || "—"}   |   Prazo: ${activity.prazo ? formatDateBR(activity.prazo) : "—"}   |   Concluído em: ${activity.data_conclusao ? formatDateTimeBR(activity.data_conclusao) : "—"}`
       );
-      if (activity.observacoes) addFieldBlock("Observações", activity.observacoes, 9);
+      if (activity.observacoes) addFieldBlock("Observações", activity.observacoes);
       addGap(4);
     }
     addDivider();

@@ -6,7 +6,7 @@ import { toast } from "@/lib/notify";
 import { pricingConfigApi } from "@/api/pricingConfig";
 import { commercialProposalsApi } from "@/api/commercialProposals";
 import { toBRDecimalString } from "@/lib/brNumber";
-import { BRAND_CYAN, createPdfHelpers, drawFooterPages, slugify } from "@/lib/pdfBrand";
+import { LETTERHEAD, createPdfHelpers, drawLetterheadBackground, drawLetterheadFooterPages, slugify } from "@/lib/pdfBrand";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,7 +30,7 @@ import ProposalOutcome from "@/components/commercialProposals/ProposalOutcome.js
 import ProposalAcceptDialog from "@/components/commercialProposals/ProposalAcceptDialog";
 import ProposalRejectDialog from "@/components/commercialProposals/ProposalRejectDialog";
 import { PROPOSAL_STATUS_LABELS, isProposalClosed, isProposalClosedError } from "@/components/commercialProposals/proposalOutcome.js";
-import { Save, Loader2, Eye, Download, Search, Pencil, FilePlus2, Plus, ArrowLeft, Mail, CheckCircle2, XCircle, FileText, Lock } from "lucide-react";
+import { Save, Loader2, Eye, Download, Search, Pencil, FilePlus2, Plus, ArrowLeft, Mail, CheckCircle2, XCircle, FileText, Lock, Check, RotateCcw } from "lucide-react";
 
 const PAGAMENTO_IMPLANTACAO_OPTIONS = [
   { value: "avista", label: "À vista" },
@@ -182,6 +182,9 @@ function getDefaultFormValues() {
     wantCadastro: false,
     cadastroQty: "",
     qtdRenegociados: "",
+    cobrarImplantacao: true,
+    implantacaoManual: "",
+    implantacaoParcelas: "",
     pagamentoImplantacao: "entrada30_6x",
     pagamentoMensalidade: "boleto",
     diaVencimento: "05",
@@ -257,6 +260,13 @@ export default function CommercialProposal() {
   const [wantCadastro, setWantCadastro] = useState(() => getDefaultFormValues().wantCadastro);
   const [cadastroQty, setCadastroQty] = useState(() => getDefaultFormValues().cadastroQty);
   const [qtdRenegociados, setQtdRenegociados] = useState(() => getDefaultFormValues().qtdRenegociados);
+  // Cobrança da implantação — desmarcável (isenta) por proposta, e valor
+  // ajustável manualmente só para esta proposta (não mexe no parâmetro do
+  // plano). "" em implantacaoManual/implantacaoParcelas = usa o automático.
+  const [cobrarImplantacao, setCobrarImplantacao] = useState(() => getDefaultFormValues().cobrarImplantacao);
+  const [implantacaoManual, setImplantacaoManual] = useState(() => getDefaultFormValues().implantacaoManual);
+  const [editingImplantacao, setEditingImplantacao] = useState(false);
+  const [implantacaoParcelas, setImplantacaoParcelas] = useState(() => getDefaultFormValues().implantacaoParcelas);
   const [pagamentoImplantacao, setPagamentoImplantacao] = useState(() => getDefaultFormValues().pagamentoImplantacao);
   const [pagamentoMensalidade, setPagamentoMensalidade] = useState(() => getDefaultFormValues().pagamentoMensalidade);
   const [diaVencimento, setDiaVencimento] = useState(() => getDefaultFormValues().diaVencimento);
@@ -370,6 +380,9 @@ export default function CommercialProposal() {
       qtd_renegociados: qtdRenegociados || null,
       want_cadastro: wantCadastro,
       cadastro_qty: cadastroQty || null,
+      cobrar_implantacao: cobrarImplantacao,
+      implantacao_valor_manual: implantacaoManual !== "" ? parseBRNumber(implantacaoManual) : null,
+      implantacao_parcelas: implantacaoParcelas !== "" ? Number(implantacaoParcelas) : null,
       pagamento_implantacao: pagamentoImplantacao,
       pagamento_mensalidade: pagamentoMensalidade,
       dia_vencimento: diaVencimento,
@@ -481,7 +494,12 @@ export default function CommercialProposal() {
   const tierMeta = TIERS.find((t) => t.value === tier);
   const base = parseBRNumber(params[`${tierMeta.prefix}_mensalidade`]);
   const bloco = parseBRNumber(params[`${tierMeta.prefix}_bloco`]);
-  const implantacao = parseBRNumber(params[`${tierMeta.prefix}_implantacao`]);
+  // Valor automático do plano — nunca alterado por uma proposta individual.
+  // "implantacao" abaixo é o valor EFETIVO desta proposta: isenção e/ou
+  // edição manual só valem para ela, sem mexer no parâmetro do plano.
+  const implantacaoPlano = parseBRNumber(params[`${tierMeta.prefix}_implantacao`]);
+  const implantacaoBase = implantacaoManual !== "" ? parseBRNumber(implantacaoManual) : implantacaoPlano;
+  const implantacao = cobrarImplantacao ? implantacaoBase : 0;
   const cadastramentoValor = parseBRNumber(params.cadastramento_valor);
 
   const count = Math.max(0, Math.round(Number(contractCount) || 0));
@@ -496,6 +514,22 @@ export default function CommercialProposal() {
   const cadastramentoTotal = wantCadastro ? cadastroQtyNum * cadastramentoValor : 0;
   const firstMonth = implantacao + mensalidade + cadastramentoTotal;
   const precisaVencimento = pagamentoImplantacao !== "avista" || pagamentoMensalidade === "boleto";
+
+  // Parcelamento da implantação: só entra em jogo quando há cobrança e a
+  // forma de pagamento não é à vista. O nº de parcelas é travado no teto
+  // "até Nx" da forma escolhida (6 para entrada+saldo, 12 para parcelado) e
+  // assume esse teto quando o usuário não digita um número diferente.
+  const IMPLANTACAO_PARCELAS_TETO = { avista: 1, entrada30_6x: 6, parcelado12x: 12 };
+  const implantacaoParcelado = cobrarImplantacao && pagamentoImplantacao !== "avista";
+  const implantacaoParcelasTeto = IMPLANTACAO_PARCELAS_TETO[pagamentoImplantacao] || 1;
+  const implantacaoParcelasEfetivas = implantacaoParcelado
+    ? Math.min(Math.max(1, Math.round(Number(implantacaoParcelas) || implantacaoParcelasTeto)), implantacaoParcelasTeto)
+    : 1;
+  const implantacaoParcelaMensal = implantacaoParcelado ? implantacao / implantacaoParcelasEfetivas : 0;
+  // Quanto o cliente paga por mês enquanto a implantação ainda está sendo
+  // parcelada (mensalidade + parcela) — e depois que ela termina.
+  const valorMensalDuranteParcelas = mensalidade + implantacaoParcelaMensal;
+  const implantacaoDisplay = cobrarImplantacao ? formatCurrency(implantacao) : "Isenta";
 
   // Payload de salvamento = campos de entrada + valores comerciais já
   // calculados acima, congelados no momento do clique em "Salvar proposta"
@@ -546,6 +580,13 @@ export default function CommercialProposal() {
     setWantCadastro(Boolean(record.want_cadastro));
     setCadastroQty(record.cadastro_qty || "");
     setQtdRenegociados(record.qtd_renegociados || "");
+    // record.cobrar_implantacao vem sempre definido do banco (default true na
+    // coluna) — só cai no "?? true" pra propostas antigas carregadas antes
+    // desta migração, se por algum motivo chegarem sem o campo.
+    setCobrarImplantacao(record.cobrar_implantacao ?? true);
+    setImplantacaoManual(record.implantacao_valor_manual != null ? toBRDecimalString(record.implantacao_valor_manual) : "");
+    setEditingImplantacao(false);
+    setImplantacaoParcelas(record.implantacao_parcelas != null ? String(record.implantacao_parcelas) : "");
     setPagamentoImplantacao(record.pagamento_implantacao || "entrada30_6x");
     setPagamentoMensalidade(record.pagamento_mensalidade || "boleto");
     setDiaVencimento(record.dia_vencimento || "05");
@@ -587,6 +628,10 @@ export default function CommercialProposal() {
     setWantCadastro(d.wantCadastro);
     setCadastroQty(d.cadastroQty);
     setQtdRenegociados(d.qtdRenegociados);
+    setCobrarImplantacao(d.cobrarImplantacao);
+    setImplantacaoManual(d.implantacaoManual);
+    setEditingImplantacao(false);
+    setImplantacaoParcelas(d.implantacaoParcelas);
     setPagamentoImplantacao(d.pagamentoImplantacao);
     setPagamentoMensalidade(d.pagamentoMensalidade);
     setDiaVencimento(d.diaVencimento);
@@ -660,15 +705,20 @@ export default function CommercialProposal() {
     const doc = new jsPDF({ unit: "pt", format: "a4" });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
-    const margin = 48;
-    const footerH = 66;
-    const contentW = pageW - margin * 2;
+    const margin = LETTERHEAD.marginLeft;
+    const marginRight = LETTERHEAD.marginRight;
+    const footerH = LETTERHEAD.footerH;
+    const contentW = pageW - margin - marginRight;
     const {
       addTitle, addBoldLine, addParagraph, addFieldBlock, addDivider,
-      addValueRow, addGap, addCenteredTitle, blankLine, drawHeaderBar, getY, setY,
-    } = createPdfHelpers(doc, { margin, contentW, pageW, pageH, footerH });
+      addValueRow, addGap, addCenteredTitle, blankLine, drawLetterheadIntro, getY, setY,
+    } = createPdfHelpers(doc, {
+      margin, marginRight, topY: LETTERHEAD.topY, contentW, pageW, pageH, footerH,
+      onNewPage: () => drawLetterheadBackground(doc),
+    });
 
-    drawHeaderBar(renegCount > 0 ? "Proposta Comercial — Inclui Contratos Renegociados" : "Proposta Comercial");
+    drawLetterheadBackground(doc);
+    drawLetterheadIntro(renegCount > 0 ? "Proposta Comercial — Inclui Contratos Renegociados" : "Proposta Comercial");
     addCenteredTitle("PROPOSTA COMERCIAL E TERMO DE CONTRATAÇÃO DE SOFTWARE SaaS");
     setY(getY() + 10);
 
@@ -689,13 +739,13 @@ export default function CommercialProposal() {
     addDivider();
 
     // 1. Apresentação
-    addTitle("1. APRESENTAÇÃO", 12);
+    addTitle("1. APRESENTAÇÃO");
     addParagraph("A Clarity IB Ltda é uma empresa de tecnologia dedicada ao desenvolvimento de soluções digitais para otimização, organização e automação de processos empresariais.");
     addParagraph("Como fabricante e proprietária do software objeto desta proposta, a Clarity IB é responsável pela disponibilização da solução na modalidade SaaS (Software as a Service – Software como Serviço), conforme condições estabelecidas neste documento.");
     addDivider();
 
     // 2. Objeto da proposta
-    addTitle("2. OBJETO DA PROPOSTA", 12);
+    addTitle("2. OBJETO DA PROPOSTA");
     addFieldBlock("Objeto", objeto);
     addParagraph(`Plano contratado: ${tierMeta.label} — ${tierMeta.desc}.`);
     addParagraph("A presente proposta tem por objeto a disponibilização, pela CONTRATADA à CONTRATANTE, do direito de uso do software acima identificado, na modalidade SaaS, durante o período contratado e conforme o escopo, limites e condições estabelecidos neste documento.");
@@ -703,7 +753,7 @@ export default function CommercialProposal() {
     addDivider();
 
     // 3. Escopo do trabalho
-    addTitle("3. ESCOPO DO TRABALHO", 12);
+    addTitle("3. ESCOPO DO TRABALHO");
     addParagraph("A contratação contempla:");
     addFieldBlock("Disponibilização do sistema", escopoDisponibilizacao);
     addFieldBlock("Implantação/configuração inicial", escopoImplantacao);
@@ -715,9 +765,12 @@ export default function CommercialProposal() {
     addDivider();
 
     // 4. Valor da proposta
-    addTitle("4. VALOR DA PROPOSTA", 12);
+    addTitle("4. VALOR DA PROPOSTA");
     addParagraph("Pela disponibilização do software e execução dos serviços descritos nesta proposta, a CONTRATANTE pagará à CONTRATADA:");
-    addValueRow("Valor de implantação/configuração", formatCurrency(implantacao), { bold: true });
+    addValueRow("Valor de implantação/configuração", implantacaoDisplay, { bold: true });
+    if (implantacaoParcelado) {
+      addValueRow(`Parcelada em ${implantacaoParcelasEfetivas}x`, `${formatCurrency(implantacaoParcelaMensal)}/mês`);
+    }
     addValueRow("Mensalidade SaaS", formatCurrency(mensalidade), { bold: true });
     if (wantCadastro && cadastroQtyNum > 0) {
       addValueRow(
@@ -737,7 +790,7 @@ export default function CommercialProposal() {
     if (precisaVencimento) addValueRow("Vencimento", `Dia ${diaVencimento}`);
     addDivider();
 
-    addTitle("Detalhamento do investimento", 10.5);
+    addTitle("Detalhamento do investimento");
     if (contractCount) addValueRow("Contratos ativos", `${count} contrato(s).`);
     if (renegCount > 0) addValueRow("Contratos renegociados", `${renegCount} contrato(s).`);
     if (contractCount || renegCount > 0) addValueRow("Carteira total considerada", `${totalCount} contrato(s).`, { bold: true });
@@ -748,15 +801,24 @@ export default function CommercialProposal() {
         formatCurrency(blocks * bloco)
       );
     }
-    addValueRow("Total no 1º mês", formatCurrency(firstMonth), { bold: true, size: 12, color: BRAND_CYAN });
+    addValueRow("Total no 1º mês", formatCurrency(firstMonth), { bold: true });
     addValueRow("Recorrente a partir do 2º mês", formatCurrency(mensalidade), { bold: true });
+    if (implantacaoParcelado) {
+      addGap(2);
+      addValueRow(
+        `Valor mensal durante os primeiros ${implantacaoParcelasEfetivas} meses`,
+        formatCurrency(valorMensalDuranteParcelas),
+        { bold: true }
+      );
+      addValueRow(`A partir do ${implantacaoParcelasEfetivas + 1}º mês`, `${formatCurrency(mensalidade)}/mês`);
+    }
     addGap(4);
     addParagraph("Eventuais impostos incidentes serão tratados conforme a legislação aplicável e as condições comerciais definidas nesta proposta.");
     addDivider();
 
     // 5. Condições de execução
-    addTitle("5. CONDIÇÕES DE EXECUÇÃO", 12);
-    addTitle("5.1. Cronograma", 10.5);
+    addTitle("5. CONDIÇÕES DE EXECUÇÃO");
+    addTitle("5.1. Cronograma");
     if (cronogramaInicio) addParagraph(`O início dos trabalhos está previsto para ${formatDateBR(cronogramaInicio)}.`);
     if (cronogramaPrazo) {
       addParagraph(`O prazo estimado para implantação/disponibilização será de ${cronogramaPrazo}${cronogramaContadoA ? `, contado a partir da ${cronogramaContadoA}` : ""}.`);
@@ -764,34 +826,34 @@ export default function CommercialProposal() {
     addParagraph("O cronograma poderá ser ajustado quando houver atraso na entrega de informações, documentos, acessos, validações ou demais providências que dependam da CONTRATANTE ou de terceiros.");
     addGap(4);
 
-    addTitle("5.2. Equipe envolvida", 10.5);
+    addTitle("5.2. Equipe envolvida");
     addParagraph("Para execução do escopo, está prevista a seguinte estrutura:");
     addFieldBlock("Equipe envolvida (Clarity IB)", equipeClarityIB);
     addFieldBlock("Equipe necessária (Contratante)", equipeContratante);
     addParagraph("A CONTRATADA será responsável pela organização e alocação de sua equipe, podendo realizar substituições ou ajustes de profissionais quando necessário, desde que preservada a execução do objeto contratado.");
     addGap(4);
 
-    addTitle("5.3. Responsabilidades da CONTRATANTE", 10.5);
+    addTitle("5.3. Responsabilidades da CONTRATANTE");
     addParagraph("A CONTRATANTE deverá fornecer, dentro dos prazos acordados, as informações, acessos, documentos, validações e demais elementos necessários à implantação e funcionamento da solução.");
     addParagraph("A CONTRATANTE também será responsável pela correta utilização do sistema por seus usuários e pela veracidade das informações inseridas na plataforma.");
     addDivider();
 
     // 6. Licença e direito de uso
-    addTitle("6. LICENÇA E DIREITO DE USO", 12);
+    addTitle("6. LICENÇA E DIREITO DE USO");
     addParagraph("O software será disponibilizado exclusivamente na modalidade SaaS, mediante direito de uso durante a vigência da contratação.");
     addParagraph("Todos os direitos relativos ao software, incluindo sua estrutura, funcionalidades, código-fonte, tecnologia, documentação técnica, marca e demais elementos de propriedade intelectual permanecem de titularidade da Clarity IB Ltda, ressalvados direitos de terceiros eventualmente utilizados na solução.");
     addParagraph("A CONTRATANTE não poderá copiar, comercializar, sublicenciar, ceder, modificar, realizar engenharia reversa ou permitir acesso não autorizado ao software, salvo mediante autorização expressa da CONTRATADA ou nos limites permitidos pela legislação aplicável.");
     addDivider();
 
     // 7. Dados e confidencialidade
-    addTitle("7. DADOS E CONFIDENCIALIDADE", 12);
+    addTitle("7. DADOS E CONFIDENCIALIDADE");
     addParagraph("As partes comprometem-se a manter confidencialidade sobre informações comerciais, estratégicas, técnicas e demais informações não públicas a que tiverem acesso em razão desta contratação.");
     addParagraph("Os dados inseridos pela CONTRATANTE no sistema permanecem sob sua titularidade ou responsabilidade, conforme sua natureza.");
     addParagraph("O tratamento de dados pessoais deverá observar a legislação aplicável, especialmente a Lei Geral de Proteção de Dados Pessoais – LGPD (Lei nº 13.709/2018), cabendo às partes cumprir as responsabilidades que lhes forem aplicáveis.");
     addDivider();
 
     // 8. Vigência e cancelamento
-    addTitle("8. VIGÊNCIA E CANCELAMENTO", 12);
+    addTitle("8. VIGÊNCIA E CANCELAMENTO");
     if (vigenciaDuracao && vigenciaInicio) {
       addParagraph(`A contratação terá vigência de ${vigenciaDuracao}, iniciando-se em ${formatDateBR(vigenciaInicio)}.`);
     } else if (vigenciaDuracao) {
@@ -805,20 +867,20 @@ export default function CommercialProposal() {
     addDivider();
 
     // 9. Validade da proposta
-    addTitle("9. VALIDADE DA PROPOSTA", 12);
+    addTitle("9. VALIDADE DA PROPOSTA");
     addParagraph(`Esta proposta comercial é válida por ${validityDays || "15"} dias, contados da data de sua emissão.`);
     addParagraph("Após esse período, valores, prazos, condições comerciais e disponibilidade para execução poderão ser revistos pela CONTRATADA.");
     addDivider();
 
     // 10. Aceite e caráter contratual
-    addTitle("10. ACEITE E CARÁTER CONTRATUAL", 12);
+    addTitle("10. ACEITE E CARÁTER CONTRATUAL");
     addParagraph("A assinatura desta proposta representa a concordância integral das partes com seu conteúdo e formaliza a contratação dos serviços e do direito de uso do software nela descritos.");
     addParagraph("Após assinada pelos representantes das partes, esta proposta passa a produzir efeitos como instrumento contratual entre CLARITY IB LTDA e a CONTRATANTE, dispensando a celebração de instrumento separado para o mesmo objeto, salvo se posteriormente acordado entre as partes.");
     addParagraph("As partes reconhecem como válidas as assinaturas físicas e eletrônicas apostas neste documento, na forma permitida pela legislação aplicável.");
     addDivider();
 
     // 11. Disposições gerais
-    addTitle("11. DISPOSIÇÕES GERAIS", 12);
+    addTitle("11. DISPOSIÇÕES GERAIS");
     addParagraph("Qualquer alteração relevante de escopo, valores, prazos ou condições desta contratação deverá ser formalizada e aceita pelas partes.");
     addParagraph("A eventual tolerância de uma das partes quanto ao descumprimento de determinada obrigação não implicará renúncia ao direito de exigir seu cumprimento posteriormente.");
     addParagraph("Caso alguma disposição deste instrumento seja considerada inválida ou inexequível, as demais disposições permanecerão válidas.");
@@ -832,26 +894,24 @@ export default function CommercialProposal() {
     // Assinaturas
     const now = new Date();
     addParagraph(
-      `${assinaturaCidade ? `${assinaturaCidade}, ` : ""}${now.getDate()} de ${MONTHS_PT[now.getMonth()]} de ${now.getFullYear()}.`,
-      10,
-      [30, 41, 59]
+      `${assinaturaCidade ? `${assinaturaCidade}, ` : ""}${now.getDate()} de ${MONTHS_PT[now.getMonth()]} de ${now.getFullYear()}.`
     );
     addGap(10);
 
-    addTitle("CONTRATADA", 11);
+    addTitle("CONTRATADA");
     addParagraph(CONTRATADA_NOME);
     if (contratadaRepresentante) addParagraph(`Representante: ${contratadaRepresentante}`);
     if (contratadaCargo) addParagraph(`Cargo: ${contratadaCargo}`);
     addParagraph(`Assinatura: ${blankLine(30)}`);
     addGap(10);
 
-    addTitle("CONTRATANTE", 11);
+    addTitle("CONTRATANTE");
     if (clientName) addParagraph(clientName);
     if (contactName) addParagraph(`Representante: ${contactName}`);
     if (contratanteCargo) addParagraph(`Cargo: ${contratanteCargo}`);
     addParagraph(`Assinatura: ${blankLine(30)}`);
 
-    drawFooterPages(doc, { margin, pageW, pageH, footerH });
+    drawLetterheadFooterPages(doc, { pageW });
     clientSlugRef.current = slugify(clientName);
     return doc;
   };
@@ -863,13 +923,18 @@ export default function CommercialProposal() {
     const doc = new jsPDF({ unit: "pt", format: "a4" });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
-    const margin = 48;
-    const footerH = 66;
-    const contentW = pageW - margin * 2;
-    const { addTitle, addParagraph, addFieldBlock, addDivider, addValueRow, drawHeaderBar } =
-      createPdfHelpers(doc, { margin, contentW, pageW, pageH, footerH });
+    const margin = LETTERHEAD.marginLeft;
+    const marginRight = LETTERHEAD.marginRight;
+    const footerH = LETTERHEAD.footerH;
+    const contentW = pageW - margin - marginRight;
+    const { addTitle, addParagraph, addFieldBlock, addDivider, addValueRow, addGap, drawLetterheadIntro } =
+      createPdfHelpers(doc, {
+        margin, marginRight, topY: LETTERHEAD.topY, contentW, pageW, pageH, footerH,
+        onNewPage: () => drawLetterheadBackground(doc),
+      });
 
-    drawHeaderBar(renegCount > 0 ? "Proposta Comercial — Inclui Contratos Renegociados" : "Proposta Comercial");
+    drawLetterheadBackground(doc);
+    drawLetterheadIntro(renegCount > 0 ? "Proposta Comercial — Inclui Contratos Renegociados" : "Proposta Comercial");
 
     addTitle("Dados do cliente");
     if (clientName) addParagraph(`Cliente: ${clientName}`);
@@ -884,15 +949,16 @@ export default function CommercialProposal() {
     if (contractCount) addParagraph(`Carteira estimada: ${count} contrato(s) ativo(s).`);
     if (renegCount > 0) {
       addParagraph(
-        `+ ${renegCount} contrato(s) renegociado(s) — carteira total considerada: ${totalCount} contrato(s).`,
-        10,
-        [180, 83, 9]
+        `+ ${renegCount} contrato(s) renegociado(s) — carteira total considerada: ${totalCount} contrato(s).`
       );
     }
     addDivider();
 
     addTitle("Investimento");
-    addValueRow("Implantação (única)", formatCurrency(implantacao), { bold: true });
+    addValueRow("Implantação (única)", implantacaoDisplay, { bold: true });
+    if (implantacaoParcelado) {
+      addValueRow(`Parcelada em ${implantacaoParcelasEfetivas}x`, `${formatCurrency(implantacaoParcelaMensal)}/mês`);
+    }
     addValueRow("Mensalidade base (até 10 contratos)", formatCurrency(base));
     if (blocks > 0) {
       addValueRow(
@@ -909,11 +975,20 @@ export default function CommercialProposal() {
     }
     if (String(outrosValores || "").trim()) addFieldBlock("Outros valores", outrosValores);
     addDivider();
-    addValueRow("Total no 1º mês", formatCurrency(firstMonth), { bold: true, size: 13, color: BRAND_CYAN });
+    addValueRow("Total no 1º mês", formatCurrency(firstMonth), { bold: true });
     addValueRow("Recorrente a partir do 2º mês", formatCurrency(mensalidade), { bold: true });
+    if (implantacaoParcelado) {
+      addGap(2);
+      addValueRow(
+        `Valor mensal durante os primeiros ${implantacaoParcelasEfetivas} meses`,
+        formatCurrency(valorMensalDuranteParcelas),
+        { bold: true }
+      );
+      addValueRow(`A partir do ${implantacaoParcelasEfetivas + 1}º mês`, `${formatCurrency(mensalidade)}/mês`);
+    }
     addDivider();
 
-    addTitle("Forma de pagamento", 12);
+    addTitle("Forma de pagamento");
     addValueRow(
       "Implantação",
       PAGAMENTO_IMPLANTACAO_OPTIONS.find((o) => o.value === pagamentoImplantacao)?.label || "—"
@@ -924,7 +999,7 @@ export default function CommercialProposal() {
     );
     if (precisaVencimento) addValueRow("Vencimento", `Dia ${diaVencimento}`);
 
-    drawFooterPages(doc, { margin, pageW, pageH, footerH });
+    drawLetterheadFooterPages(doc, { pageW });
     quickClientSlugRef.current = slugify(clientName);
     return doc;
   };
@@ -1309,7 +1384,14 @@ export default function CommercialProposal() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <div className="text-xs text-slate-500">Implantação</div>
-                    <div className="font-medium">{formatCurrency(viewedProposal.valor_implantacao)}</div>
+                    <div className="font-medium">
+                      {viewedProposal.cobrar_implantacao === false ? "Isenta" : formatCurrency(viewedProposal.valor_implantacao)}
+                    </div>
+                    {viewedProposal.cobrar_implantacao !== false && viewedProposal.implantacao_parcelas > 1 && (
+                      <div className="text-xs text-slate-500">
+                        Parcelada em {viewedProposal.implantacao_parcelas}x de {formatCurrency(Number(viewedProposal.valor_implantacao) / viewedProposal.implantacao_parcelas)}/mês
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div className="text-xs text-slate-500">Mensalidade</div>
@@ -1323,6 +1405,17 @@ export default function CommercialProposal() {
                     <div className="text-xs text-slate-500">Total no 1º mês</div>
                     <div className="font-semibold text-cyan-700">{formatCurrency(viewedProposal.valor_total_primeiro_mes)}</div>
                   </div>
+                  {viewedProposal.cobrar_implantacao !== false && viewedProposal.implantacao_parcelas > 1 && (
+                    <div className="col-span-2">
+                      <div className="text-xs text-slate-500">
+                        Valor mensal durante os primeiros {viewedProposal.implantacao_parcelas} meses
+                      </div>
+                      <div className="font-semibold text-cyan-700">
+                        {formatCurrency(Number(viewedProposal.valor_mensalidade) + Number(viewedProposal.valor_implantacao) / viewedProposal.implantacao_parcelas)}
+                        <span className="text-xs font-normal text-slate-500"> · a partir do {Number(viewedProposal.implantacao_parcelas) + 1}º mês: {formatCurrency(viewedProposal.valor_mensalidade)}/mês</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="h-px bg-slate-200" />
                 <div>
@@ -1509,6 +1602,14 @@ export default function CommercialProposal() {
               />
             </div>
 
+            <div className="flex items-center gap-3">
+              <Checkbox id="cobrar-implantacao" checked={cobrarImplantacao} onCheckedChange={(v) => setCobrarImplantacao(Boolean(v))} />
+              <Label htmlFor="cobrar-implantacao" className="text-sm font-normal text-slate-700">Cobrar implantação</Label>
+              {!cobrarImplantacao && (
+                <span className="text-xs text-amber-700">Desmarcado: implantação sai como Isenta (R$ 0,00) e não entra no total.</span>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs text-slate-500">Pagamento da implantação</Label>
@@ -1539,6 +1640,21 @@ export default function CommercialProposal() {
                   </Select>
                 </div>
               )}
+              {implantacaoParcelado && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-slate-500">Nº de parcelas da implantação</Label>
+                  <Input
+                    className="h-8 text-sm"
+                    type="number"
+                    min="1"
+                    max={implantacaoParcelasTeto}
+                    disabled={isFormClosed}
+                    value={implantacaoParcelas}
+                    onChange={(e) => setImplantacaoParcelas(e.target.value)}
+                    placeholder={String(implantacaoParcelasTeto)}
+                  />
+                </div>
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-slate-500">Outros valores (opcional)</Label>
@@ -1556,13 +1672,61 @@ export default function CommercialProposal() {
               <div className="flex justify-between pl-3 text-xs"><span className="text-slate-500">+ {blocks} bloco(s) de 20 × {formatCurrency(bloco)}</span><span className="font-medium">{formatCurrency(blocks * bloco)}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Mensalidade recorrente</span><span className="font-semibold">{formatCurrency(mensalidade)}</span></div>
               <div className="h-px bg-slate-200 my-1.5" />
-              <div className="flex justify-between"><span className="text-slate-500">Implantação (única)</span><span className="font-medium">{formatCurrency(implantacao)}</span></div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Implantação (única)</span>
+                {editingImplantacao ? (
+                  <div className="flex items-center gap-1">
+                    <CurrencyInput
+                      autoFocus
+                      className="h-6 w-28 text-xs text-right"
+                      value={implantacaoManual !== "" ? implantacaoManual : toBRDecimalString(implantacaoBase)}
+                      onChange={(e) => setImplantacaoManual(e.target.value)}
+                      placeholder="0,00"
+                    />
+                    <button type="button" className="text-emerald-600 hover:text-emerald-700" title="Confirmar" onClick={() => setEditingImplantacao(false)}>
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    {implantacaoManual !== "" && (
+                      <button
+                        type="button"
+                        className="text-slate-400 hover:text-slate-600"
+                        title="Voltar ao valor automático do plano"
+                        onClick={() => { setImplantacaoManual(""); setEditingImplantacao(false); }}
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <span className="font-medium inline-flex items-center gap-1.5">
+                    {implantacaoDisplay}
+                    {!isFormClosed && (
+                      <button type="button" className="text-slate-400 hover:text-slate-600" title="Alterar valor só nesta proposta" onClick={() => setEditingImplantacao(true)}>
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    )}
+                  </span>
+                )}
+              </div>
+              {implantacaoParcelado && (
+                <div className="flex justify-between pl-3 text-xs"><span className="text-slate-500">Parcelada em {implantacaoParcelasEfetivas}x</span><span className="font-medium">{formatCurrency(implantacaoParcelaMensal)}/mês</span></div>
+              )}
               {wantCadastro && (
                 <div className="flex justify-between"><span className="text-slate-500">Cadastramento ({cadastroQtyNum} × {formatCurrency(cadastramentoValor)})</span><span className="font-medium">{formatCurrency(cadastramentoTotal)}</span></div>
               )}
               <div className="h-px bg-slate-200 my-1.5" />
               <div className="flex justify-between text-base"><span className="font-semibold">Total no 1º mês</span><span className="font-bold text-cyan-700">{formatCurrency(firstMonth)}</span></div>
               <div className="flex justify-between text-xs"><span className="text-slate-500">Recorrente a partir do 2º mês</span><span className="font-medium">{formatCurrency(mensalidade)}</span></div>
+              {implantacaoParcelado && (
+                <>
+                  <div className="h-px bg-slate-200 my-1.5" />
+                  <div className="flex justify-between text-sm">
+                    <span className="font-semibold">Valor mensal durante os primeiros {implantacaoParcelasEfetivas} meses</span>
+                    <span className="font-bold text-cyan-700">{formatCurrency(valorMensalDuranteParcelas)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs"><span className="text-slate-500">A partir do {implantacaoParcelasEfetivas + 1}º mês</span><span className="font-medium">{formatCurrency(mensalidade)}/mês</span></div>
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-2 mt-auto">
