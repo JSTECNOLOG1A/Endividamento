@@ -13,8 +13,76 @@ import { pool } from "../../db/pool.js";
 import { groupIdOrThrow } from "../tenants/access.js";
 import { computeContractPositionAsOf, isLastDayOfMonthIso } from "./deploymentPosition.js";
 import { loadDataBasePtax } from "./balanceDeployment.js";
+import { OPERATION_CATEGORY_LABELS } from "./closingEngine.js";
 
 const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
+function isoDateOnly(value) {
+  if (!value) return "";
+  if (value instanceof Date) {
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
+    return `${value.getFullYear()}-${m}-${d}`;
+  }
+  return String(value).slice(0, 10);
+}
+
+// CET só existe dentro do schedule_data (não é coluna) — cada contrato o calcula uma vez, na aprovação.
+function parseCet(contract) {
+  try {
+    const parsed = typeof contract.schedule_data === "string" ? JSON.parse(contract.schedule_data) : contract.schedule_data;
+    const v = Number(parsed?.cet);
+    return Number.isFinite(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+// Acumula um contrato nos 3 níveis da árvore de CET (banco → categoria → tipo), ponderado pelo saldo
+// devedor atual na data-base (mesma régua do resto do Dashboard — não é média simples nem pelo valor
+// original contratado, porque um contrato quase liquidado não deveria pesar como um recém-liberado).
+function addToCetTree(tree, bankKey, bankLabel, category, categoryLabel, type, weight, cet, contractRef) {
+  if (cet == null || !(weight > 0)) return;
+  if (!tree.has(bankKey)) tree.set(bankKey, { label: bankLabel, weight: 0, weightedSum: 0, categorias: new Map() });
+  const bank = tree.get(bankKey);
+  bank.weight += weight; bank.weightedSum += weight * cet;
+
+  if (!bank.categorias.has(category)) bank.categorias.set(category, { label: categoryLabel, category, weight: 0, weightedSum: 0, tipos: new Map() });
+  const cat = bank.categorias.get(category);
+  cat.weight += weight; cat.weightedSum += weight * cet;
+
+  if (!cat.tipos.has(type)) cat.tipos.set(type, { label: type, type, weight: 0, weightedSum: 0, contracts: [] });
+  const tp = cat.tipos.get(type);
+  tp.weight += weight; tp.weightedSum += weight * cet;
+  tp.contracts.push({ ...contractRef, cetPercent: r2(cet) });
+}
+
+function finalizeCetTree(tree) {
+  return [...tree.values()]
+    .map((bank) => ({
+      label: bank.label,
+      cetPercent: bank.weight > 0 ? r2(bank.weightedSum / bank.weight) : null,
+      saldoBase: r2(bank.weight),
+      categorias: [...bank.categorias.values()]
+        .map((cat) => ({
+          label: cat.label,
+          category: cat.category,
+          cetPercent: cat.weight > 0 ? r2(cat.weightedSum / cat.weight) : null,
+          saldoBase: r2(cat.weight),
+          tipos: [...cat.tipos.values()]
+            .map((tp) => ({
+              label: tp.label,
+              type: tp.type,
+              cetPercent: tp.weight > 0 ? r2(tp.weightedSum / tp.weight) : null,
+              saldoBase: r2(tp.weight),
+              contracts: tp.contracts.sort((a, b) => b.total - a.total),
+            }))
+            .sort((a, b) => b.saldoBase - a.saldoBase),
+        }))
+        .sort((a, b) => b.saldoBase - a.saldoBase),
+    }))
+    .sort((a, b) => b.saldoBase - a.saldoBase);
+}
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -66,7 +134,10 @@ export async function getDashboardSummary(payload = {}) {
   }
 
   const contracts = (await pool.query(
-    `SELECT c.*, b.bank_name FROM loan_contracts c LEFT JOIN banks b ON b.id = c.bank_id
+    `SELECT c.*, b.bank_name, cur.currency_code
+       FROM loan_contracts c
+       LEFT JOIN banks b ON b.id = c.bank_id
+       LEFT JOIN currencies cur ON cur.id = c.currency_id
       WHERE c.group_id = $1 AND c.entity_id = ANY($2::text[]) AND c.status = 'aprovado'
       ORDER BY c.operation_date`,
     [groupId, usable.map((e) => e.id)]
@@ -87,6 +158,10 @@ export async function getDashboardSummary(payload = {}) {
   let exposicaoCambial = 0;
   const porBanco = new Map(); // bank_id -> {label, total}
   const porGarantia = new Map(); // "real|pessoal" -> {realType, personalType, total}
+  const cetTree = new Map(); // banco -> categoria -> tipo, ponderado pelo saldo atual
+  const volumePorBanco = new Map(); // volume CONTRATADO (valor original), não saldo atual
+  const volumePorMoeda = new Map();
+  const volumePorCategoria = new Map(); // categoria -> tipos
   const warnings = [];
   const skippedContracts = [];
 
@@ -128,6 +203,33 @@ export async function getDashboardSummary(payload = {}) {
     porGarantia.get(garKey).total += total;
     porGarantia.get(garKey).contracts.push(contractRef);
 
+    // CET escalonado: ponderado pelo saldo atual (= `total` desta mesma posição), não pelo valor contratado.
+    const categoryLabel = OPERATION_CATEGORY_LABELS[contract.operation_category] || contract.operation_category || "Outros";
+    addToCetTree(cetTree, bankKey, bankLabel, contract.operation_category || "outros", categoryLabel, contract.operation_type || "outros", total, parseCet(contract), contractRef);
+
+    // Volume CONTRATADO (bancos/moeda/categoria×tipo mais tomados): valor ORIGINAL da operação, só dos
+    // contratos já existentes nesta data-base (operação posterior a ela não "aconteceu" ainda do ponto de
+    // vista da data escolhida) — diferente do saldo atual usado nos outros gráficos.
+    if (isoDateOnly(contract.operation_date) <= dataBase) {
+      const volume = Number(contract.operation_value) || 0;
+
+      if (!volumePorBanco.has(bankKey)) volumePorBanco.set(bankKey, { label: bankLabel, total: 0 });
+      volumePorBanco.get(bankKey).total += volume;
+
+      const moedaKey = contract.currency_code || "BRL";
+      if (!volumePorMoeda.has(moedaKey)) volumePorMoeda.set(moedaKey, { label: moedaKey, total: 0 });
+      volumePorMoeda.get(moedaKey).total += volume;
+
+      if (!volumePorCategoria.has(contract.operation_category)) {
+        volumePorCategoria.set(contract.operation_category, { label: categoryLabel, category: contract.operation_category, total: 0, tipos: new Map() });
+      }
+      const catBucket = volumePorCategoria.get(contract.operation_category);
+      catBucket.total += volume;
+      const typeKey = contract.operation_type || "outros";
+      if (!catBucket.tipos.has(typeKey)) catBucket.tipos.set(typeKey, { label: typeKey, type: typeKey, total: 0 });
+      catBucket.tipos.get(typeKey).total += volume;
+    }
+
     // Vencimentos futuros (30/90/180 dias a partir da data-base): parcelas do cronograma além da
     // data-base, ainda não cobertas pela posição acima (que só olha até a data-base).
     const schedule = parseSchedule(contract);
@@ -157,6 +259,19 @@ export async function getDashboardSummary(payload = {}) {
       exposicaoCambial: { valor: r2(exposicaoCambial), percentual: saldoTotal > 0 ? r2((exposicaoCambial / saldoTotal) * 100) : 0 },
       concentracaoPorBanco: [...porBanco.values()].map((b) => ({ label: b.label, total: r2(b.total), contracts: b.contracts.sort((a, c) => c.total - a.total) })).sort((a, b) => b.total - a.total),
       garantias: [...porGarantia.values()].map((g) => ({ ...g, total: r2(g.total), contracts: g.contracts.sort((a, c) => c.total - a.total) })).sort((a, b) => b.total - a.total),
+      cetPorBanco: finalizeCetTree(cetTree),
+      volumeContratado: {
+        porBanco: [...volumePorBanco.values()].map((b) => ({ label: b.label, total: r2(b.total) })).sort((a, b) => b.total - a.total),
+        porMoeda: [...volumePorMoeda.values()].map((m) => ({ label: m.label, total: r2(m.total) })).sort((a, b) => b.total - a.total),
+        porCategoria: [...volumePorCategoria.values()]
+          .map((c) => ({
+            label: c.label,
+            category: c.category,
+            total: r2(c.total),
+            tipos: [...c.tipos.values()].map((t) => ({ label: t.label, type: t.type, total: r2(t.total) })).sort((a, b) => b.total - a.total),
+          }))
+          .sort((a, b) => b.total - a.total),
+      },
     },
   };
 }
