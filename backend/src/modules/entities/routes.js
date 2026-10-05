@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as store from "./store.js";
 import { writeAudit } from "../../middleware/audit.js";
+import { registroFrom } from "../audit/format.js";
 import { requireCanWrite, requireModule } from "../../middleware/rbac.js";
 
 export const entitiesRouter = Router();
@@ -17,6 +18,12 @@ entitiesRouter.use("/:name", (req, res, next) => {
   if (!moduleKey) return next();
   return requireModule(moduleKey)(req, res, next);
 });
+
+// Como a inclusão em lote aparece na auditoria ("12 parcelas" em vez de "12 registros").
+const BULK_NOUN = {
+  TaxAgreement: "parcelamentos",
+  TaxInstallment: "parcelas",
+};
 
 function actor(req) {
   return req.user?.email || "system";
@@ -47,7 +54,7 @@ entitiesRouter.post("/:name/bulk", requireCanWrite, async (req, res, next) => {
       req,
       action: "BULK_CREATE",
       resourceType: req.params.name,
-      registro: `${created.length} registros`,
+      registro: `${created.length} ${BULK_NOUN[req.params.name] || "registros"}`,
       after: { count: created.length, ids: created.slice(0, 50).map((row) => row.id) },
       payload: { count: created.length },
     });
@@ -120,12 +127,21 @@ entitiesRouter.put("/:name/:id", requireCanWrite, async (req, res, next) => {
 entitiesRouter.delete("/:name/:id", requireCanWrite, async (req, res, next) => {
   try {
     const removed = await store.remove(req.params.name, req.params.id);
+    // Excluir um parcelamento leva junto as parcelas (cascata do banco): a auditoria diz quantas saíram.
+    const { parcelas_excluidas: cascadedInstallments, ...before } = removed;
+    const cascaded = Number.isInteger(cascadedInstallments);
     await writeAudit({
       req,
       action: "DELETE",
       resourceType: req.params.name,
       resourceId: req.params.id,
-      before: removed,
+      before: cascaded ? before : removed,
+      ...(cascaded
+        ? {
+          registro: `${registroFrom(req.params.name, before, req.params.id)} (com ${cascadedInstallments} ${cascadedInstallments === 1 ? "parcela" : "parcelas"})`,
+          payload: { parcelas_excluidas: cascadedInstallments },
+        }
+        : {}),
     });
     res.json(removed);
   } catch (error) {

@@ -11,6 +11,8 @@
     "test:closing": "node src/modules/accounting/closing.test.js",
     "test:deployment": "node src/modules/accounting/deploymentPosition.test.js",
     "test:isolation": "node src/modules/tenants/isolation.test.js",
+    "test:tax": "node src/modules/tax/tax.test.js",
+    "test:tax-signal": "node ../src/lib/taxSignal.test.mjs",
     "test:secrets": "node src/config/validateSecrets.test.js",
     "test:p0": "node src/modules/security/p0.test.js",
     "test:parameters": "node src/modules/parameters/parameters.test.js",

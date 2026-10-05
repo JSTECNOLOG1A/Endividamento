@@ -1,0 +1,310 @@
+import React, { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { AlertTriangle, ArrowLeft, BadgeCheck, CalendarCheck, CalendarPlus, Pencil, Plus, Trash2, Wallet } from "lucide-react";
+import { base44 } from "@/api/base44Client";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/lib/notify";
+import { formatCivilDate } from "@/lib/taxDates";
+import { AGREEMENT_STATUS_LABELS, SPHERE_LABELS, formatMoney } from "@/lib/taxLabels";
+import { useAgreementInstallments, useInvalidateTax } from "@/hooks/useTaxData";
+import { TaxErrorState } from "./TaxPageShell";
+import { InstallmentStatusBadge, ProvenanceNote, TaxSignalBadge } from "./TaxBadges";
+import { NextInstallmentCell, SaldoCell } from "./TaxAgreementList";
+import TaxInstallmentFormDialog from "./TaxInstallmentFormDialog";
+import TaxPaymentDialog from "./TaxPaymentDialog";
+import TaxScheduleDialog from "./TaxScheduleDialog";
+import TaxConfirmDialog from "./TaxConfirmDialog";
+
+function Info({ label, children }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className="mt-0.5 break-words text-sm text-slate-800">{children || <span className="text-slate-400">—</span>}</dd>
+    </div>
+  );
+}
+
+function countBy(installments, today) {
+  const counts = { em_aberto: 0, vencidas: 0, aguardando: 0, reconhecidas: 0 };
+  for (const item of installments) {
+    if (item.situacao === "em_aberto") {
+      counts.em_aberto += 1;
+      if (item.vencimento < today) counts.vencidas += 1;
+    }
+    if (item.situacao === "paga_aguardando_reconhecimento") counts.aguardando += 1;
+    if (item.situacao === "reconhecida") counts.reconhecidas += 1;
+  }
+  return counts;
+}
+
+export default function TaxAgreementDetail({ row, actions, onBack }) {
+  const { agreement, entityName } = row;
+  const { installments, isLoading: installmentsLoading, error: installmentsError, refetch: refetchInstallments } =
+    useAgreementInstallments(agreement.id);
+  const installmentsReady = !installmentsLoading && !installmentsError;
+  const { canWrite, portalName, today } = actions;
+  const invalidateTax = useInvalidateTax();
+
+  const [installmentForm, setInstallmentForm] = useState({ open: false, installment: null });
+  const [payingInstallment, setPayingInstallment] = useState(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [deletingInstallment, setDeletingInstallment] = useState(null);
+
+  const recognizeMutation = useMutation({
+    mutationFn: (installment) => base44.entities.TaxInstallment.update(installment.id, { situacao: "reconhecida" }),
+    onSuccess: async () => {
+      toast.success("Parcela marcada como reconhecida");
+      await invalidateTax();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteInstallmentMutation = useMutation({
+    mutationFn: (installment) => base44.entities.TaxInstallment.delete(installment.id),
+    onSuccess: async () => {
+      toast.success("Parcela excluída");
+      setDeletingInstallment(null);
+      await invalidateTax();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const counts = countBy(installments, today);
+  const confirmedToday = agreement.ultima_conferencia === today;
+  const quantity = agreement.qtd_parcelas;
+
+  return (
+    <div className="space-y-4">
+      <Button type="button" variant="ghost" size="sm" className="-ml-2 gap-1.5 text-slate-600" onClick={onBack}>
+        <ArrowLeft className="h-4 w-4" />
+        Voltar para a lista
+      </Button>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-500">
+              Parcelamento {SPHERE_LABELS[agreement.esfera]?.toLowerCase()} · {agreement.orgao}
+              {agreement.uf ? ` · ${agreement.uf}` : ""}
+            </p>
+            <h2 className="mt-0.5 break-words text-lg font-bold text-slate-900">nº {agreement.codigo_parcelamento}</h2>
+            <p className="text-sm text-slate-600">{entityName}</p>
+          </div>
+          <TaxSignalBadge signal={row.signal} recordsSignal={row.recordsSignal} situacao={agreement.situacao} />
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
+          <ProvenanceNote origem={agreement.origem_dado} ultimaConferencia={agreement.ultima_conferencia} className="text-xs" />
+          {canWrite ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="ml-auto h-8 gap-1.5 bg-white"
+              disabled={confirmedToday || actions.confirmingId === agreement.id}
+              onClick={() => actions.onConfirmToday(row)}
+            >
+              <CalendarCheck className="h-4 w-4" />
+              {confirmedToday ? `Conferido hoje no ${portalName}` : `Conferi hoje no ${portalName}`}
+            </Button>
+          ) : null}
+        </div>
+
+        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 lg:grid-cols-4">
+          <Info label="Modalidade">{agreement.modalidade}</Info>
+          <Info label="Tributo">{agreement.tributo}</Info>
+          <Info label="Situação do acordo">{AGREEMENT_STATUS_LABELS[agreement.situacao]}</Info>
+          <Info label="Data de adesão">{formatCivilDate(agreement.data_adesao)}</Info>
+          <Info label="Quantidade de parcelas">{quantity ? String(quantity) : null}</Info>
+          <Info label="Saldo informado"><SaldoCell agreement={agreement} /></Info>
+          <Info label="Próxima parcela"><NextInstallmentCell installment={row.nextInstallment} today={today} /></Info>
+        </dl>
+        {agreement.observacoes ? (
+          <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-600">{agreement.observacoes}</p>
+        ) : null}
+
+        {canWrite ? (
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => actions.onEdit(row)}>
+              <Pencil className="h-4 w-4" />
+              Editar parcelamento
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-rose-600 hover:text-rose-700"
+              onClick={() => actions.onDelete(row)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Excluir parcelamento
+            </Button>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Parcelas</h3>
+            {installmentsReady ? (
+              <p className="text-xs text-slate-500">
+                {installments.length} {installments.length === 1 ? "cadastrada" : "cadastradas"}
+                {quantity ? ` de ${quantity} combinadas` : ""} · {counts.em_aberto} em aberto
+                {counts.vencidas ? ` (${counts.vencidas} vencidas)` : ""} · {counts.aguardando} aguardando reconhecimento ·{" "}
+                {counts.reconhecidas} reconhecidas
+              </p>
+            ) : null}
+            <ProvenanceNote origem={agreement.origem_dado} ultimaConferencia={agreement.ultima_conferencia} className="mt-1" />
+          </div>
+          {canWrite ? (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={!installmentsReady} onClick={() => setScheduleOpen(true)}>
+                <CalendarPlus className="h-4 w-4" />
+                Gerar parcelas
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1.5"
+                disabled={!installmentsReady}
+                onClick={() => setInstallmentForm({ open: true, installment: null })}
+              >
+                <Plus className="h-4 w-4" />
+                Nova parcela
+              </Button>
+            </div>
+          ) : null}
+        </div>
+
+        {installmentsLoading ? (
+          <p className="p-6 text-center text-xs text-slate-500">Carregando parcelas…</p>
+        ) : installmentsError ? (
+          <div className="p-4">
+            <TaxErrorState title="Não foi possível carregar as parcelas" message={installmentsError.message} onRetry={refetchInstallments} />
+          </div>
+        ) : installments.length === 0 ? (
+          <p className="p-6 text-center text-xs text-slate-500">
+            Nenhuma parcela cadastrada.{" "}
+            {canWrite ? "Use “Gerar parcelas” para criar todas de uma vez a partir do 1º vencimento, ou inclua uma a uma." : ""}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-xs">
+              <thead className="border-b-2 border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">Nº</th>
+                  <th className="px-3 py-2 font-semibold">Vencimento</th>
+                  <th className="px-3 py-2 text-right font-semibold">Valor</th>
+                  <th className="px-3 py-2 font-semibold">Situação</th>
+                  <th className="px-3 py-2 font-semibold">Pagamento</th>
+                  {canWrite ? <th className="px-3 py-2"><span className="sr-only">Ações</span></th> : null}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {installments.map((item) => {
+                  const overdue = item.situacao === "em_aberto" && item.vencimento < today;
+                  const exceeds = Boolean(quantity) && item.numero_parcela > quantity;
+                  return (
+                    <tr key={item.id} className="align-middle">
+                      <td className="px-3 py-2 tabular-nums font-medium text-slate-900">
+                        <span className="inline-flex items-center gap-1">
+                          {item.numero_parcela}
+                          {exceeds ? (
+                            <span title={`Passa da quantidade de parcelas do acordo (${quantity})`}>
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+                              <span className="sr-only">Passa da quantidade de parcelas do acordo ({quantity})</span>
+                            </span>
+                          ) : null}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 tabular-nums text-slate-700">{formatCivilDate(item.vencimento)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-800">{formatMoney(item.valor)}</td>
+                      <td className="px-3 py-2"><InstallmentStatusBadge situacao={item.situacao} overdue={overdue} /></td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {item.data_pagamento ? (
+                          <>
+                            {formatCivilDate(item.data_pagamento)}
+                            {item.valor_pago !== null && item.valor_pago !== undefined ? ` · ${formatMoney(item.valor_pago)}` : ""}
+                          </>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      {canWrite ? (
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-end gap-1">
+                            {item.situacao === "em_aberto" ? (
+                              <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => setPayingInstallment(item)}>
+                                <Wallet className="h-3.5 w-3.5" />
+                                Marcar como paga
+                              </Button>
+                            ) : null}
+                            {item.situacao === "paga_aguardando_reconhecimento" ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1 px-2 text-xs"
+                                disabled={recognizeMutation.isPending && recognizeMutation.variables?.id === item.id}
+                                onClick={() => recognizeMutation.mutate(item)}
+                              >
+                                <BadgeCheck className="h-3.5 w-3.5" />
+                                Marcar como reconhecida
+                              </Button>
+                            ) : null}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              title="Editar parcela"
+                              aria-label={`Editar parcela ${item.numero_parcela}`}
+                              onClick={() => setInstallmentForm({ open: true, installment: item })}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-rose-600 hover:text-rose-700"
+                              title="Excluir parcela"
+                              aria-label={`Excluir parcela ${item.numero_parcela}`}
+                              onClick={() => setDeletingInstallment(item)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <TaxInstallmentFormDialog
+        open={installmentForm.open}
+        onOpenChange={(open) => setInstallmentForm((current) => ({ ...current, open }))}
+        agreement={agreement}
+        installment={installmentForm.installment}
+        installments={installments}
+      />
+      <TaxPaymentDialog installment={payingInstallment} onOpenChange={(open) => { if (!open) setPayingInstallment(null); }} />
+      <TaxScheduleDialog open={scheduleOpen} onOpenChange={setScheduleOpen} agreement={agreement} installments={installments} />
+      <TaxConfirmDialog
+        open={Boolean(deletingInstallment)}
+        title={`Excluir a parcela ${deletingInstallment?.numero_parcela ?? ""}?`}
+        description={`Vencimento ${formatCivilDate(deletingInstallment?.vencimento)} · ${formatMoney(deletingInstallment?.valor)}. Essa ação não pode ser desfeita.`}
+        confirmLabel="Excluir parcela"
+        busy={deleteInstallmentMutation.isPending}
+        onConfirm={() => deleteInstallmentMutation.mutate(deletingInstallment)}
+        onCancel={() => setDeletingInstallment(null)}
+      />
+    </div>
+  );
+}

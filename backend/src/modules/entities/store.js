@@ -26,6 +26,7 @@ import {
   stampGroupId,
   tenantClause,
 } from "../tenants/scope.js";
+import { TAX_ENTITIES, TAX_FIELD_LABELS, TAX_NOT_FOUND, deleteAgreementWithInstallments, prepareTaxWrite } from "../tax/rules.js";
 
 export const CONTRACT_WORKFLOW_FIELDS = [
   "status",
@@ -56,23 +57,14 @@ function mapDbError(error) {
   }
   if (error?.code === "23503") {
     const constraint = String(error.constraint || "");
-    if (constraint.includes("payable_titles_entity")) {
-      return httpError(409, "Não é possível excluir a entidade enquanto houver títulos a pagar vinculados");
-    }
-    if (constraint.includes("payable_titles_contract")) {
-      return httpError(409, "Não é possível excluir o contrato enquanto houver títulos a pagar vinculados");
+    if (constraint.includes("tax_installments_agreement")) {
+      return httpError(400, "O parcelamento desta parcela não existe mais");
     }
     if (constraint.includes("group")) {
       return httpError(400, "O grupo econômico informado não existe");
     }
     if (constraint.includes("entity")) {
       return httpError(400, "A entidade informada não existe");
-    }
-    if (constraint.includes("bank_accounts_bank")) {
-      return httpError(409, "Não é possível excluir o banco enquanto houver contas vinculadas");
-    }
-    if (constraint.includes("bank_accounts_entity")) {
-      return httpError(409, "Não é possível excluir a entidade enquanto houver contas bancárias vinculadas");
     }
     if (constraint.includes("bank_id") || constraint.includes("banks")) {
       return httpError(400, "O banco informado não existe");
@@ -84,6 +76,12 @@ function mapDbError(error) {
   }
   if (error?.code === "23505") {
     const constraint = String(error.constraint || "");
+    if (constraint === "tax_agreements_code_norm_uidx") {
+      return httpError(409, "Já existe um parcelamento com esse número para esta empresa, órgão e modalidade");
+    }
+    if (constraint === "tax_installments_number_uidx") {
+      return httpError(409, "Já existe uma parcela com esse número neste parcelamento");
+    }
     if (constraint.includes("codigo_empresa") || constraint.includes("empresa_filial")) {
       return httpError(409, "Já existe uma entidade com essa empresa e filial Protheus neste grupo");
     }
@@ -101,8 +99,98 @@ function mapDbError(error) {
     }
     return httpError(409, "Já existe um registro com esses dados");
   }
+  if (error?.code === "23514") {
+    const label = dbFieldLabel(error);
+    return httpError(400, label ? `O campo ${label} tem um valor que não é permitido` : "Um dos campos tem um valor que não é permitido");
+  }
+  // Classe 22 = dado com formato inválido para a coluna (data inexistente, número em campo de número...).
+  if (typeof error?.code === "string" && error.code.startsWith("22")) {
+    const label = dbFieldLabel(error);
+    return httpError(400, label ? `O campo ${label} tem um valor inválido` : "Um dos campos tem um valor inválido");
+  }
   return error;
 }
+
+// Nome legível da coluna que o Postgres apontou: `column` quando vem, senão o nome do CHECK no padrão
+// `<tabela>_<coluna>_check`. Coluna sem rótulo conhecido não aparece crua para o usuário.
+function dbFieldLabel(error) {
+  let column = error?.column || null;
+  const constraint = String(error?.constraint || "");
+  const table = String(error?.table || "");
+  if (!column && table && constraint.startsWith(`${table}_`) && constraint.endsWith("_check")) {
+    column = constraint.slice(table.length + 1, -"_check".length);
+  }
+  if (!column) return null;
+  const labels = table.startsWith("tax_") ? TAX_FIELD_LABELS : DB_FIELD_LABELS;
+  return labels[column] || null;
+}
+
+const DB_FIELD_LABELS = {
+  valor: "valor",
+  saldo: "saldo",
+  status: "situação",
+  amount: "valor",
+};
+
+// O que cada tabela representa para o usuário, quando ela impede uma exclusão por ainda apontar para o registro.
+const DEPENDENT_LABELS = {
+  company_entities: "empresas",
+  banks: "bancos",
+  currencies: "moedas",
+  loan_contracts: "contratos",
+  calculation_snapshots: "cálculos de contrato",
+  cdi_rates: "taxas de indexador",
+  holidays: "feriados",
+  tenants: "clientes",
+  tenant_users: "usuários",
+  integrations: "integrações",
+  natures: "naturezas",
+  chart_of_accounts: "contas contábeis",
+  bank_accounts: "contas bancárias",
+  payable_titles: "títulos a pagar",
+  receivable_titles: "títulos a receber",
+  scheduled_jobs: "agendamentos",
+  scheduled_job_runs: "execuções de agendamento",
+  accounting_closings: "fechamentos contábeis",
+  contract_settlements: "baixas de contrato",
+  accounting_event_mappings: "mapeamentos contábeis",
+  accounting_journal_entries: "lançamentos contábeis",
+  notification_log: "notificações",
+  account_movements: "movimentações de conta",
+  client_implementations: "implantações",
+  balance_deployment_configs: "implantações de saldos",
+  tax_agreements: "parcelamentos de tributos",
+  tax_installments: "parcelas de tributos",
+};
+
+const DELETE_SUBJECTS = {
+  Group: "o grupo",
+  CompanyEntity: "a empresa",
+  Bank: "o banco",
+  BankAccount: "a conta bancária",
+  Nature: "a natureza",
+  ChartOfAccount: "a conta contábil",
+  Currency: "a moeda",
+  LoanContract: "o contrato",
+  PayableTitle: "o título a pagar",
+  ReceivableTitle: "o título a receber",
+  AccountingClosing: "o fechamento contábil",
+  BalanceDeploymentConfig: "a implantação de saldos",
+  TaxAgreement: "o parcelamento",
+};
+
+// Na exclusão, a FK violada é de quem ainda aponta para o registro: é um vínculo (409), não um dado que falta.
+function mapDeleteError(name, error) {
+  if (error?.code !== "23503") return mapDbError(error);
+  const subject = DELETE_SUBJECTS[name] || "este registro";
+  const dependents = DEPENDENT_LABELS[String(error.table || "")];
+  return httpError(
+    409,
+    `Não é possível excluir ${subject}: existem ${dependents || "outros registros"} que dependem deste cadastro. Exclua ou altere esses registros antes.`
+  );
+}
+
+export { mapDbError, mapDeleteError };
 
 // Campos do fluxo da Implantação de Saldos: só as funções aprovar/reabrir/aplicar mudam.
 const DEPLOYMENT_WORKFLOW_FIELDS = ["status", "approved_by", "approved_at", "applied_at", "position_snapshot", "mirror_amount", "mirror_reference", "mirror_date", "mirror_by", "mirror_at"];
@@ -139,7 +227,10 @@ function fromDbValue(entity, key, value) {
   if (value === null || value === undefined) return value;
   if (value instanceof Date) {
     if (PLAIN_DATE_FIELDS.has(key)) {
-      return value.toISOString().slice(0, 10);
+      // O driver monta DATE como meia-noite no fuso do processo: lê os componentes locais, não os de UTC.
+      const month = String(value.getMonth() + 1).padStart(2, "0");
+      const day = String(value.getDate()).padStart(2, "0");
+      return `${value.getFullYear()}-${month}-${day}`;
     }
     return value.toISOString();
   }
@@ -245,21 +336,26 @@ export async function filter(name, query, sort, limit = 100) {
   const scope = tenantClause(name, { startIndex: params.length + 1 });
   const where = combineWhere(sql, scope.sql);
   const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 20000);
-  const result = await pool.query(
-    `SELECT * FROM ${entity.table} ${where} ORDER BY ${column} ${dir} LIMIT $${params.length + scope.params.length + 1}`,
-    [...params, ...scope.params, safeLimit]
-  );
+  let result;
+  try {
+    result = await pool.query(
+      `SELECT * FROM ${entity.table} ${where} ORDER BY ${column} ${dir} LIMIT $${params.length + scope.params.length + 1}`,
+      [...params, ...scope.params, safeLimit]
+    );
+  } catch (error) {
+    throw mapDbError(error);
+  }
   return result.rows.map((row) => rowToObject(entity, row));
 }
 
-export async function getById(name, id) {
+export async function getById(name, id, { client = pool } = {}) {
   const entity = getEntity(name);
   const scope = tenantClause(name, { startIndex: 2 });
-  const result = await pool.query(
+  const result = await client.query(
     `SELECT * FROM ${entity.table} WHERE id = $1 AND ${scope.sql}`,
     [id, ...scope.params]
   );
-  if (!result.rows[0]) throw httpError(404, `${name} não encontrado`);
+  if (!result.rows[0]) throw httpError(404, TAX_NOT_FOUND[name] || `${name} não encontrado`);
   return rowToObject(entity, result.rows[0]);
 }
 
@@ -433,14 +529,15 @@ function alphanumericContractNumber(value) {
     .replace(/[^a-zA-Z0-9]/g, "");
 }
 
-export async function create(name, data, createdBy) {
+export async function create(name, data, createdBy, { client = pool } = {}) {
   if (CREATE_BLOCKED.has(name)) {
     throw httpError(403, "Este cadastro não pode ser criado por esta via");
   }
   if (name === "LoanContract") await assertCanCreateContract();
   else await assertCanWrite();
   const entity = getEntity(name);
-  const row = splitPayload(entity, data);
+  const isTax = TAX_ENTITIES.has(name);
+  const row = isTax ? await prepareTaxWrite(name, data, { client }) : splitPayload(entity, data);
   if (name === "CompanyEntity") { delete row.implantacao_pendente; delete row.implantacao_liberada_em; }
   if (name === "BalanceDeploymentConfig") {
     for (const key of DEPLOYMENT_WORKFLOW_FIELDS) delete row[key];
@@ -473,12 +570,12 @@ export async function create(name, data, createdBy) {
     row.group_id = contract.group_id;
   }
   row.id = randomUUID();
-  row.created_by = name === "LoanContract" ? (actorEmail() || createdBy) : (data?.created_by || createdBy);
+  row.created_by = name === "LoanContract" || isTax ? (actorEmail() || createdBy) : (data?.created_by || createdBy);
   const keys = Object.keys(row);
   const values = keys.map((key) => row[key]);
   const slots = keys.map((_, idx) => `$${idx + 1}`);
   try {
-    await pool.query(
+    await client.query(
       `INSERT INTO ${entity.table} (${keys.join(", ")}) VALUES (${slots.join(", ")})`,
       values
     );
@@ -490,16 +587,19 @@ export async function create(name, data, createdBy) {
     await syncBankAccountsForEntity(row.id, row.codigo_empresa);
   }
   if (name === "LoanContract") await bumpContractsUsed(1);
-  return getById(name, row.id);
+  return getById(name, row.id, { client });
 }
 
 export async function bulkCreate(name, items = [], createdBy) {
+  // Só as entidades da Gestão Tributária gravam dentro da transação (tudo ou nada): as demais disparam
+  // sincronizações fora dela no create e continuam no comportamento anterior, item a item.
+  const transactional = TAX_ENTITIES.has(name);
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const created = [];
     for (const item of items) {
-      created.push(await create(name, item, createdBy));
+      created.push(await create(name, item, createdBy, transactional ? { client } : {}));
     }
     await client.query("COMMIT");
     return created;
@@ -631,7 +731,9 @@ export async function update(name, id, data) {
   }
   const revertSettlement = Boolean(data?.__revert_settlement);
   if (data) delete data.__revert_settlement;
-  const row = splitPayload(entity, data);
+  const row = TAX_ENTITIES.has(name)
+    ? await prepareTaxWrite(name, data, { previous })
+    : splitPayload(entity, data);
   delete row.group_id;
   delete row.id;
   if (row.entity_id) await assertEntityInTenant(row.entity_id);
@@ -743,8 +845,22 @@ export async function remove(name, id) {
   if (ENTITY_SCOPE[name]?.type === "shared" && !existing.group_id) {
     throw httpError(403, "O catálogo compartilhado não pode ser excluído");
   }
+  if (name === "TaxAgreement") {
+    let outcome;
+    try {
+      outcome = await deleteAgreementWithInstallments(id);
+    } catch (error) {
+      throw mapDeleteError(name, error);
+    }
+    if (!outcome.deleted) throw httpError(404, TAX_NOT_FOUND[name]);
+    return { ...existing, parcelas_excluidas: outcome.installmentsDeleted };
+  }
   const scope = tenantClause(name, { startIndex: 2 });
-  await pool.query(`DELETE FROM ${entity.table} WHERE id = $1 AND ${scope.sql}`, [id, ...scope.params]);
+  try {
+    await pool.query(`DELETE FROM ${entity.table} WHERE id = $1 AND ${scope.sql}`, [id, ...scope.params]);
+  } catch (error) {
+    throw mapDeleteError(name, error);
+  }
   if (name === "LoanContract" && existing.status !== "cancelado") await bumpContractsUsed(-1);
   return existing;
 }

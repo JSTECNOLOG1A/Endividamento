@@ -159,8 +159,26 @@ export function diffRecords(before, after) {
   return changes;
 }
 
+function civilDateLabel(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ""));
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : null;
+}
+
+function taxRegistro(resourceType, row) {
+  if (resourceType === "TaxAgreement" && row.codigo_parcelamento) {
+    return [`Parcelamento ${row.codigo_parcelamento}`, row.orgao, row.modalidade].filter(Boolean).join(" — ");
+  }
+  if (resourceType === "TaxInstallment" && row.numero_parcela != null) {
+    const due = civilDateLabel(row.vencimento);
+    return due ? `Parcela ${row.numero_parcela} — vencimento ${due}` : `Parcela ${row.numero_parcela}`;
+  }
+  return null;
+}
+
 export function registroFrom(resourceType, row, fallbackId) {
   if (!row || typeof row !== "object") return fallbackId || "—";
+  const taxLabel = taxRegistro(resourceType, row);
+  if (taxLabel) return taxLabel;
   for (const field of LABEL_FIELDS) {
     const value = row[field];
     if (value != null && String(value).trim()) {

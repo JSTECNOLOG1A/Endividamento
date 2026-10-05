@@ -1,5 +1,7 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/AuthContext";
 import { hasModule } from "@/lib/modules";
 
@@ -24,6 +26,32 @@ export function TaxEmptyState({ title, children }) {
     <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
       <p className="text-sm font-medium text-slate-700">{title}</p>
       {children ? <div className="mx-auto mt-2 max-w-xl text-xs leading-relaxed text-slate-500">{children}</div> : null}
+    </div>
+  );
+}
+
+export function TaxLoadingState() {
+  return (
+    <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white p-8 text-sm text-slate-500">
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      Carregando parcelamentos…
+    </div>
+  );
+}
+
+export function TaxErrorState({ title = "Não foi possível carregar os parcelamentos", message, onRetry }) {
+  return (
+    <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-center">
+      <p className="flex items-center justify-center gap-1.5 text-sm font-medium text-rose-700">
+        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+        {title}
+      </p>
+      {message ? <p className="mt-1 text-xs text-rose-600">{message}</p> : null}
+      {onRetry ? (
+        <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onRetry}>
+          Tentar novamente
+        </Button>
+      ) : null}
     </div>
   );
 }
