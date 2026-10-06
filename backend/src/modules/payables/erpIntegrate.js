@@ -163,7 +163,7 @@ export function buildErpTitlePayload(title, entity, sm0Match = null, codes = nul
   const fornecedor = padLeft(title.fornecedor || "", 6);
   const loja = String(title.fornecedor_loja || "01").trim() || "01";
   const valor = Number(title.valor) || 0;
-  return {
+  const payload = {
     filial: e2Filial,
     filOrig: filialOrigem,
     prefixo,
@@ -179,6 +179,21 @@ export function buildErpTitlePayload(title, entity, sm0Match = null, codes = nul
     historico: String(title.historico || "").slice(0, 40),
     moeda: 1,
   };
+  // Boleto/guia: só quando o título tem. Título sem código de barras gera o payload de sempre, chave por chave.
+  const codBarras = String(title.codigo_barras || "").replace(/\D/g, "");
+  if (codBarras.length === 44) payload.codBarras = codBarras;
+  const linhaDigitavel = String(title.linha_digitavel || "").replace(/\D/g, "");
+  if (payload.codBarras && (linhaDigitavel.length === 47 || linhaDigitavel.length === 48)) payload.linhaDigitavel = linhaDigitavel;
+  return payload;
+}
+
+/**
+ * Corpo de consulta e estorno: só a chave e os dados que o Protheus confere (ConsultarPagar/ExcluirPagar não leem
+ * código de barras). O código de barras vai apenas na inclusão.
+ */
+export function erpTitleLookupPayload(body) {
+  const { codBarras: _codBarras, linhaDigitavel: _linhaDigitavel, ...lookup } = body;
+  return lookup;
 }
 
 function actualSe2Filial(data) {
@@ -436,7 +451,7 @@ export async function integratePayableTitles(payload = {}) {
             linked,
             credential,
             ctx,
-            body,
+            body: erpTitleLookupPayload(body),
             includePath: path,
           });
           if (consulted.statusCode >= 200 && consulted.statusCode < 300 && consultEncontrado(consulted.data) === true) {
@@ -590,7 +605,7 @@ export async function reversePayableTitles(payload = {}) {
     const requestPath = isProtheusErp(ctx.erpNome) ? applyProtheusContext(path, ctx) : path;
 
     try {
-      const body = buildErpTitlePayload({ ...title, filial: codes.e2Filial || codes.filial, filial_origem: codes.filialOrigem }, entity, resolved.match, codes);
+      const body = erpTitleLookupPayload(buildErpTitlePayload({ ...title, filial: codes.e2Filial || codes.filial, filial_origem: codes.filialOrigem }, entity, resolved.match, codes));
 
       if (consultLinked) {
         const consultPath = isProtheusErp(ctx.erpNome)
@@ -993,12 +1008,12 @@ export async function refreshPayableTitlesFromErp(payload = {}) {
     const requestPath = isProtheusErp(ctx.erpNome) ? applyProtheusContext(path, ctx) : path;
 
     try {
-      const body = buildErpTitlePayload(
+      const body = erpTitleLookupPayload(buildErpTitlePayload(
         { ...title, filial: codes.e2Filial || codes.filial, filial_origem: codes.filialOrigem },
         entity,
         resolved.match,
         codes
-      );
+      ));
       logger.info({
         titleId: title.id,
         filial: body.filial,
