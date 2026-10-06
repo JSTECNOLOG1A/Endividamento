@@ -26,7 +26,15 @@ import {
   stampGroupId,
   tenantClause,
 } from "../tenants/scope.js";
-import { TAX_ENTITIES, TAX_FIELD_LABELS, TAX_NOT_FOUND, deleteAgreementWithInstallments, prepareTaxWrite } from "../tax/rules.js";
+import {
+  TAX_ENTITIES,
+  TAX_FIELD_LABELS,
+  TAX_NOT_FOUND,
+  deleteAgreementWithInstallments,
+  deleteInstallmentWithGuides,
+  prepareTaxWrite,
+} from "../tax/rules.js";
+import { afterGuidesDeleted, refreshInstallmentGuide } from "../tax/guides.js";
 
 export const CONTRACT_WORKFLOW_FIELDS = [
   "status",
@@ -790,6 +798,15 @@ export async function update(name, id, data) {
     return saved;
   }
   const saved = await getById(name, id);
+  if (name === "TaxInstallment" && saved.vencimento !== previous.vencimento) {
+    // A regra do "pagar até" da guia depende do mês de vencimento da parcela. Falhar aqui não desfaz a edição:
+    // o envio da guia confere tudo de novo antes de sair.
+    try {
+      await refreshInstallmentGuide(id);
+    } catch (error) {
+      logger.error({ err: error, installmentId: id }, "falha ao verificar de novo a guia após mudar o vencimento da parcela");
+    }
+  }
   if (name === "LoanContract" && previous.status === "pendente_aprovacao" && previous.settlement_discount_mode) {
     if (saved.status === "quitado") {
       // Quitação aprovada: encerra o cronograma — remove só os títulos futuros em aberto.
@@ -853,7 +870,29 @@ export async function remove(name, id) {
       throw mapDeleteError(name, error);
     }
     if (!outcome.deleted) throw httpError(404, TAX_NOT_FOUND[name]);
-    return { ...existing, parcelas_excluidas: outcome.installmentsDeleted };
+    await afterGuidesDeleted(outcome.guides);
+    return {
+      ...existing,
+      parcelas_excluidas: outcome.installmentsDeleted,
+      guias_excluidas: outcome.guides.totalGuides,
+      envios_excluidos: outcome.guides.sends,
+    };
+  }
+  if (name === "TaxInstallment") {
+    let outcome;
+    try {
+      outcome = await deleteInstallmentWithGuides(id);
+    } catch (error) {
+      throw mapDeleteError(name, error);
+    }
+    if (!outcome.deleted) throw httpError(404, TAX_NOT_FOUND[name]);
+    await afterGuidesDeleted(outcome.guides);
+    return {
+      ...existing,
+      guia_anexada: outcome.guides.currentGuides > 0,
+      guias_excluidas: outcome.guides.totalGuides,
+      envios_excluidos: outcome.guides.sends,
+    };
   }
   const scope = tenantClause(name, { startIndex: 2 });
   try {

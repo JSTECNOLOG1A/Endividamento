@@ -32,6 +32,7 @@ import { implementationsRouter } from "./modules/implementations/routes.js";
 import { onboardingRouter } from "./modules/onboarding/routes.js";
 import { parametersRouter } from "./modules/parameters/routes.js";
 import { legalRouter, meFirstAccessRouter } from "./modules/firstAccess/routes.js";
+import { taxRouter } from "./modules/tax/routes.js";
 import { openApiDocument } from "./openapi.js";
 import * as store from "./modules/entities/store.js";
 
@@ -146,6 +147,7 @@ export function createApp() {
   app.use("/api/schedules", schedulesRouter);
   app.use("/api/users", usersRouter);
   app.use("/api/parameters", parametersRouter);
+  app.use("/api/tax", taxRouter);
 
   const aliases = {
     groups: "Group",

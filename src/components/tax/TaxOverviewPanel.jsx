@@ -1,13 +1,14 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { cn } from "@/lib/utils";
 import { formatCivilDate } from "@/lib/taxDates";
 import { SIGNALS, SIGNAL_ORDER, STALE_AFTER_DAYS, isBalanceUnverified } from "@/lib/taxSignal";
 import { AGREEMENT_STATUS_LABELS, formatMoney } from "@/lib/taxLabels";
 import { useTaxPortfolio } from "@/hooks/useTaxData";
-import { ProvenanceNote, SIGNAL_DOT } from "./TaxBadges";
+import { GUIDE_URL_PARAM, openInstallmentsWithGuideException } from "@/lib/taxGuides";
+import { AmountToPay, ProvenanceNote, SIGNAL_DOT } from "./TaxBadges";
 import { TaxEmptyState, TaxErrorState, TaxLoadingState } from "./TaxPageShell";
 
 const UPCOMING_LIMIT = 8;
@@ -119,7 +120,54 @@ function SphereSummary({ sphere, rows }) {
   );
 }
 
-function UpcomingInstallments({ rows, today }) {
+const EXCEPTION_LIST_LIMIT = 6;
+
+/** Parcelas em aberto cuja guia está em exceção: cada uma leva direto à guia, no detalhe do parcelamento. */
+function GuideExceptions({ rows, guidesByInstallment }) {
+  const items = openInstallmentsWithGuideException(rows, guidesByInstallment);
+  const count = items.length;
+  return (
+    <section className={cn("rounded-xl border bg-white", count ? "border-amber-300" : "border-slate-200")}>
+      <div className="flex items-start gap-3 p-4">
+        <AlertTriangle className={cn("mt-0.5 h-4 w-4 shrink-0", count ? "text-amber-600" : "text-slate-300")} aria-hidden="true" />
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-slate-900">
+            Guias em exceção: <span className="tabular-nums">{count}</span>
+          </h3>
+          <p className="text-xs text-slate-500">
+            {count
+              ? "Parcelas a vencer ou vencidas com guia que precisa ser conferida antes do pagamento."
+              : "Nenhuma parcela a vencer ou vencida tem guia em exceção."}
+          </p>
+        </div>
+      </div>
+      {count ? (
+        <ul className="divide-y divide-slate-100 border-t border-slate-100">
+          {items.slice(0, EXCEPTION_LIST_LIMIT).map(({ row, installment }) => (
+            <li key={installment.id}>
+              <Link
+                to={listUrl(PAGE_BY_SPHERE[row.agreement.esfera], { acordo: row.agreement.id, [GUIDE_URL_PARAM]: installment.id })}
+                className="flex flex-col gap-0.5 px-4 py-2 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+              >
+                <span className="min-w-0 truncate text-xs font-medium text-slate-900">{row.entityName}</span>
+                <span className="text-xs text-slate-600">
+                  nº {row.agreement.codigo_parcelamento} · parcela {installment.numero_parcela} · vence {formatCivilDate(installment.vencimento)}
+                </span>
+              </Link>
+            </li>
+          ))}
+          {count > EXCEPTION_LIST_LIMIT ? (
+            <li className="px-4 py-2 text-[11px] text-slate-500">
+              e mais {count - EXCEPTION_LIST_LIMIT}. Veja no detalhe de cada parcelamento.
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+function UpcomingInstallments({ rows, today, guidesByInstallment }) {
   const upcoming = rows
     .filter((row) => row.agreement.situacao === "ativo")
     .flatMap((row) =>
@@ -155,7 +203,9 @@ function UpcomingInstallments({ rows, today }) {
                   <ProvenanceNote origem={item.origem_dado} ultimaConferencia={row.agreement.ultima_conferencia} />
                 </div>
                 <div className="shrink-0 text-left sm:text-right">
-                  <p className="text-sm font-semibold tabular-nums text-slate-900">{formatMoney(item.valor)}</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    <AmountToPay installment={item} guide={guidesByInstallment.get(item.id)} />
+                  </p>
                   <p className="text-xs tabular-nums text-slate-600">vence {formatCivilDate(item.vencimento)}</p>
                 </div>
               </Link>
@@ -168,7 +218,7 @@ function UpcomingInstallments({ rows, today }) {
 }
 
 export default function TaxOverviewPanel() {
-  const { rows, today, isLoading, error, refetch } = useTaxPortfolio();
+  const { rows, guidesByInstallment, today, isLoading, error, refetch } = useTaxPortfolio();
 
   if (isLoading) return <TaxLoadingState />;
   if (error) return <TaxErrorState message={error.message} onRetry={refetch} />;
@@ -201,7 +251,8 @@ export default function TaxOverviewPanel() {
       <div className="grid gap-3 lg:grid-cols-2">
         {SPHERES.map((sphere) => <SphereSummary key={sphere.key} sphere={sphere} rows={rows} />)}
       </div>
-      <UpcomingInstallments rows={rows} today={today} />
+      <GuideExceptions rows={rows} guidesByInstallment={guidesByInstallment} />
+      <UpcomingInstallments rows={rows} today={today} guidesByInstallment={guidesByInstallment} />
     </div>
   );
 }

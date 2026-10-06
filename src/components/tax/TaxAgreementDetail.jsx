@@ -1,19 +1,22 @@
 import React, { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, BadgeCheck, CalendarCheck, CalendarPlus, Pencil, Plus, Trash2, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BadgeCheck, CalendarCheck, CalendarPlus, FileText, Paperclip, Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/lib/notify";
 import { formatCivilDate } from "@/lib/taxDates";
 import { AGREEMENT_STATUS_LABELS, SPHERE_LABELS, formatMoney, isInstallmentOverdue } from "@/lib/taxLabels";
+import { GUIDE_URL_PARAM, amountToPay, isGuideException } from "@/lib/taxGuides";
 import { useAgreementInstallments, useInvalidateTax } from "@/hooks/useTaxData";
 import { TaxErrorState } from "./TaxPageShell";
-import { InstallmentStatusBadge, ProvenanceNote, TaxSignalBadge } from "./TaxBadges";
+import { AmountToPay, GuideStatusBadge, InstallmentStatusBadge, ProvenanceNote, TaxSignalBadge } from "./TaxBadges";
 import { NextInstallmentCell, SaldoCell } from "./TaxAgreementList";
 import TaxInstallmentFormDialog from "./TaxInstallmentFormDialog";
 import TaxPaymentDialog from "./TaxPaymentDialog";
 import TaxScheduleDialog from "./TaxScheduleDialog";
 import TaxConfirmDialog from "./TaxConfirmDialog";
+import TaxGuideDialog from "./TaxGuideDialog";
 
 function Info({ label, children }) {
   return (
@@ -24,12 +27,13 @@ function Info({ label, children }) {
   );
 }
 
-function countBy(installments, today) {
-  const counts = { aVencer: 0, vencidas: 0, aguardando: 0, pagas: 0 };
+function countBy(installments, today, guidesByInstallment) {
+  const counts = { aVencer: 0, vencidas: 0, aguardando: 0, pagas: 0, guiasEmExcecao: 0 };
   for (const item of installments) {
     if (item.situacao === "em_aberto") {
       if (isInstallmentOverdue(item, today)) counts.vencidas += 1;
       else counts.aVencer += 1;
+      if (isGuideException(guidesByInstallment.get(item.id))) counts.guiasEmExcecao += 1;
     }
     if (item.situacao === "paga_aguardando_reconhecimento") counts.aguardando += 1;
     if (item.situacao === "reconhecida") counts.pagas += 1;
@@ -37,7 +41,7 @@ function countBy(installments, today) {
   return counts;
 }
 
-export default function TaxAgreementDetail({ row, actions, onBack }) {
+export default function TaxAgreementDetail({ row, guidesByInstallment, actions, onBack }) {
   const { agreement, entityName } = row;
   const { installments, isLoading: installmentsLoading, error: installmentsError, refetch: refetchInstallments } =
     useAgreementInstallments(agreement.id);
@@ -49,6 +53,17 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
   const [payingInstallment, setPayingInstallment] = useState(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [deletingInstallment, setDeletingInstallment] = useState(null);
+
+  // A guia aberta fica na URL: a Visão geral leva direto a ela, e voltar no navegador a fecha.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const guideInstallmentId = searchParams.get(GUIDE_URL_PARAM);
+  const guideInstallment = guideInstallmentId ? installments.find((item) => item.id === guideInstallmentId) || null : null;
+  const setGuideInstallment = (installment) => {
+    const next = new URLSearchParams(searchParams);
+    if (installment) next.set(GUIDE_URL_PARAM, installment.id);
+    else next.delete(GUIDE_URL_PARAM);
+    setSearchParams(next);
+  };
 
   const recognizeMutation = useMutation({
     mutationFn: (installment) => base44.entities.TaxInstallment.update(installment.id, { situacao: "reconhecida" }),
@@ -69,7 +84,7 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
     onError: (err) => toast.error(err.message),
   });
 
-  const counts = countBy(installments, today);
+  const counts = countBy(installments, today, guidesByInstallment);
   const confirmedToday = agreement.ultima_conferencia === today;
   const quantity = agreement.qtd_parcelas;
 
@@ -117,7 +132,9 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
           <Info label="Data de adesão">{formatCivilDate(agreement.data_adesao)}</Info>
           <Info label="Quantidade de parcelas">{quantity ? String(quantity) : null}</Info>
           <Info label="Saldo informado"><SaldoCell agreement={agreement} /></Info>
-          <Info label="Próxima parcela"><NextInstallmentCell installment={row.nextInstallment} today={today} /></Info>
+          <Info label="Próxima parcela">
+            <NextInstallmentCell installment={row.nextInstallment} guide={row.nextInstallmentGuide} today={today} />
+          </Info>
         </dl>
         {agreement.observacoes ? (
           <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-600">{agreement.observacoes}</p>
@@ -154,6 +171,11 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
                 {counts.vencidas === 1 ? "vencida" : "vencidas"} · {counts.aguardando}{" "}
                 {counts.aguardando === 1 ? "paga, aguardando reconhecimento" : "pagas, aguardando reconhecimento"} · {counts.pagas}{" "}
                 {counts.pagas === 1 ? "paga" : "pagas"}
+                {counts.guiasEmExcecao ? (
+                  <span className="font-medium text-amber-800">
+                    {" "}· {counts.guiasEmExcecao} {counts.guiasEmExcecao === 1 ? "guia em exceção" : "guias em exceção"}
+                  </span>
+                ) : null}
               </p>
             ) : null}
             <ProvenanceNote origem={agreement.origem_dado} ultimaConferencia={agreement.ultima_conferencia} className="mt-1" />
@@ -191,13 +213,14 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
           </p>
         ) : (
           <div className="relative overflow-x-auto">
-            <table className="w-full min-w-[760px] text-xs">
+            <table className="w-full min-w-[900px] text-xs">
               <thead className="border-b-2 border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-3 py-2 font-semibold">Nº</th>
                   <th className="px-3 py-2 font-semibold">Vencimento</th>
                   <th className="px-3 py-2 text-right font-semibold">Valor</th>
                   <th className="px-3 py-2 font-semibold">Situação</th>
+                  <th className="px-3 py-2 font-semibold">Guia</th>
                   <th className="px-3 py-2 font-semibold">Pagamento</th>
                   {canWrite ? <th className="px-3 py-2"><span className="sr-only">Ações</span></th> : null}
                 </tr>
@@ -205,6 +228,7 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
               <tbody className="divide-y divide-slate-100">
                 {installments.map((item) => {
                   const exceeds = Boolean(quantity) && item.numero_parcela > quantity;
+                  const guide = guidesByInstallment.get(item.id) || null;
                   return (
                     <tr key={item.id} className="align-middle">
                       <td className="px-3 py-2 tabular-nums font-medium text-slate-900">
@@ -219,8 +243,28 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 tabular-nums text-slate-700">{formatCivilDate(item.vencimento)}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-800">{formatMoney(item.valor)}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-slate-800">
+                        <AmountToPay installment={item} guide={guide} align="right" />
+                      </td>
                       <td className="px-3 py-2"><InstallmentStatusBadge installment={item} today={today} /></td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col items-start gap-1">
+                          <GuideStatusBadge guide={guide} />
+                          {guide || canWrite ? (
+                            <Button
+                              type="button"
+                              variant="link"
+                              size="sm"
+                              className="h-auto gap-1 p-0 text-xs"
+                              aria-label={`${guide ? "Ver guia" : "Anexar guia"} da parcela ${item.numero_parcela}`}
+                              onClick={() => setGuideInstallment(item)}
+                            >
+                              {guide ? <FileText className="h-3.5 w-3.5" /> : <Paperclip className="h-3.5 w-3.5" />}
+                              {guide ? "Ver guia" : "Anexar guia"}
+                            </Button>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className="whitespace-nowrap px-3 py-2 tabular-nums leading-tight text-slate-600">
                         {item.data_pagamento ? (
                           <>
@@ -296,7 +340,18 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
         installment={installmentForm.installment}
         installments={installments}
       />
-      <TaxPaymentDialog installment={payingInstallment} onOpenChange={(open) => { if (!open) setPayingInstallment(null); }} />
+      <TaxPaymentDialog
+        installment={payingInstallment}
+        amount={payingInstallment ? amountToPay(payingInstallment, guidesByInstallment.get(payingInstallment.id)) : null}
+        onOpenChange={(open) => { if (!open) setPayingInstallment(null); }}
+      />
+      <TaxGuideDialog
+        installment={guideInstallment}
+        agreement={agreement}
+        entityName={entityName}
+        canWrite={canWrite}
+        onOpenChange={(open) => { if (!open) setGuideInstallment(null); }}
+      />
       <TaxScheduleDialog open={scheduleOpen} onOpenChange={setScheduleOpen} agreement={agreement} installments={installments} />
       <TaxConfirmDialog
         open={Boolean(deletingInstallment)}

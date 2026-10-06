@@ -12,6 +12,7 @@
     "test:deployment": "node src/modules/accounting/deploymentPosition.test.js",
     "test:isolation": "node src/modules/tenants/isolation.test.js",
     "test:tax": "node src/modules/tax/tax.test.js",
+    "test:tax-guides": "node src/modules/tax/guides.test.js",
     "test:tax-signal": "node ../src/lib/taxSignal.test.mjs",
     "test:secrets": "node src/config/validateSecrets.test.js",
     "test:p0": "node src/modules/security/p0.test.js",
@@ -35,6 +36,7 @@
     "pg": "^8.16.3",
     "pino": "^9.9.0",
     "pino-http": "^10.5.0",
+    "unpdf": "^1.8.1",
     "zod": "^3.24.2"
   }
 }

@@ -124,24 +124,48 @@ entitiesRouter.put("/:name/:id", requireCanWrite, async (req, res, next) => {
   }
 });
 
+function plural(count, singular, pluralForm) {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
+// Exclusões da Gestão Tributária levam registros junto (cascata do banco): a auditoria diz o que saiu.
+// Parcelamento → parcelas, guias e envios por e-mail; parcela → guia anexada e envios da guia por e-mail.
+function deleteAudit(name, id, removed) {
+  if (Number.isInteger(removed.parcelas_excluidas)) {
+    const { parcelas_excluidas: installments, guias_excluidas: guides = 0, envios_excluidos: sends = 0, ...before } = removed;
+    const parts = [plural(installments, "parcela", "parcelas")];
+    if (guides) parts.push(plural(guides, "guia", "guias"));
+    if (sends) parts.push(plural(sends, "envio por e-mail", "envios por e-mail"));
+    const last = parts.pop();
+    return {
+      before,
+      registro: `${registroFrom(name, before, id)} (com ${parts.length ? `${parts.join(", ")} e ${last}` : last})`,
+      payload: { parcelas_excluidas: installments, guias_excluidas: guides, envios_excluidos: sends },
+    };
+  }
+  if (Number.isInteger(removed.guias_excluidas)) {
+    const { guia_anexada: hasGuide, guias_excluidas: guides, envios_excluidos: sends, ...before } = removed;
+    if (!guides) return { before };
+    const parts = [hasGuide ? "guia anexada" : plural(guides, "guia anterior", "guias anteriores")];
+    if (sends) parts.push(plural(sends, "envio por e-mail", "envios por e-mail"));
+    return {
+      before,
+      registro: `${registroFrom(name, before, id)} (com ${parts.join(" e ")})`,
+      payload: { guia_anexada: hasGuide, guias_excluidas: guides, envios_excluidos: sends },
+    };
+  }
+  return { before: removed };
+}
+
 entitiesRouter.delete("/:name/:id", requireCanWrite, async (req, res, next) => {
   try {
     const removed = await store.remove(req.params.name, req.params.id);
-    // Excluir um parcelamento leva junto as parcelas (cascata do banco): a auditoria diz quantas saíram.
-    const { parcelas_excluidas: cascadedInstallments, ...before } = removed;
-    const cascaded = Number.isInteger(cascadedInstallments);
     await writeAudit({
       req,
       action: "DELETE",
       resourceType: req.params.name,
       resourceId: req.params.id,
-      before: cascaded ? before : removed,
-      ...(cascaded
-        ? {
-          registro: `${registroFrom(req.params.name, before, req.params.id)} (com ${cascadedInstallments} ${cascadedInstallments === 1 ? "parcela" : "parcelas"})`,
-          payload: { parcelas_excluidas: cascadedInstallments },
-        }
-        : {}),
+      ...deleteAudit(req.params.name, req.params.id, removed),
     });
     res.json(removed);
   } catch (error) {

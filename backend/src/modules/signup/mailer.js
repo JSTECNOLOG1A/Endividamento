@@ -17,24 +17,34 @@ function getTransporter() {
   return transporter;
 }
 
-export async function sendMail({ to, subject, text, html }) {
+/**
+ * Envia um e-mail pelo SMTP configurado. Nunca lança.
+ * `to` aceita um endereço ou uma lista; `attachments` e `replyTo` seguem o formato do nodemailer.
+ * Sem SMTP configurado devolve `{ sent: false }` sem `error` (quem chama decide se isso é simulação ou falha).
+ * `rejected` lista os destinatários que o servidor recusou quando os demais foram aceitos.
+ */
+export async function sendMail({ to, subject, text, html, attachments, replyTo }) {
   const transport = getTransporter();
   if (!transport) {
     logger.warn({ to, subject }, "SMTP não configurado; e-mail não enviado");
     return { sent: false };
   }
   try {
-    await transport.sendMail({
+    const info = await transport.sendMail({
       from: config.smtpFrom,
       to,
       subject,
       text,
       html,
+      ...(attachments?.length ? { attachments } : {}),
+      ...(replyTo ? { replyTo } : {}),
     });
-    return { sent: true };
+    const rejected = (info?.rejected || []).map((item) => String(item?.address || item));
+    return { sent: true, rejected };
   } catch (error) {
     logger.error({ err: error, to, subject }, "falha ao enviar e-mail");
-    return { sent: false, error: error.message };
+    const rejected = (error?.rejected || []).map((item) => String(item?.address || item));
+    return { sent: false, error: error.message, rejected };
   }
 }
 
@@ -103,7 +113,7 @@ export function confirmationEmail({ fullName, companyName, confirmUrl }) {
   return { subject, text, html };
 }
 
-function escapeHtml(value) {
+export function escapeHtml(value) {
   return String(value || "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")

@@ -12,8 +12,11 @@ import { formatMoney, parseCurrencyField, toCurrencyField } from "@/lib/taxLabel
 import { useInvalidateTax } from "@/hooks/useTaxData";
 import { FieldError, serverErrorField } from "./TaxBadges";
 
-/** Registra o pagamento de uma parcela: ela fica "Paga, aguardando reconhecimento" até constar no e-CAC/portal. */
-export default function TaxPaymentDialog({ installment, onOpenChange }) {
+/**
+ * Registra o pagamento de uma parcela: ela fica "Paga, aguardando reconhecimento" até constar no e-CAC/portal.
+ * `amount` é o valor para pagamento (o da guia, quando há; senão o cadastrado) e só sugere o valor pago.
+ */
+export default function TaxPaymentDialog({ installment, amount, onOpenChange }) {
   const open = Boolean(installment);
   const today = todayInBrazil();
   const [paymentDate, setPaymentDate] = useState(today);
@@ -24,7 +27,7 @@ export default function TaxPaymentDialog({ installment, onOpenChange }) {
   useEffect(() => {
     if (!installment) return;
     setPaymentDate(todayInBrazil());
-    setAmountPaid(toCurrencyField(installment.valor));
+    setAmountPaid(toCurrencyField(amount ?? installment.valor));
     setFieldErrors({});
   }, [installment]);
 
@@ -55,7 +58,7 @@ export default function TaxPaymentDialog({ installment, onOpenChange }) {
         <DialogHeader>
           <DialogTitle>Registrar pagamento da parcela {installment?.numero_parcela}</DialogTitle>
           <DialogDescription>
-            Vencimento {formatCivilDate(installment?.vencimento)} · valor {formatMoney(installment?.valor)}. A parcela passa a constar
+            Vencimento {formatCivilDate(installment?.vencimento)} · valor para pagamento {formatMoney(amount ?? installment?.valor)}. A parcela passa a constar
             como “Paga, aguardando reconhecimento”. Quando o pagamento aparecer no e-CAC/portal, use “Confirmar reconhecimento”
             para ela passar a “Paga”.
           </DialogDescription>

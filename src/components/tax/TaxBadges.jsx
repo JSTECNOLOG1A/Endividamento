@@ -1,8 +1,9 @@
 import React from "react";
-import { PenLine } from "lucide-react";
+import { AlertTriangle, FileCheck2, FileMinus2, PenLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SIGNALS } from "@/lib/taxSignal";
-import { AGREEMENT_STATUS_LABELS, conferenceLabel, installmentStatusLabel, isInstallmentOverdue, originLabel } from "@/lib/taxLabels";
+import { AGREEMENT_STATUS_LABELS, conferenceLabel, formatMoney, installmentStatusLabel, isInstallmentOverdue, originLabel } from "@/lib/taxLabels";
+import { GUIDE_STATUS, amountToPay, guideStatusKey, guideStatusLabel, showsAmountAsPayable } from "@/lib/taxGuides";
 
 const SIGNAL_STYLES = {
   desatualizado: "border-slate-400 border-dashed bg-slate-100 text-slate-700",
@@ -66,6 +67,55 @@ export function InstallmentStatusBadge({ installment, today }) {
       className={cn("inline-flex items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-semibold", INSTALLMENT_STYLES[styleKey])}
     >
       {installmentStatusLabel(installment, today)}
+    </span>
+  );
+}
+
+// Selo da guia: com ícone e contorno próprios, para não ser confundido com o selo de situação da parcela.
+const GUIDE_STYLES = {
+  [GUIDE_STATUS.none]: "border-dashed border-slate-300 bg-white text-slate-500",
+  [GUIDE_STATUS.linked]: "border-indigo-200 bg-indigo-50 text-indigo-700",
+  [GUIDE_STATUS.exception]: "border-amber-300 bg-amber-50 text-amber-800",
+};
+
+const GUIDE_ICONS = {
+  [GUIDE_STATUS.none]: FileMinus2,
+  [GUIDE_STATUS.linked]: FileCheck2,
+  [GUIDE_STATUS.exception]: AlertTriangle,
+};
+
+export function GuideStatusBadge({ guide, className }) {
+  const key = guideStatusKey(guide);
+  const Icon = GUIDE_ICONS[key];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+        GUIDE_STYLES[key],
+        className
+      )}
+    >
+      <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />
+      {guideStatusLabel(guide)}
+    </span>
+  );
+}
+
+/**
+ * Valor da parcela: o da guia ou, sem valor da guia, o cadastrado — um ou outro, nunca somados. Em parcela em aberto,
+ * o valor da guia vem como "a pagar", com o cadastrado como "estimado" logo abaixo; parcela paga ou cancelada mostra
+ * só o valor, sem indicação de "a pagar".
+ */
+export function AmountToPay({ installment, guide, align = "left" }) {
+  const payable = showsAmountAsPayable(installment, guide);
+  return (
+    <span className={cn("block leading-tight", align === "right" && "text-right")}>
+      <span className="block tabular-nums" title={payable ? "Valor a pagar pela guia" : undefined}>
+        {formatMoney(amountToPay(installment, guide))}
+      </span>
+      {payable ? (
+        <span className="block whitespace-nowrap text-[11px] font-normal text-slate-500">estimado {formatMoney(installment?.valor)}</span>
+      ) : null}
     </span>
   );
 }

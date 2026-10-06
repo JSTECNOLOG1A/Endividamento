@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import { taxGuidesApi } from "@/api/taxGuides";
 import { DEFAULT_QUERY_RETRIES } from "@/lib/query-client";
 import { todayInBrazil } from "@/lib/taxDates";
 import { computeTaxSignal, groupInstallmentsByAgreement, nextOpenInstallment } from "@/lib/taxSignal";
+import { indexGuidesByInstallment } from "@/lib/taxGuides";
 
 export const TAX_QUERY_KEYS = {
   agreements: ["tax-agreements"],
@@ -11,6 +13,10 @@ export const TAX_QUERY_KEYS = {
   openInstallments: ["tax-installments", "pendentes"],
   agreementInstallments: (agreementId) => ["tax-installments", "acordo", agreementId],
   entities: ["tax-entities"],
+  guides: ["tax-guides"],
+  currentGuides: ["tax-guides", "atuais"],
+  installmentGuide: (installmentId) => ["tax-guides", "parcela", installmentId],
+  guideSends: (installmentId) => ["tax-guides", "envios", installmentId],
 };
 
 // O CRUD genérico devolve no máximo 20.000 linhas por chamada e não pagina. Resposta que bate no teto é tratada
@@ -42,9 +48,10 @@ async function readAll(promise) {
 }
 
 /**
- * Parcelamentos de tributos com as parcelas pendentes, empresa e semáforo já resolvidos.
+ * Parcelamentos de tributos com as parcelas pendentes, empresa, semáforo e guias já resolvidos.
  * `row.installments` traz só as parcelas em aberto ou aguardando reconhecimento — a lista completa de um acordo
- * vem de useAgreementInstallments.
+ * vem de useAgreementInstallments. As guias atuais de todas as parcelas vêm numa chamada só
+ * (`guidesByInstallment`); sem elas o valor para pagamento não é conhecido, então a falha é erro da tela inteira.
  */
 export function useTaxPortfolio() {
   const agreementsQuery = useQuery({
@@ -65,8 +72,14 @@ export function useTaxPortfolio() {
     retry: retryUnlessIncomplete,
     queryFn: () => readAll(base44.entities.CompanyEntity.list("", READ_LIMIT)),
   });
+  const guidesQuery = useQuery({
+    queryKey: TAX_QUERY_KEYS.currentGuides,
+    queryFn: async () => (await taxGuidesApi.listCurrent()) || [],
+  });
 
   const today = todayInBrazil();
+
+  const guidesByInstallment = useMemo(() => indexGuidesByInstallment(guidesQuery.data), [guidesQuery.data]);
 
   const rows = useMemo(() => {
     const byAgreement = groupInstallmentsByAgreement(installmentsQuery.data);
@@ -74,6 +87,7 @@ export function useTaxPortfolio() {
     return (agreementsQuery.data || []).map((agreement) => {
       const installments = byAgreement.get(agreement.id) || [];
       const { signal, recordsSignal } = computeTaxSignal(agreement, installments, today);
+      const nextInstallment = nextOpenInstallment(installments);
       return {
         agreement,
         installments,
@@ -81,18 +95,21 @@ export function useTaxPortfolio() {
         signal,
         recordsSignal,
         statusKey: signal || agreement.situacao,
-        nextInstallment: nextOpenInstallment(installments),
+        nextInstallment,
+        nextInstallmentGuide: nextInstallment ? guidesByInstallment.get(nextInstallment.id) || null : null,
       };
     });
-  }, [agreementsQuery.data, installmentsQuery.data, entitiesQuery.data, today]);
+  }, [agreementsQuery.data, installmentsQuery.data, entitiesQuery.data, guidesByInstallment, today]);
 
   return {
     rows,
+    guidesByInstallment,
     entities: entitiesQuery.data || [],
     today,
-    isLoading: agreementsQuery.isLoading || installmentsQuery.isLoading || entitiesQuery.isLoading,
-    error: agreementsQuery.error || installmentsQuery.error || entitiesQuery.error || null,
-    refetch: () => Promise.all([agreementsQuery.refetch(), installmentsQuery.refetch(), entitiesQuery.refetch()]),
+    isLoading: agreementsQuery.isLoading || installmentsQuery.isLoading || entitiesQuery.isLoading || guidesQuery.isLoading,
+    error: agreementsQuery.error || installmentsQuery.error || entitiesQuery.error || guidesQuery.error || null,
+    refetch: () =>
+      Promise.all([agreementsQuery.refetch(), installmentsQuery.refetch(), entitiesQuery.refetch(), guidesQuery.refetch()]),
   };
 }
 
@@ -118,5 +135,33 @@ export function useInvalidateTax() {
     Promise.all([
       queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.agreements }),
       queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.installments }),
+      // Mudar ou excluir parcela faz o servidor verificar de novo as guias (vencimento, duplicidade).
+      queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.guides }),
     ]);
+}
+
+/** Guia atual, parcela e guias anteriores de uma parcela. */
+export function useInstallmentGuide(installmentId) {
+  const query = useQuery({
+    queryKey: TAX_QUERY_KEYS.installmentGuide(installmentId),
+    queryFn: () => taxGuidesApi.get(installmentId),
+    enabled: Boolean(installmentId),
+  });
+  return { data: query.data || null, isLoading: query.isLoading, error: query.error || null, refetch: query.refetch };
+}
+
+/** Envios por e-mail das guias de uma parcela (inclusive de guias já substituídas). */
+export function useGuideSends(installmentId) {
+  const query = useQuery({
+    queryKey: TAX_QUERY_KEYS.guideSends(installmentId),
+    queryFn: async () => (await taxGuidesApi.sends(installmentId)) || [],
+    enabled: Boolean(installmentId),
+  });
+  return { sends: query.data || [], isLoading: query.isLoading, error: query.error || null, refetch: query.refetch };
+}
+
+/** Recarrega tudo o que mostra guia: lista de guias atuais, guia de cada parcela e envios. */
+export function useInvalidateTaxGuides() {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.guides });
 }

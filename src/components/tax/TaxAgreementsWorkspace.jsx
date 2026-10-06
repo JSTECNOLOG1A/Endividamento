@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { toast } from "@/lib/notify";
 import { todayInBrazil } from "@/lib/taxDates";
 import { canWriteTax } from "@/lib/taxLabels";
+import { GUIDE_URL_PARAM } from "@/lib/taxGuides";
 import { useAgreementInstallments, useInvalidateTax, useTaxPortfolio } from "@/hooks/useTaxData";
 import { TaxEmptyState, TaxErrorState, TaxLoadingState } from "./TaxPageShell";
 import TaxAgreementList from "./TaxAgreementList";
@@ -29,7 +30,7 @@ export default function TaxAgreementsWorkspace({ esfera }) {
   const { user } = useAuth();
   const canWrite = canWriteTax(user);
   const [searchParams, setSearchParams] = useSearchParams();
-  const { rows, entities, today, isLoading, error, refetch } = useTaxPortfolio();
+  const { rows, guidesByInstallment, entities, today, isLoading, error, refetch } = useTaxPortfolio();
   const invalidateTax = useInvalidateTax();
 
   const [formOpen, setFormOpen] = useState(false);
@@ -70,7 +71,7 @@ export default function TaxAgreementsWorkspace({ esfera }) {
           ? `Parcelamento excluído junto com ${removed} ${removed === 1 ? "parcela" : "parcelas"}`
           : "Parcelamento excluído"
       );
-      if (deletingRow && deletingRow.agreement.id === detailId) updateParams({ [DETAIL_PARAM]: null });
+      if (deletingRow && deletingRow.agreement.id === detailId) updateParams({ [DETAIL_PARAM]: null, [GUIDE_URL_PARAM]: null });
       setDeletingRow(null);
       await invalidateTax();
     },
@@ -105,13 +106,24 @@ export default function TaxAgreementsWorkspace({ esfera }) {
     content = (
       <TaxEmptyState title="Parcelamento não encontrado">
         Ele pode ter sido excluído.{" "}
-        <button type="button" className="font-medium text-slate-700 underline" onClick={() => updateParams({ [DETAIL_PARAM]: null })}>
+        <button
+          type="button"
+          className="font-medium text-slate-700 underline"
+          onClick={() => updateParams({ [DETAIL_PARAM]: null, [GUIDE_URL_PARAM]: null })}
+        >
           Voltar para a lista
         </button>
       </TaxEmptyState>
     );
   } else if (detailRow) {
-    content = <TaxAgreementDetail row={detailRow} actions={actions} onBack={() => updateParams({ [DETAIL_PARAM]: null })} />;
+    content = (
+      <TaxAgreementDetail
+        row={detailRow}
+        guidesByInstallment={guidesByInstallment}
+        actions={actions}
+        onBack={() => updateParams({ [DETAIL_PARAM]: null, [GUIDE_URL_PARAM]: null })}
+      />
+    );
   } else {
     content = (
       <TaxAgreementList

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { formatCivilDate } from "@/lib/taxDates";
 import { SIGNAL_ORDER, isBalanceUnverified } from "@/lib/taxSignal";
 import { AGREEMENT_STATUS_OPTIONS, INSTALLMENT_OVERDUE_LABEL, formatMoney, isInstallmentOverdue } from "@/lib/taxLabels";
+import { amountComesFromGuide, amountToPay, isGuideException } from "@/lib/taxGuides";
 import { ProvenanceNote, TaxSignalBadge, statusKeyLabel } from "./TaxBadges";
 import { TaxEmptyState } from "./TaxPageShell";
 
@@ -45,9 +46,11 @@ export function SaldoCell({ agreement }) {
   );
 }
 
-export function NextInstallmentCell({ installment, today }) {
+/** Próxima parcela em aberto com o valor para pagamento: o da guia, quando há; senão o cadastrado (estimado). */
+export function NextInstallmentCell({ installment, guide, today }) {
   if (!installment) return <span className="text-xs text-slate-400">Nenhuma parcela a vencer ou vencida</span>;
   const overdue = isInstallmentOverdue(installment, today);
+  const fromGuide = amountComesFromGuide(guide);
   return (
     <div className="leading-tight">
       <p className={cn("tabular-nums", overdue ? "font-semibold text-rose-700" : "text-slate-800")}>
@@ -55,8 +58,11 @@ export function NextInstallmentCell({ installment, today }) {
         {overdue ? ` · ${INSTALLMENT_OVERDUE_LABEL}` : ""}
       </p>
       <p className="text-[11px] text-slate-500">
-        Parcela {installment.numero_parcela} · {formatMoney(installment.valor)}
+        Parcela {installment.numero_parcela} · {formatMoney(amountToPay(installment, guide))}
+        {fromGuide ? " a pagar" : ""}
       </p>
+      {fromGuide ? <p className="text-[11px] text-slate-400">estimado {formatMoney(installment.valor)}</p> : null}
+      {isGuideException(guide) ? <p className="text-[11px] font-medium text-amber-800">guia em exceção</p> : null}
     </div>
   );
 }
@@ -205,7 +211,7 @@ export default function TaxAgreementList({ esfera, rows, entities, actions, stat
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                       <SaldoCell agreement={row.agreement} />
-                      <NextInstallmentCell installment={row.nextInstallment} today={actions.today} />
+                      <NextInstallmentCell installment={row.nextInstallment} guide={row.nextInstallmentGuide} today={actions.today} />
                     </div>
                   </Link>
                   <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-1.5">
@@ -254,7 +260,7 @@ export default function TaxAgreementList({ esfera, rows, entities, actions, stat
                       <TaxSignalBadge signal={row.signal} recordsSignal={row.recordsSignal} situacao={row.agreement.situacao} />
                     </td>
                     <td className="px-3 py-2.5"><SaldoCell agreement={row.agreement} /></td>
-                    <td className="px-3 py-2.5"><NextInstallmentCell installment={row.nextInstallment} today={actions.today} /></td>
+                    <td className="px-3 py-2.5"><NextInstallmentCell installment={row.nextInstallment} guide={row.nextInstallmentGuide} today={actions.today} /></td>
                     <td className="px-3 py-2.5">
                       <ProvenanceNote origem={row.agreement.origem_dado} ultimaConferencia={row.agreement.ultima_conferencia} />
                     </td>

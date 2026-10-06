@@ -1,6 +1,7 @@
 import { pool } from "../../db/pool.js";
 import { requireTenantContext, selectResourceForTenant } from "../tenants/scope.js";
 import { installmentStatusLabel } from "./labels.js";
+import { collectGuidesForDeletion } from "./guideFiles.js";
 
 // Regras de gravação dos parcelamentos de tributos (Gestão Tributária) quando chegam pelo CRUD genérico.
 // O dado digitado à mão nunca pode parecer oficial: a procedência é sempre carimbada aqui, nunca vem do cliente.
@@ -60,6 +61,8 @@ export const TAX_FIELD_LABELS = {
   valor: "valor da parcela",
   data_pagamento: "data de pagamento",
   valor_pago: "valor pago",
+  pagar_ate: "pagar até",
+  linha_digitavel: "linha digitável",
 };
 
 // Órgãos sugeridos na tela: digitados com outra caixa, gravam na grafia canônica (evita o mesmo acordo duas vezes).
@@ -68,7 +71,7 @@ const CANONICAL_AGENCIES = new Map([
   ["pgfn", "PGFN"],
 ]);
 
-function validationError(field, message, status = 400) {
+export function validationError(field, message, status = 400) {
   const err = new Error(message);
   err.status = status;
   err.code = "TAX_VALIDATION";
@@ -112,7 +115,7 @@ function isCivilDate(text) {
 }
 
 // Data civil (AAAA-MM-DD), sem horário nem fuso: o vencimento de tributo é o dia do calendário, não um instante.
-function parseDate(field, value) {
+export function parseDate(field, value) {
   if (isBlank(value)) return null;
   const text = typeof value === "string" ? value.trim() : "";
   if (!isCivilDate(text)) {
@@ -380,7 +383,7 @@ async function prepareInstallment(data, previous, client) {
 }
 
 /**
- * Exclui o parcelamento e, por cascata do banco, as parcelas dele — numa transação que trava o parcelamento,
+ * Exclui o parcelamento e, por cascata do banco, as parcelas dele (e as guias delas) — numa transação que trava o parcelamento,
  * para que a contagem devolvida (e auditada) seja exatamente o que saiu.
  */
 export async function deleteAgreementWithInstallments(id) {
@@ -394,15 +397,45 @@ export async function deleteAgreementWithInstallments(id) {
     );
     if (!locked.rows[0]) {
       await client.query("ROLLBACK");
-      return { deleted: false, installmentsDeleted: 0 };
+      return { deleted: false, installmentsDeleted: 0, guides: null };
     }
     const installments = await client.query(
       `SELECT count(*)::int AS total FROM tax_installments WHERE agreement_id = $1`,
       [id]
     );
+    const guides = await collectGuidesForDeletion(client, { groupId, agreementId: id });
     await client.query(`DELETE FROM tax_agreements WHERE id = $1 AND group_id = $2`, [id, groupId]);
     await client.query("COMMIT");
-    return { deleted: true, installmentsDeleted: installments.rows[0].total };
+    return { deleted: true, installmentsDeleted: installments.rows[0].total, guides };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Exclui a parcela e, por cascata do banco, as guias e os envios dela — numa transação que trava a parcela, para
+ * que nenhuma guia seja anexada entre a coleta dos arquivos e a exclusão.
+ */
+export async function deleteInstallmentWithGuides(id) {
+  const groupId = requireTenantContext();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await client.query(
+      `SELECT id FROM tax_installments WHERE id = $1 AND group_id = $2 FOR UPDATE`,
+      [id, groupId]
+    );
+    if (!locked.rows[0]) {
+      await client.query("ROLLBACK");
+      return { deleted: false, guides: null };
+    }
+    const guides = await collectGuidesForDeletion(client, { groupId, installmentId: id });
+    await client.query(`DELETE FROM tax_installments WHERE id = $1 AND group_id = $2`, [id, groupId]);
+    await client.query("COMMIT");
+    return { deleted: true, guides };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

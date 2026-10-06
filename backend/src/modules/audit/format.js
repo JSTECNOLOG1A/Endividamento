@@ -29,6 +29,7 @@ const ROTINA_BY_RESOURCE = {
   CalculationSnapshot: "Contratos",
   TaxAgreement: "Gestão Tributária",
   TaxInstallment: "Gestão Tributária",
+  TaxInstallmentGuide: "Gestão Tributária",
   CDIRate: "Indexadores",
   Holiday: "Indexadores",
   Currency: "Indexadores",
@@ -81,6 +82,12 @@ const ACTION_LABELS = {
   SUPPORT_ACCESS_EXPIRED: "Suporte expirado",
   COMMERCIAL_PROPOSAL_ACCEPTED: "Proposta comercial aceita",
   COMMERCIAL_PROPOSAL_REJECTED: "Proposta comercial recusada",
+  TAX_GUIDE_ATTACHED: "Guia anexada",
+  TAX_GUIDE_REPLACED: "Guia substituída",
+  TAX_GUIDE_CORRECTED: "Guia corrigida",
+  TAX_GUIDE_REMOVED: "Guia removida",
+  TAX_GUIDE_EMAIL_SENT: "Guia enviada por e-mail",
+  TAX_GUIDE_EMAIL_FAILED: "Falha no envio da guia por e-mail",
 };
 
 const LABEL_FIELDS = [
