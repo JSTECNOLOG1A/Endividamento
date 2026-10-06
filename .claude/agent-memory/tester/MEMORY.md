@@ -1,1 +1,0 @@
-- [Teste de navegador no AllDebt](reference_browser_testing_alldebt.md) — Playwright via Docker em `--network container:endividamento-web`, --headless=new p/ PDF, modal legal/tour, usuário descartável via bcrypt, grupo não apaga

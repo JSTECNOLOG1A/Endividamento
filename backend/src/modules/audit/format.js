@@ -1,3 +1,5 @@
+import { installmentStatusLabel } from "../tax/labels.js";
+
 const SECRET_KEYS = /password|secret|token|credential|authorization|hash|authheader/i;
 const SKIP_DIFF = new Set([
   "updated_date",
@@ -142,19 +144,35 @@ function asText(value) {
   return String(value);
 }
 
-export function diffRecords(before, after) {
+// Valores internos que a tela de auditoria mostra com o nome que o usuário conhece.
+export function displayAuditRecord(row, resourceType, referenceDate) {
+  if (!row || typeof row !== "object") return row;
+  if (resourceType === "TaxInstallment" && row.situacao) {
+    return { ...row, situacao: installmentStatusLabel(row.situacao, row.vencimento, referenceDate) };
+  }
+  return row;
+}
+
+/**
+ * @param {object} [options]
+ * @param {string} [options.resourceType] tipo do registro auditado
+ * @param {string} [options.referenceDate] AAAA-MM-DD do evento (situação "a vencer"/"vencida" é a daquele dia)
+ */
+export function diffRecords(before, after, { resourceType, referenceDate } = {}) {
   if (!before || !after) return [];
   const left = before && typeof before === "object" ? before : {};
   const right = after && typeof after === "object" ? after : {};
+  // O que mudou é decidido pelo valor gravado; o rótulo só entra depois (senão "Vencida → A vencer" apareceria
+  // como mudança de situação quando só o vencimento mudou).
+  const shownLeft = displayAuditRecord(left, resourceType, referenceDate);
+  const shownRight = displayAuditRecord(right, resourceType, referenceDate);
   const keys = [...new Set([...Object.keys(left), ...Object.keys(right)])]
     .filter((key) => !SECRET_KEYS.test(key) && !SKIP_DIFF.has(key))
     .sort();
   const changes = [];
   for (const campo of keys) {
-    const de = asText(left[campo]);
-    const para = asText(right[campo]);
-    if (de === para) continue;
-    changes.push({ campo, de, para });
+    if (asText(left[campo]) === asText(right[campo])) continue;
+    changes.push({ campo, de: asText(shownLeft[campo]), para: asText(shownRight[campo]) });
   }
   return changes;
 }

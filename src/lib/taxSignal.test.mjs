@@ -2,6 +2,7 @@
  * Testes do semáforo dos parcelamentos de tributos (node src/lib/taxSignal.test.mjs).
  */
 import assert from "node:assert/strict";
+import { INSTALLMENT_STATUS_OPTIONS, installmentStatusLabel } from "./taxLabels.js";
 import { addMonthsKeepingDay, daysBetween, formatCivilDate, todayInBrazil } from "./taxDates.js";
 import {
   DUE_SOON_DAYS,
@@ -73,6 +74,17 @@ assert.equal(isBalanceUnverified({ saldo_oficial: null, ultima_conferencia: null
 assert.equal(isBalanceUnverified({ saldo_oficial: 10, saldo_data_base: "2026-09-01", ultima_conferencia: null }), true);
 assert.equal(isBalanceUnverified({ saldo_oficial: 10, saldo_data_base: "2026-10-02", ultima_conferencia: "2026-10-01" }), true);
 assert.equal(isBalanceUnverified({ saldo_oficial: 10, saldo_data_base: "2026-10-01", ultima_conferencia: "2026-10-01" }), false);
+
+// Situação da parcela no vocabulário da equipe; o valor interno não muda.
+assert.equal(installmentStatusLabel(open(TODAY), TODAY), "A vencer", "vence hoje ainda é a vencer");
+assert.equal(installmentStatusLabel(open("2026-10-04"), TODAY), "Vencida");
+assert.equal(installmentStatusLabel(waiting, TODAY), "Paga, aguardando reconhecimento");
+assert.equal(installmentStatusLabel({ situacao: "reconhecida", vencimento: "2026-01-01" }, TODAY), "Paga");
+assert.equal(installmentStatusLabel({ situacao: "cancelada", vencimento: "2026-01-01" }, TODAY), "Cancelada");
+assert.deepEqual(
+  INSTALLMENT_STATUS_OPTIONS.map((item) => item.label),
+  ["A vencer ou vencida", "Paga, aguardando reconhecimento", "Paga", "Cancelada"]
+);
 
 // Datas civis sem fuso.
 assert.equal(daysBetween("2026-02-28", "2026-03-01"), 1);

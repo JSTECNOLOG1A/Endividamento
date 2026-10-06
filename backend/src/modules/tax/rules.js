@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool.js";
 import { requireTenantContext, selectResourceForTenant } from "../tenants/scope.js";
+import { installmentStatusLabel } from "./labels.js";
 
 // Regras de gravação dos parcelamentos de tributos (Gestão Tributária) quando chegam pelo CRUD genérico.
 // O dado digitado à mão nunca pode parecer oficial: a procedência é sempre carimbada aqui, nunca vem do cliente.
@@ -292,23 +293,23 @@ function assertInstallmentRules(merged) {
   if (!INSTALLMENT_STATUSES.has(merged.situacao)) {
     throw validationError(
       "situacao",
-      "Situação da parcela inválida. Use em aberto, paga aguardando reconhecimento, reconhecida ou cancelada."
+      "Situação da parcela inválida. Use a vencer ou vencida, paga aguardando reconhecimento, paga ou cancelada."
     );
   }
   const hasPayment = Boolean(merged.data_pagamento) || (merged.valor_pago !== null && merged.valor_pago !== undefined);
   if (PAID_STATUSES.has(merged.situacao)) {
     if (!merged.data_pagamento) {
-      throw validationError("data_pagamento", "Informe a data de pagamento para marcar a parcela como paga.");
+      throw validationError("data_pagamento", "Informe a data de pagamento para registrar o pagamento da parcela.");
     }
     if (merged.data_pagamento > todayInBrazil()) {
       throw validationError("data_pagamento", "A data de pagamento não pode ser no futuro.");
     }
   } else if (hasPayment) {
     const field = merged.data_pagamento ? "data_pagamento" : "valor_pago";
-    const label = merged.situacao === "cancelada" ? "Parcela cancelada" : "Parcela em aberto";
+    const label = `Parcela ${installmentStatusLabel(merged.situacao).toLowerCase()}`;
     throw validationError(
       field,
-      `${label} não pode ter data nem valor de pagamento. Apague esses campos ou marque a parcela como paga.`
+      `${label} não pode ter data nem valor de pagamento. Apague esses campos ou registre o pagamento da parcela.`
     );
   }
 }

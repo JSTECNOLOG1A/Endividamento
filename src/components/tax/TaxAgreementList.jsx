@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { formatCivilDate } from "@/lib/taxDates";
 import { SIGNAL_ORDER, isBalanceUnverified } from "@/lib/taxSignal";
-import { AGREEMENT_STATUS_OPTIONS, formatMoney } from "@/lib/taxLabels";
+import { AGREEMENT_STATUS_OPTIONS, INSTALLMENT_OVERDUE_LABEL, formatMoney, isInstallmentOverdue } from "@/lib/taxLabels";
 import { ProvenanceNote, TaxSignalBadge, statusKeyLabel } from "./TaxBadges";
 import { TaxEmptyState } from "./TaxPageShell";
 
@@ -46,13 +46,13 @@ export function SaldoCell({ agreement }) {
 }
 
 export function NextInstallmentCell({ installment, today }) {
-  if (!installment) return <span className="text-xs text-slate-400">Nenhuma em aberto</span>;
-  const overdue = installment.vencimento < today;
+  if (!installment) return <span className="text-xs text-slate-400">Nenhuma parcela a vencer ou vencida</span>;
+  const overdue = isInstallmentOverdue(installment, today);
   return (
     <div className="leading-tight">
       <p className={cn("tabular-nums", overdue ? "font-semibold text-rose-700" : "text-slate-800")}>
         {formatCivilDate(installment.vencimento)}
-        {overdue ? " · vencida" : ""}
+        {overdue ? ` · ${INSTALLMENT_OVERDUE_LABEL}` : ""}
       </p>
       <p className="text-[11px] text-slate-500">
         Parcela {installment.numero_parcela} · {formatMoney(installment.valor)}
@@ -217,7 +217,7 @@ export default function TaxAgreementList({ esfera, rows, entities, actions, stat
             ))}
           </ul>
 
-          <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
+          <div className="relative hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
             <table className="w-full min-w-[1080px] text-xs">
               <thead className="border-b-2 border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
                 <tr>

@@ -4,6 +4,9 @@ import { pool } from "../../db/pool.js";
 import { createApp } from "../../app.js";
 import { issueAuthResponse } from "../auth/token.js";
 import { mapDbError } from "../entities/store.js";
+import { toPublic } from "../audit/service.js";
+import { diffRecords } from "../audit/format.js";
+import { installmentStatusLabel } from "./labels.js";
 
 // Gestão Tributária pelo CRUD genérico, de ponta a ponta (HTTP → rotas → store → banco).
 // Rodar também com TZ positivo (ex.: TZ=Pacific/Kiritimati) para provar que data civil não desloca.
@@ -306,17 +309,17 @@ async function main() {
     expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, valor: "" }), 400, "Informe o valor da parcela", "valor vazio");
     expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, valor: "abc" }), 400, "Informe um número válido no campo valor da parcela", "valor não numérico");
     expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, agreement_id: "" }), 400, "Selecione o parcelamento", "sem parcelamento");
-    expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, situacao: "reconhecida" }), 400, "Informe a data de pagamento", "paga sem data");
+    expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, situacao: "reconhecida" }), 400, "Informe a data de pagamento para registrar o pagamento da parcela.", "paga sem data");
     expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, situacao: "paga_aguardando_reconhecimento", data_pagamento: "2999-01-01" }), 400, "não pode ser no futuro", "pagamento no futuro");
-    expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, data_pagamento: "2026-09-01" }), 400, "Parcela em aberto não pode ter data", "em aberto com data de pagamento");
-    expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, situacao: "cancelada", valor_pago: 10 }), 400, "Parcela cancelada não pode ter", "cancelada com valor pago");
-    expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, situacao: "paga" }), 400, "Situação da parcela inválida", "situação inválida");
+    expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, data_pagamento: "2026-09-01" }), 400, "Parcela a vencer ou vencida não pode ter data nem valor de pagamento. Apague esses campos ou registre o pagamento da parcela.", "em aberto com data de pagamento");
+    expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, situacao: "cancelada", valor_pago: 10 }), 400, "Parcela cancelada não pode ter data nem valor de pagamento. Apague esses campos ou registre o pagamento da parcela.", "cancelada com valor pago");
+    expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, situacao: "paga" }), 400, "Situação da parcela inválida. Use a vencer ou vencida, paga aguardando reconhecimento, paga ou cancelada.", "situação inválida");
     expectError(await call(tA, "POST", "/TaxInstallment", { ...inst, numero_parcela: 1 }), 409, "Já existe uma parcela com esse número", "parcela repetida");
 
     const paid = await call(tA, "POST", "/TaxInstallment", { ...inst, situacao: "reconhecida", data_pagamento: "2026-09-30", valor_pago: 10 });
     check(paid.status === 201 && paid.json?.data_pagamento === "2026-09-30", `parcela paga: ${paid.status} ${JSON.stringify(paid.json)}`);
     // Voltar para em aberto sem limpar o pagamento é recusado; limpando, passa.
-    expectError(await call(tA, "PATCH", `/TaxInstallment/${paid.json?.id}`, { situacao: "em_aberto" }), 400, "Parcela em aberto não pode ter data", "reabrir sem limpar pagamento");
+    expectError(await call(tA, "PATCH", `/TaxInstallment/${paid.json?.id}`, { situacao: "em_aberto" }), 400, "Parcela a vencer ou vencida não pode ter data nem valor de pagamento. Apague esses campos ou registre o pagamento da parcela.", "reabrir sem limpar pagamento");
     const importedInstallmentId = `tax_inst_imp_${suffix}`;
     await pool.query(
       `INSERT INTO tax_installments (id, group_id, agreement_id, numero_parcela, vencimento, valor, origem_dado, created_by)
@@ -329,10 +332,75 @@ async function main() {
 
     const reopened = await call(tA, "PATCH", `/TaxInstallment/${paid.json?.id}`, { situacao: "em_aberto", data_pagamento: null, valor_pago: null, origem_dado: "api" });
     check(reopened.status === 200 && reopened.json?.data_pagamento === null && reopened.json?.origem_dado === "manual", `reabrir limpando pagamento: ${reopened.status} ${JSON.stringify(reopened.json)}`);
+    // Auditoria mostra a situação com o nome que o usuário conhece, não o valor interno.
+    const reopenAudit = await pool.query(
+      `SELECT * FROM audit_events WHERE action = 'UPDATE' AND resource_type = 'TaxInstallment' AND resource_id = $1 ORDER BY occurred_at DESC LIMIT 1`,
+      [paid.json?.id]
+    );
+    const reopenChange = reopenAudit.rows[0] ? toPublic(reopenAudit.rows[0]).changes.find((c) => c.campo === "situacao") : null;
+    check(reopenChange?.de === "Paga" && reopenChange?.para === "Vencida", `auditoria da situação: ${JSON.stringify(reopenChange)}`);
     expectError(await call(tA, "PATCH", `/TaxInstallment/${paid.json?.id}`, { agreement_id: otherCompany.json?.id }), 400, "Não é possível mover a parcela", "mover parcela");
     const sameAgreement = await call(tA, "PATCH", `/TaxInstallment/${paid.json?.id}`, { agreement_id: agreement.id, observacoes: "ok" });
     check(sameAgreement.status === 200, "reenviar o mesmo parcelamento na edição é aceito");
     expectError(await call(tA, "PATCH", `/TaxInstallment/${paid.json?.id}`, { numero_parcela: 1 }), 409, "Já existe uma parcela com esse número", "edição para número repetido");
+
+    // Situação exibida: os quatro valores internos e os dois lados do vencimento.
+    const labelCases = [
+      [installmentStatusLabel("em_aberto", "2026-10-05", "2026-10-06"), "Vencida"],
+      [installmentStatusLabel("em_aberto", "2026-10-06", "2026-10-06"), "A vencer"],
+      [installmentStatusLabel("em_aberto", "2026-10-07", "2026-10-06"), "A vencer"],
+      [installmentStatusLabel("em_aberto", "2026-10-05"), "A vencer ou vencida"],
+      [installmentStatusLabel("paga_aguardando_reconhecimento"), "Paga, aguardando reconhecimento"],
+      [installmentStatusLabel("reconhecida"), "Paga"],
+      [installmentStatusLabel("cancelada"), "Cancelada"],
+    ];
+    for (const [got, want] of labelCases) check(got === want, `rótulo da situação: esperado ${want}, veio ${got}`);
+    const futureDiff = diffRecords(
+      { situacao: "cancelada", vencimento: "2026-12-31" },
+      { situacao: "em_aberto", vencimento: "2026-12-31" },
+      { resourceType: "TaxInstallment", referenceDate: "2026-10-06" }
+    );
+    check(futureDiff[0]?.de === "Cancelada" && futureDiff[0]?.para === "A vencer", `auditoria parcela a vencer: ${JSON.stringify(futureDiff)}`);
+    const otherEntityDiff = diffRecords({ situacao: "em_aberto" }, { situacao: "reconhecida" }, { resourceType: "TaxAgreement" });
+    check(otherEntityDiff[0]?.de === "em_aberto", "rótulo de parcela não vale para outra entidade");
+
+    // Mudou só o vencimento: a situação gravada é a mesma, então não há linha de situação no histórico.
+    const onlyDueDiff = diffRecords(
+      { situacao: "em_aberto", vencimento: "2026-10-01" },
+      { situacao: "em_aberto", vencimento: "2026-12-01" },
+      { resourceType: "TaxInstallment", referenceDate: "2026-10-06" }
+    );
+    check(onlyDueDiff.length === 1 && onlyDueDiff[0].campo === "vencimento", `só vencimento mudou: ${JSON.stringify(onlyDueDiff)}`);
+    const lateInstallment = await call(tA, "POST", "/TaxInstallment", { agreement_id: otherCompany.json?.id, numero_parcela: 20, vencimento: "2026-01-31", valor: 5 });
+    await call(tA, "PATCH", `/TaxInstallment/${lateInstallment.json?.id}`, { vencimento: "2099-01-31" });
+    const dueAudit = await pool.query(
+      `SELECT * FROM audit_events WHERE action = 'UPDATE' AND resource_type = 'TaxInstallment' AND resource_id = $1`,
+      [lateInstallment.json?.id]
+    );
+    const dueChanges = dueAudit.rows[0] ? toPublic(dueAudit.rows[0]).changes : null;
+    check(dueChanges?.length === 1 && dueChanges[0].campo === "vencimento", `auditoria de troca de vencimento: ${JSON.stringify(dueChanges)}`);
+
+    // Inclusão e exclusão não têm diff: o registro mostrado também usa o nome da situação.
+    const createdPaidAudit = await pool.query(
+      `SELECT * FROM audit_events WHERE action = 'CREATE' AND resource_type = 'TaxInstallment' AND resource_id = $1`,
+      [paid.json?.id]
+    );
+    const createdPaid = createdPaidAudit.rows[0] ? toPublic(createdPaidAudit.rows[0]) : null;
+    check(createdPaid?.after?.situacao === "Paga" && createdPaid?.after?.numero_parcela === 9, `auditoria da inclusão: ${JSON.stringify(createdPaid?.after)}`);
+    check(createdPaidAudit.rows[0]?.after_json?.situacao === "reconhecida", "o evento gravado continua com o valor interno");
+    await call(tA, "PUT", `/TaxInstallment/${lateInstallment.json?.id}`, { vencimento: "2026-01-31" });
+    await call(tA, "DELETE", `/TaxInstallment/${lateInstallment.json?.id}`);
+    const deletedAudit = await pool.query(
+      `SELECT * FROM audit_events WHERE action = 'DELETE' AND resource_type = 'TaxInstallment' AND resource_id = $1`,
+      [lateInstallment.json?.id]
+    );
+    const deleted = deletedAudit.rows[0] ? toPublic(deletedAudit.rows[0]) : null;
+    check(deleted?.before?.situacao === "Vencida" && deleted?.after == null, `auditoria da exclusão da parcela: ${JSON.stringify(deleted?.before)}`);
+    const agreementCreateAudit = await pool.query(
+      `SELECT * FROM audit_events WHERE action = 'CREATE' AND resource_type = 'TaxAgreement' AND resource_id = $1`,
+      [otherCompany.json?.id]
+    );
+    check(agreementCreateAudit.rows[0] && toPublic(agreementCreateAudit.rows[0]).after?.situacao === "ativo", "situação de parcelamento não recebe nome de parcela");
 
     // ---- Isolamento entre clientes ----
     expectError(await call(tB, "POST", "/TaxInstallment", { ...inst, numero_parcela: 50 }), 400, "parcelamento desta parcela não foi encontrado", "parcela em parcelamento de outro cliente");

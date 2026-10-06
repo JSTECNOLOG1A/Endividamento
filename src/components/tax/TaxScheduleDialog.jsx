@@ -152,8 +152,8 @@ export default function TaxScheduleDialog({ open, onOpenChange, agreement, insta
             <p className="flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               {pastDue === 1 ? "1 parcela tem" : pastDue === schedule.length ? `Todas as ${pastDue} parcelas têm` : `${pastDue} parcelas têm`}{" "}
-              vencimento antes de hoje e {pastDue === 1 ? "será criada" : "serão criadas"} em aberto — o parcelamento vai aparecer em
-              atraso. Se já foram pagas, marque cada uma como paga com a data real do pagamento.
+              vencimento antes de hoje e {pastDue === 1 ? "será criada como “Vencida”" : "serão criadas como “Vencida”"} — o parcelamento
+              vai aparecer em atraso. Se já foram pagas, use “Registrar pagamento” em cada uma, com a data real do pagamento.
             </p>
           ) : null}
 

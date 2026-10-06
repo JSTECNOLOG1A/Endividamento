@@ -5,7 +5,7 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/lib/notify";
 import { formatCivilDate } from "@/lib/taxDates";
-import { AGREEMENT_STATUS_LABELS, SPHERE_LABELS, formatMoney } from "@/lib/taxLabels";
+import { AGREEMENT_STATUS_LABELS, SPHERE_LABELS, formatMoney, isInstallmentOverdue } from "@/lib/taxLabels";
 import { useAgreementInstallments, useInvalidateTax } from "@/hooks/useTaxData";
 import { TaxErrorState } from "./TaxPageShell";
 import { InstallmentStatusBadge, ProvenanceNote, TaxSignalBadge } from "./TaxBadges";
@@ -25,14 +25,14 @@ function Info({ label, children }) {
 }
 
 function countBy(installments, today) {
-  const counts = { em_aberto: 0, vencidas: 0, aguardando: 0, reconhecidas: 0 };
+  const counts = { aVencer: 0, vencidas: 0, aguardando: 0, pagas: 0 };
   for (const item of installments) {
     if (item.situacao === "em_aberto") {
-      counts.em_aberto += 1;
-      if (item.vencimento < today) counts.vencidas += 1;
+      if (isInstallmentOverdue(item, today)) counts.vencidas += 1;
+      else counts.aVencer += 1;
     }
     if (item.situacao === "paga_aguardando_reconhecimento") counts.aguardando += 1;
-    if (item.situacao === "reconhecida") counts.reconhecidas += 1;
+    if (item.situacao === "reconhecida") counts.pagas += 1;
   }
   return counts;
 }
@@ -53,7 +53,7 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
   const recognizeMutation = useMutation({
     mutationFn: (installment) => base44.entities.TaxInstallment.update(installment.id, { situacao: "reconhecida" }),
     onSuccess: async () => {
-      toast.success("Parcela marcada como reconhecida");
+      toast.success("Reconhecimento confirmado. A parcela agora consta como Paga.");
       await invalidateTax();
     },
     onError: (err) => toast.error(err.message),
@@ -150,9 +150,10 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
             {installmentsReady ? (
               <p className="text-xs text-slate-500">
                 {installments.length} {installments.length === 1 ? "cadastrada" : "cadastradas"}
-                {quantity ? ` de ${quantity} combinadas` : ""} · {counts.em_aberto} em aberto
-                {counts.vencidas ? ` (${counts.vencidas} vencidas)` : ""} · {counts.aguardando} aguardando reconhecimento ·{" "}
-                {counts.reconhecidas} reconhecidas
+                {quantity ? ` de ${quantity} combinadas` : ""} · {counts.aVencer} a vencer · {counts.vencidas}{" "}
+                {counts.vencidas === 1 ? "vencida" : "vencidas"} · {counts.aguardando}{" "}
+                {counts.aguardando === 1 ? "paga, aguardando reconhecimento" : "pagas, aguardando reconhecimento"} · {counts.pagas}{" "}
+                {counts.pagas === 1 ? "paga" : "pagas"}
               </p>
             ) : null}
             <ProvenanceNote origem={agreement.origem_dado} ultimaConferencia={agreement.ultima_conferencia} className="mt-1" />
@@ -189,7 +190,7 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
             {canWrite ? "Use “Gerar parcelas” para criar todas de uma vez a partir do 1º vencimento, ou inclua uma a uma." : ""}
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full min-w-[760px] text-xs">
               <thead className="border-b-2 border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
                 <tr>
@@ -203,7 +204,6 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {installments.map((item) => {
-                  const overdue = item.situacao === "em_aberto" && item.vencimento < today;
                   const exceeds = Boolean(quantity) && item.numero_parcela > quantity;
                   return (
                     <tr key={item.id} className="align-middle">
@@ -218,14 +218,16 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
                           ) : null}
                         </span>
                       </td>
-                      <td className="px-3 py-2 tabular-nums text-slate-700">{formatCivilDate(item.vencimento)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-800">{formatMoney(item.valor)}</td>
-                      <td className="px-3 py-2"><InstallmentStatusBadge situacao={item.situacao} overdue={overdue} /></td>
-                      <td className="px-3 py-2 text-slate-600">
+                      <td className="whitespace-nowrap px-3 py-2 tabular-nums text-slate-700">{formatCivilDate(item.vencimento)}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-800">{formatMoney(item.valor)}</td>
+                      <td className="px-3 py-2"><InstallmentStatusBadge installment={item} today={today} /></td>
+                      <td className="whitespace-nowrap px-3 py-2 tabular-nums leading-tight text-slate-600">
                         {item.data_pagamento ? (
                           <>
-                            {formatCivilDate(item.data_pagamento)}
-                            {item.valor_pago !== null && item.valor_pago !== undefined ? ` · ${formatMoney(item.valor_pago)}` : ""}
+                            <span className="block">{formatCivilDate(item.data_pagamento)}</span>
+                            {item.valor_pago !== null && item.valor_pago !== undefined ? (
+                              <span className="block text-[11px] text-slate-500">{formatMoney(item.valor_pago)}</span>
+                            ) : null}
                           </>
                         ) : (
                           <span className="text-slate-400">—</span>
@@ -237,7 +239,7 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
                             {item.situacao === "em_aberto" ? (
                               <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => setPayingInstallment(item)}>
                                 <Wallet className="h-3.5 w-3.5" />
-                                Marcar como paga
+                                Registrar pagamento
                               </Button>
                             ) : null}
                             {item.situacao === "paga_aguardando_reconhecimento" ? (
@@ -250,7 +252,7 @@ export default function TaxAgreementDetail({ row, actions, onBack }) {
                                 onClick={() => recognizeMutation.mutate(item)}
                               >
                                 <BadgeCheck className="h-3.5 w-3.5" />
-                                Marcar como reconhecida
+                                Confirmar reconhecimento
                               </Button>
                             ) : null}
                             <Button

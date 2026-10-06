@@ -78,6 +78,7 @@ export default function TaxInstallmentFormDialog({ open, onOpenChange, agreement
   };
 
   const isPaid = PAID_INSTALLMENT_STATUSES.has(form.situacao);
+  const wasPaid = isEdit && PAID_INSTALLMENT_STATUSES.has(installment.situacao);
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -86,7 +87,7 @@ export default function TaxInstallmentFormDialog({ open, onOpenChange, agreement
         vencimento: form.vencimento || null,
         valor: parseCurrencyField(form.valor),
         situacao: form.situacao,
-        // Em aberto e cancelada não aceitam pagamento: limpar os dois campos é o que reabre uma parcela paga.
+        // A vencer/vencida e cancelada não aceitam pagamento: limpar os dois campos é o que reabre uma parcela paga.
         data_pagamento: isPaid ? form.data_pagamento || null : null,
         valor_pago: isPaid ? parseCurrencyField(form.valor_pago) : null,
         observacoes: form.observacoes,
@@ -162,6 +163,11 @@ export default function TaxInstallmentFormDialog({ open, onOpenChange, agreement
               </SelectContent>
             </Select>
             <FieldError message={fieldErrors.situacao} />
+            {wasPaid && form.situacao === "em_aberto" ? (
+              <p className="text-xs text-amber-700">
+                A parcela volta a constar como “A vencer” ou “Vencida”, conforme o vencimento, e os dados do pagamento serão apagados.
+              </p>
+            ) : null}
           </div>
 
           {isPaid ? (

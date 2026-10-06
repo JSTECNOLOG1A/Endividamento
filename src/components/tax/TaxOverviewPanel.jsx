@@ -61,7 +61,7 @@ function SphereSummary({ sphere, rows }) {
   const sphereRows = rows.filter((row) => row.agreement.esfera === sphere.key);
   const active = sphereRows.filter((row) => row.agreement.situacao === "ativo");
   const withBalance = active.filter((row) => row.agreement.saldo_oficial !== null && row.agreement.saldo_oficial !== undefined);
-  // Total devedor = saldo informado de cada acordo, na sua data-base. Parcelas em aberto não entram: já estão dentro do saldo.
+  // Total devedor = saldo informado de cada acordo, na sua data-base. Parcelas a vencer ou vencidas não entram: já estão dentro do saldo.
   const total = withBalance.reduce((sum, row) => sum + Number(row.agreement.saldo_oficial), 0);
   const baseDates = withBalance.map((row) => row.agreement.saldo_data_base).filter(Boolean).sort();
   const oldest = baseDates[0];
@@ -134,10 +134,10 @@ function UpcomingInstallments({ rows, today }) {
     <section className="rounded-xl border border-slate-200 bg-white">
       <div className="border-b border-slate-100 p-4">
         <h3 className="text-sm font-semibold text-slate-900">Próximas parcelas a vencer</h3>
-        <p className="text-xs text-slate-500">Parcelas em aberto dos parcelamentos ativos, a partir de hoje. Dados informados manualmente.</p>
+        <p className="text-xs text-slate-500">Parcelas a vencer dos parcelamentos ativos, a partir de hoje. Dados informados manualmente.</p>
       </div>
       {upcoming.length === 0 ? (
-        <p className="p-6 text-center text-xs text-slate-500">Nenhuma parcela em aberto com vencimento a partir de hoje.</p>
+        <p className="p-6 text-center text-xs text-slate-500">Nenhuma parcela a vencer.</p>
       ) : (
         <ul className="divide-y divide-slate-100">
           {upcoming.map(({ item, row }) => (

@@ -2,7 +2,7 @@ import React from "react";
 import { PenLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SIGNALS } from "@/lib/taxSignal";
-import { AGREEMENT_STATUS_LABELS, INSTALLMENT_STATUS_LABELS, conferenceLabel, originLabel } from "@/lib/taxLabels";
+import { AGREEMENT_STATUS_LABELS, conferenceLabel, installmentStatusLabel, isInstallmentOverdue, originLabel } from "@/lib/taxLabels";
 
 const SIGNAL_STYLES = {
   desatualizado: "border-slate-400 border-dashed bg-slate-100 text-slate-700",
@@ -51,23 +51,21 @@ export function TaxSignalBadge({ signal, recordsSignal, situacao, className }) {
 }
 
 const INSTALLMENT_STYLES = {
-  em_aberto: "border-slate-200 bg-white text-slate-700",
+  a_vencer: "border-slate-200 bg-white text-slate-700",
+  vencida: "border-rose-200 bg-rose-50 text-rose-700",
   paga_aguardando_reconhecimento: "border-sky-200 bg-sky-50 text-sky-700",
   reconhecida: "border-emerald-200 bg-emerald-50 text-emerald-700",
   cancelada: "border-slate-200 bg-slate-50 text-slate-500 line-through",
 };
 
-export function InstallmentStatusBadge({ situacao, overdue }) {
-  if (situacao === "em_aberto" && overdue) {
-    return (
-      <span className="inline-flex items-center rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
-        Em aberto · vencida
-      </span>
-    );
-  }
+export function InstallmentStatusBadge({ installment, today }) {
+  const styleKey =
+    installment.situacao === "em_aberto" ? (isInstallmentOverdue(installment, today) ? "vencida" : "a_vencer") : installment.situacao;
   return (
-    <span className={cn("inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold", INSTALLMENT_STYLES[situacao])}>
-      {INSTALLMENT_STATUS_LABELS[situacao] || "—"}
+    <span
+      className={cn("inline-flex items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-semibold", INSTALLMENT_STYLES[styleKey])}
+    >
+      {installmentStatusLabel(installment, today)}
     </span>
   );
 }

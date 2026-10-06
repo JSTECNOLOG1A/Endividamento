@@ -12,7 +12,7 @@ import { formatMoney, parseCurrencyField, toCurrencyField } from "@/lib/taxLabel
 import { useInvalidateTax } from "@/hooks/useTaxData";
 import { FieldError, serverErrorField } from "./TaxBadges";
 
-/** Registra o pagamento de uma parcela; ela fica "paga, aguardando reconhecimento" até constar no e-CAC/portal. */
+/** Registra o pagamento de uma parcela: ela fica "Paga, aguardando reconhecimento" até constar no e-CAC/portal. */
 export default function TaxPaymentDialog({ installment, onOpenChange }) {
   const open = Boolean(installment);
   const today = todayInBrazil();
@@ -36,7 +36,7 @@ export default function TaxPaymentDialog({ installment, onOpenChange }) {
         valor_pago: parseCurrencyField(amountPaid),
       }),
     onSuccess: async () => {
-      toast.success("Pagamento registrado. A parcela fica aguardando reconhecimento.");
+      toast.success("Pagamento registrado. A parcela agora consta como Paga, aguardando reconhecimento.");
       await invalidateTax();
       onOpenChange(false);
     },
@@ -53,10 +53,11 @@ export default function TaxPaymentDialog({ installment, onOpenChange }) {
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Marcar parcela {installment?.numero_parcela} como paga</DialogTitle>
+          <DialogTitle>Registrar pagamento da parcela {installment?.numero_parcela}</DialogTitle>
           <DialogDescription>
-            Vencimento {formatCivilDate(installment?.vencimento)} · valor {formatMoney(installment?.valor)}. Depois que o pagamento
-            aparecer no e-CAC/portal, marque a parcela como reconhecida.
+            Vencimento {formatCivilDate(installment?.vencimento)} · valor {formatMoney(installment?.valor)}. A parcela passa a constar
+            como “Paga, aguardando reconhecimento”. Quando o pagamento aparecer no e-CAC/portal, use “Confirmar reconhecimento”
+            para ela passar a “Paga”.
           </DialogDescription>
         </DialogHeader>
         <form

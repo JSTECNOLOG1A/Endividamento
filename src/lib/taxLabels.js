@@ -11,14 +11,36 @@ export const AGREEMENT_STATUS_LABELS = {
 
 export const AGREEMENT_STATUS_OPTIONS = Object.entries(AGREEMENT_STATUS_LABELS).map(([value, label]) => ({ value, label }));
 
-export const INSTALLMENT_STATUS_LABELS = {
-  em_aberto: "Em aberto",
+// Situação da parcela como a equipe fala: "A vencer", "Vencida", "Paga, aguardando reconhecimento", "Paga".
+// "em_aberto" vira "A vencer" ou "Vencida" conforme o vencimento; onde não há data para decidir (escolha no
+// formulário), o rótulo cobre os dois casos.
+export const INSTALLMENT_DUE_LABEL = "A vencer";
+export const INSTALLMENT_OVERDUE_LABEL = "Vencida";
+
+const INSTALLMENT_STATUS_LABELS = {
   paga_aguardando_reconhecimento: "Paga, aguardando reconhecimento",
-  reconhecida: "Reconhecida",
+  reconhecida: "Paga",
   cancelada: "Cancelada",
 };
 
-export const INSTALLMENT_STATUS_OPTIONS = Object.entries(INSTALLMENT_STATUS_LABELS).map(([value, label]) => ({ value, label }));
+export const INSTALLMENT_STATUS_OPTIONS = [
+  { value: "em_aberto", label: `${INSTALLMENT_DUE_LABEL} ou ${INSTALLMENT_OVERDUE_LABEL.toLowerCase()}` },
+  ...Object.entries(INSTALLMENT_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+];
+
+/** Parcela "em_aberto" com vencimento antes de hoje. */
+export function isInstallmentOverdue(installment, today) {
+  return installment?.situacao === "em_aberto" && Boolean(installment.vencimento) && installment.vencimento < today;
+}
+
+/** Rótulo da situação de uma parcela, já resolvendo "A vencer" × "Vencida" pela data civil de hoje. */
+export function installmentStatusLabel(installment, today) {
+  if (!installment) return "—";
+  if (installment.situacao === "em_aberto") {
+    return isInstallmentOverdue(installment, today) ? INSTALLMENT_OVERDUE_LABEL : INSTALLMENT_DUE_LABEL;
+  }
+  return INSTALLMENT_STATUS_LABELS[installment.situacao] || "—";
+}
 
 export const PAID_INSTALLMENT_STATUSES = new Set(["paga_aguardando_reconhecimento", "reconhecida"]);
 

@@ -49,3 +49,6 @@ protheus/.vscode/
 
 .env
 base44/.app.jsonc
+
+# Memória local dos agentes de IA
+.claude/agent-memory/

@@ -1,5 +1,5 @@
 import { pool } from "../../db/pool.js";
-import { actionLabel, diffRecords, sideSummary, extractErpError } from "./format.js";
+import { actionLabel, diffRecords, displayAuditRecord, sideSummary, extractErpError } from "./format.js";
 import { scopedGroupSql } from "../tenants/access.js";
 
 function parseJson(value) {
@@ -21,6 +21,14 @@ function boundDate(value, endOfDay = false) {
   return text;
 }
 
+function brazilDate(value) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(date);
+}
+
 function clipRegistro(text, size = 220) {
   const value = String(text || "").trim();
   if (!value) return "—";
@@ -31,7 +39,8 @@ export function toPublic(row) {
   const before = parseJson(row.before_json);
   const after = parseJson(row.after_json);
   const payload = parseJson(row.payload);
-  const changes = diffRecords(before, after);
+  const referenceDate = brazilDate(row.occurred_at);
+  const changes = diffRecords(before, after, { resourceType: row.resource_type, referenceDate });
   const erpError = extractErpError(after);
   let registro = row.registro || row.resource_id || "—";
   // Garante que a mensagem do ERP apareça no campo Registro (lista do log),
@@ -61,8 +70,8 @@ export function toPublic(row) {
     resourceId: row.resource_id,
     action: row.action,
     actionLabel: actionLabel(row.action),
-    before,
-    after,
+    before: displayAuditRecord(before, row.resource_type, referenceDate),
+    after: displayAuditRecord(after, row.resource_type, referenceDate),
     payload,
     changes,
     de: sides.de,
