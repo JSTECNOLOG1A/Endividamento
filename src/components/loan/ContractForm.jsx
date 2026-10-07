@@ -20,7 +20,7 @@ import { Calculator, FileText, Percent, AlertCircle, Info, Paperclip, Trash2, Sa
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { toBRDecimalString } from "@/lib/brNumber";
-import { digitsOnly, formatCnpj } from "@/api/signup";
+import { digitsOnly, formatCnpj, isValidCnpj } from "@/api/signup";
 
 
 import {
@@ -523,6 +523,15 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!digitsOnly(form.creditor_cnpj)) {
+      alert("⚠️ Informe o CNPJ da Instituição Financeira do contrato. Ele é usado para localizar o fornecedor no ERP.");
+      return;
+    }
+    if (!isValidCnpj(form.creditor_cnpj)) {
+      alert("⚠️ CNPJ da Instituição Financeira do contrato inválido. Confira os números digitados.");
+      return;
+    }
     
     // Validação: Se moeda estrangeira, campos obrigatórios
     if (form.currency_id && (!form.amount_foreign || !form.exchange_rate_closing)) {
@@ -800,7 +809,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
           </div>
           <div className={gridCols2Tight}>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">CNPJ da Instituição Financeira do contrato</Label>
+              <Label className="text-xs font-medium text-slate-600 uppercase tracking-wider">CNPJ da Instituição Financeira do contrato *</Label>
               <Input
                 value={formatCnpj(form.creditor_cnpj)}
                 onChange={(e) => update("creditor_cnpj", digitsOnly(e.target.value).slice(0, 14))}
@@ -808,6 +817,7 @@ export default function ContractForm({ onCalculate, onIdentificationChange, init
                 className="h-9"
                 inputMode="numeric"
                 autoComplete="off"
+                required
               />
               <p className="text-[11px] text-slate-500">
                 Usado na geração dos títulos para localizar o fornecedor (código e loja) no ERP.

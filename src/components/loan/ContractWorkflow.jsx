@@ -194,7 +194,10 @@ export default function ContractWorkflow({ contract, user, onStatusChange, onDup
           throw reopenErr;
         }
       } else {
-        await base44.entities.LoanContract.update(contract.id, updateData);
+        const updated = await base44.entities.LoanContract.update(contract.id, updateData);
+        for (const aviso of updated?.avisos_titulos || []) {
+          toast.warning("Fornecedor não encontrado no Protheus", { description: aviso, duration: 15000 });
+        }
       }
 
       if (action === "reopen") {

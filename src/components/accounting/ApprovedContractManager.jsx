@@ -76,6 +76,9 @@ export default function ApprovedContractManager({ contract, onContractUpdate }) 
       toast.success("Contrato congelado com sucesso", {
         description: `Hash: ${calculation.calculation_hash_strict?.slice(0, 8)}... | Snapshot: ${snapshotId?.slice(0, 8) || "skipped"}`,
       });
+      for (const aviso of updatedContract?.avisos_titulos || []) {
+        toast.warning("Fornecedor não encontrado no Protheus", { description: aviso, duration: 15000 });
+      }
 
       if (onContractUpdate) onContractUpdate(updatedContract);
     } catch (error) {

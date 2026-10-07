@@ -156,6 +156,20 @@ export function supplierFromBank(bank) {
   };
 }
 
+function formatCnpj(digits) {
+  const d = String(digits || "").replace(/\D/g, "");
+  if (d.length !== 14) return d;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
+
+export function supplierWarningMessage(lookup) {
+  const cnpj = formatCnpj(lookup?.cnpj);
+  if (lookup?.status === "erro") {
+    return `Não foi possível consultar no Protheus o fornecedor do CNPJ ${cnpj} (${lookup.message || "falha na consulta"}). Informe o fornecedor no título antes de integrar.`;
+  }
+  return `Fornecedor não cadastrado no Protheus para o CNPJ ${cnpj}. Cadastre o fornecedor (SA2) e informe-o no título antes de integrar.`;
+}
+
 export function buildPayableTitles(contract, bank = null, entity = null, financeParams = null, supplierOverride = null) {
   if (!contract?.id || !contract.entity_id) return [];
   const finance = normalizeFinanceTitleParams(financeParams);
@@ -640,10 +654,12 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
   }
 
   let supplierOverride = null;
+  let supplierWarning = null;
   const creditorCnpj = String(contract.creditor_cnpj || "").replace(/\D/g, "");
   if (creditorCnpj.length === 14) {
-    supplierOverride = await resolveSupplierByCnpj(creditorCnpj);
-    if (supplierOverride) {
+    const lookup = await resolveSupplierByCnpj(creditorCnpj);
+    if (lookup.supplier) {
+      supplierOverride = lookup.supplier;
       logger.info(
         {
           contractId: contract.id,
@@ -655,9 +671,13 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
         "fornecedor SA2 resolvido pelo CNPJ do credor"
       );
     } else {
+      // Sem fornecedor confirmado o título não pode ir ao ERP com o código do banco:
+      // fica em branco e a integração exige informar o fornecedor antes.
+      supplierWarning = supplierWarningMessage(lookup);
+      supplierOverride = { fornecedor: "", fornecedor_loja: "01", fornecedor_nome: "" };
       logger.warn(
-        { contractId: contract.id, cnpj: creditorCnpj },
-        "CNPJ do credor informado, mas fornecedor não encontrado no ERP — usando fallback do banco"
+        { contractId: contract.id, cnpj: creditorCnpj, status: lookup.status, message: lookup.message },
+        "CNPJ do credor informado, mas fornecedor não encontrado no ERP"
       );
     }
   }
@@ -691,9 +711,10 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
     await client.query("BEGIN");
     const createdRows = [];
     for (const title of titles) {
-      const fornecedor = title.fornecedor || template?.fornecedor || "";
-      const fornecedorLoja = title.fornecedor_loja || template?.fornecedor_loja || "01";
-      const fornecedorNome = title.fornecedor_nome || template?.fornecedor_nome || "";
+      const supplierTemplate = supplierWarning ? null : template;
+      const fornecedor = title.fornecedor || supplierTemplate?.fornecedor || "";
+      const fornecedorLoja = title.fornecedor_loja || supplierTemplate?.fornecedor_loja || "01";
+      const fornecedorNome = title.fornecedor_nome || supplierTemplate?.fornecedor_nome || "";
       const natureza = title.natureza || "";
       const filial = title.filial || template?.filial || "";
       const filialOrigem = title.filial_origem || template?.filial_origem || "";
@@ -704,8 +725,8 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
            id, entity_id, contract_id, parcela, titulo_numero, tipo, prefixo,
            emissao, vencimento, valor, saldo, natureza, historico, status, origem,
            fornecedor, fornecedor_loja, fornecedor_nome, filial, filial_origem,
-           extra_json, created_by, group_id, retido_implantacao
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22,$23,$24)
+           extra_json, created_by, group_id, retido_implantacao, erp_mensagem
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22,$23,$24,$25)
          ON CONFLICT (contract_id, prefixo, parcela) WHERE status = 'aberto' DO NOTHING
          RETURNING id, prefixo, titulo_numero, parcela, tipo, contract_id`,
         [
@@ -733,6 +754,7 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
           createdBy,
           groupId,
           retido,
+          fornecedor ? null : supplierWarning,
         ]
       );
       if (inserted.rows[0]) createdRows.push(inserted.rows[0]);
@@ -742,7 +764,8 @@ export async function generatePayableTitlesForContract(contract, createdBy = "sy
       [contract.id, groupId]
     );
     await client.query("COMMIT");
-    return { created: createdRows.length, skipped: false, titulos: createdRows };
+    const avisos = supplierWarning && createdRows.length ? [supplierWarning] : [];
+    return { created: createdRows.length, skipped: false, titulos: createdRows, avisos };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
