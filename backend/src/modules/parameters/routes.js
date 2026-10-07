@@ -2,7 +2,7 @@ import { Router } from "express";
 import { writeAudit } from "../../middleware/audit.js";
 import { logger } from "../../logger.js";
 import { assertParameterAdmin } from "../tenants/policy.js";
-import { runParameterChecks } from "./checks.js";
+import { afterParameterChanged, assertParameterAllowed, runParameterChecks } from "./checks.js";
 import * as service from "./service.js";
 
 export const parametersRouter = Router();
@@ -52,6 +52,7 @@ parametersRouter.post("/reset", async (req, res, next) => {
       after: result.definition?.isSecret ? null : { value: result.newValue, scope: result.scope, reset: true },
       payload: { key, scope: result.scope },
     });
+    await afterParameterChanged(key).catch((error) => logger.warn({ err: error, key }, "falha ao reagendar após mudar parâmetro"));
     res.json({ data: result });
   } catch (error) {
     next(error);
@@ -79,6 +80,7 @@ parametersRouter.patch("/:key", async (req, res, next) => {
       res.status(400).json({ error: "value é obrigatório", code: "VALIDATION" });
       return;
     }
+    await assertParameterAllowed(req.params.key, value);
     const result = await service.setParameter(req.params.key, value, { scope });
     await writeAudit({
       req,
@@ -98,6 +100,7 @@ parametersRouter.patch("/:key", async (req, res, next) => {
       logger.warn({ err: checkError, key: req.params.key }, "conferência posterior do parâmetro falhou");
       conferencia = { conferido: false, fornecedores: [], avisos: ["O valor foi salvo, mas não foi possível conferi-lo agora."] };
     }
+    await afterParameterChanged(req.params.key).catch((error) => logger.warn({ err: error, key: req.params.key }, "falha ao reagendar após mudar parâmetro"));
     res.json({ data: conferencia ? { ...result, conferencia } : result });
   } catch (error) {
     next(error);

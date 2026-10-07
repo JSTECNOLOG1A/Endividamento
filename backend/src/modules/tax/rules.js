@@ -378,6 +378,33 @@ async function prepareInstallment(data, previous, client) {
   return row;
 }
 
+// Títulos de tributo das parcelas que vão sair: só saem os que não estão no Protheus (pendente ou estornado) e sem
+// operação em andamento. Os demais barram a exclusão — releaseTaxTitlesForDeletion (taxTitles.js) estorna antes.
+async function removeReleasedTaxTitles(client, groupId, { installmentId = null, agreementId = null }) {
+  const titles = await client.query(
+    `SELECT t.id, t.situacao, i.numero_parcela, (t.trava_ate IS NOT NULL AND t.trava_ate > now()) AS ocupado
+       FROM tax_payable_titles t JOIN tax_installments i ON i.id = t.installment_id
+      WHERE t.group_id = $1 AND (i.id = $2 OR i.agreement_id = $3)
+      ORDER BY i.numero_parcela
+      FOR UPDATE OF t`,
+    [groupId, installmentId, agreementId]
+  );
+  const blocking = titles.rows.filter((row) => row.ocupado || !["pendente", "estornado"].includes(row.situacao));
+  if (blocking.length) {
+    const motivos = blocking.map((row) => (row.ocupado
+      ? `O título de tributo da parcela ${row.numero_parcela} está sendo enviado ou estornado agora. Tente de novo em instantes.`
+      : `O título de tributo da parcela ${row.numero_parcela} está no Protheus e não foi estornado com confirmação.`));
+    const err = new Error(`Não foi possível excluir: ${motivos.join(" ")} Nada foi excluído.`);
+    err.status = 409;
+    err.code = "TAX_TITLE_BLOCKS_DELETION";
+    err.details = { motivos };
+    throw err;
+  }
+  if (titles.rows.length) {
+    await client.query(`DELETE FROM tax_payable_titles WHERE id = ANY($1::text[])`, [titles.rows.map((row) => row.id)]);
+  }
+}
+
 /**
  * Exclui o parcelamento e, por cascata do banco, as parcelas dele (e as guias delas) — numa transação que trava o parcelamento,
  * para que a contagem devolvida (e auditada) seja exatamente o que saiu.
@@ -400,6 +427,7 @@ export async function deleteAgreementWithInstallments(id) {
       [id]
     );
     const guides = await collectGuidesForDeletion(client, { groupId, agreementId: id });
+    await removeReleasedTaxTitles(client, groupId, { agreementId: id });
     await client.query(`DELETE FROM tax_agreements WHERE id = $1 AND group_id = $2`, [id, groupId]);
     await client.query("COMMIT");
     return { deleted: true, installmentsDeleted: installments.rows[0].total, guides };
@@ -429,6 +457,7 @@ export async function deleteInstallmentWithGuides(id) {
       return { deleted: false, guides: null };
     }
     const guides = await collectGuidesForDeletion(client, { groupId, installmentId: id });
+    await removeReleasedTaxTitles(client, groupId, { installmentId: id });
     await client.query(`DELETE FROM tax_installments WHERE id = $1 AND group_id = $2`, [id, groupId]);
     await client.query("COMMIT");
     return { deleted: true, guides };

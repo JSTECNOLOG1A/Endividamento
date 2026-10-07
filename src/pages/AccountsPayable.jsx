@@ -21,15 +21,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Eye, HandCoins, MoreHorizontal, Receipt, RefreshCw, Tags, Undo2, Upload } from "lucide-react";
+import { ArrowDown, Eye, HandCoins, MoreHorizontal, Receipt, RefreshCw, Tags, Undo2, Upload } from "lucide-react";
 import ManualSettlementDialog from "../components/payables/ManualSettlementDialog";
 import ClassifyTitleDialog from "../components/payables/ClassifyTitleDialog";
 import TitleViewDialog from "../components/payables/TitleViewDialog";
+import TaxPayableTitlesSection from "../components/payables/TaxPayableTitlesSection";
 import { erpStatusOf, ErpStatusBadge, ErpStatusLegend } from "@/lib/erpStatus";
 import { useProcessing } from "@/lib/ProcessingContext";
 import { useAuth } from "@/lib/AuthContext";
+import { hasModule } from "@/lib/modules";
+import { canWriteTax } from "@/lib/taxLabels";
+import { taxTitlesConsultOutcome } from "@/lib/taxTitles";
+import { taxTitlesApi } from "@/api/taxTitles";
+import { useInvalidateTaxTitles } from "@/hooks/useTaxData";
 import { useSortableRows, SortableTh } from "@/components/ui/sortable-table";
-import PreImplantationBanner, { usePreImplantation } from "@/components/accounting/PreImplantationBanner";
+import PreImplantationBanner from "@/components/accounting/PreImplantationBanner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -118,7 +124,10 @@ const PAYABLE_SORT_COLUMNS = {
 export default function AccountsPayable() {
   const { user } = useAuth();
   const canManageErp = Boolean(user?.platform_admin || user?.tenant_role === "OWNER");
+  // Títulos de tributo (Gestão Tributária): lista e ações próprias, abaixo dos títulos de empréstimo.
+  const showTaxTitles = hasModule(user, "tax");
   const queryClient = useQueryClient();
+  const invalidateTaxTitles = useInvalidateTaxTitles();
   const [search, setSearch] = useState("");
   const [entityFilter, setEntityFilter] = useState("__all__");
   const [tipoFilter, setTipoFilter] = useState("__all__");
@@ -251,15 +260,29 @@ export default function AccountsPayable() {
     }
   };
 
+  // Empréstimos e tributos são consultados um depois do outro, cada um com o seu recado: a falha de um não esconde o
+  // resultado do outro.
   const handleConsultNow = async () => {
+    const consultsTax = showTaxTitles && canWriteTax(user);
+    // Com os tributos na mesma consulta, cada recado diz de qual grupo é.
+    const group = (text) => (consultsTax ? `Empréstimos — ${text}` : text);
     await withProcessing("Consultando títulos no ERP…", async () => {
       try {
         const result = await schedulesApi.runTask("consultar_titulos_pagar");
-        if (result.ok) toast.success(result.message || "Títulos consultados no ERP");
-        else toast.warning(result.message || "A consulta terminou com alerta");
+        if (result.ok) toast.success(group(result.message || "Títulos consultados no ERP"));
+        else toast.warning(group(result.message || "A consulta terminou com alerta"));
         refresh();
       } catch (error) {
-        toast.error(error.data?.error || error.message || "Não foi possível consultar os títulos");
+        toast.error(group(error.data?.error || error.message || "Não foi possível consultar os títulos"));
+      }
+      if (!consultsTax) return;
+      try {
+        const outcome = taxTitlesConsultOutcome(await taxTitlesApi.consultAll());
+        toast[outcome.type](outcome.message, outcome.description ? { description: outcome.description } : undefined);
+      } catch (error) {
+        toast.error(`Tributos — ${error.message || "não foi possível consultar os títulos de tributo"}`);
+      } finally {
+        await invalidateTaxTitles();
       }
     });
   };
@@ -471,6 +494,17 @@ export default function AccountsPayable() {
             <RefreshCw className={`w-3.5 h-3.5 ${busy ? "animate-spin" : ""}`} />
             Consultar títulos
           </Button>
+          {showTaxTitles && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-9 gap-1.5 px-2 text-violet-800 hover:bg-violet-50 hover:text-violet-900"
+              onClick={() => document.getElementById("titulos-de-tributo")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            >
+              <ArrowDown className="w-3.5 h-3.5" />
+              Títulos de tributo
+            </Button>
+          )}
           {rows.length > 0 && (
             <p className="text-xs text-slate-600">
               {rows.length} {rows.length === 1 ? "título" : "títulos"}
@@ -582,7 +616,9 @@ export default function AccountsPayable() {
                 ? "Carregando títulos..."
                 : (titles || []).length > 0
                   ? "Nenhum título neste filtro"
-                  : "Nenhum título a pagar"}
+                  : showTaxTitles
+                    ? "Nenhum título de empréstimo a pagar"
+                    : "Nenhum título a pagar"}
             </p>
             <p className="text-xs text-slate-500 mt-1">
               {(titles || []).length > 0
@@ -767,6 +803,15 @@ export default function AccountsPayable() {
             </table>
           </div>
         </div>
+      )}
+
+      {showTaxTitles && (
+        <TaxPayableTitlesSection
+          search={search}
+          entityId={entityFilter === "__all__" ? null : entityFilter}
+          canOwnerErp={canManageErp}
+          canWrite={canWriteTax(user)}
+        />
       )}
 
       <TitleViewDialog

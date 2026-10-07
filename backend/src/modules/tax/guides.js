@@ -262,8 +262,9 @@ async function reevaluateGuide(client, guide, ctx) {
 }
 
 // Guias de outras parcelas que compartilham (ou compartilhavam) o código de barras: a duplicidade delas pode ter
-// começado ou acabado. Os códigos já precisam estar travados por quem chama.
+// começado ou acabado. Os códigos já precisam estar travados por quem chama. Devolve as parcelas conferidas.
 async function reevaluateBarcodes(client, groupId, barcodes, { exceptGuideId = null } = {}) {
+  const installments = [];
   for (const barcode of [...new Set(barcodes.filter(Boolean))]) {
     const result = await client.query(
       `SELECT ${guideColumns()} FROM tax_installment_guides
@@ -274,8 +275,10 @@ async function reevaluateBarcodes(client, groupId, barcodes, { exceptGuideId = n
     for (const guide of result.rows) {
       const ctx = await loadInstallmentContext(client, guide.installment_id, groupId);
       await reevaluateGuide(client, guide, ctx);
+      installments.push(guide.installment_id);
     }
   }
+  return installments;
 }
 
 // ---------------------------------------------------------------------------
@@ -408,8 +411,8 @@ export async function attachGuide(installmentId, { body = {}, file = null, user 
           stored?.size ?? null, situacao, JSON.stringify(motivos), user?.email || null, user?.full_name || null,
         ]
       );
-      await reevaluateBarcodes(client, groupId, [facts.codigo_barras, current?.codigo_barras], { exceptGuideId: guideId });
-      return { ctx, guide: presentGuide(inserted.rows[0], ctx), replaced: presentGuide(replaced, ctx) };
+      const peers = await reevaluateBarcodes(client, groupId, [facts.codigo_barras, current?.codigo_barras], { exceptGuideId: guideId });
+      return { ctx, guide: presentGuide(inserted.rows[0], ctx), replaced: presentGuide(replaced, ctx), afetadas: [ctx.id, ...peers] };
     });
   } catch (error) {
     if (stored) await guideFiles.remove(stored.key);
@@ -463,8 +466,8 @@ export async function correctGuide(installmentId, body = {}, user) {
         next.pagar_ate, situacao, JSON.stringify(motivos), user?.email || null,
       ]
     );
-    await reevaluateBarcodes(client, groupId, [current.codigo_barras, next.codigo_barras], { exceptGuideId: current.id });
-    return { ctx, before: presentGuide(current, ctx), guide: presentGuide(updated.rows[0], ctx) };
+    const peers = await reevaluateBarcodes(client, groupId, [current.codigo_barras, next.codigo_barras], { exceptGuideId: current.id });
+    return { ctx, before: presentGuide(current, ctx), guide: presentGuide(updated.rows[0], ctx), afetadas: [ctx.id, ...peers] };
   });
 }
 
@@ -487,8 +490,8 @@ export async function removeGuide(installmentId, user) {
         WHERE id = $1`,
       [current.id, user?.email || null]
     );
-    await reevaluateBarcodes(client, groupId, [current.codigo_barras], { exceptGuideId: current.id });
-    return { ctx, before: presentGuide(current, ctx) };
+    const peers = await reevaluateBarcodes(client, groupId, [current.codigo_barras], { exceptGuideId: current.id });
+    return { ctx, before: presentGuide(current, ctx), afetadas: [ctx.id, ...peers] };
   });
 }
 
@@ -510,19 +513,22 @@ export async function refreshInstallmentGuide(installmentId) {
 /**
  * Depois da exclusão de parcelas (ver collectGuidesForDeletion): apaga os PDFs que saíram com elas e verifica de
  * novo as guias de outras parcelas que tinham o mesmo código de barras. Nada aqui desfaz a exclusão.
+ * @returns {Promise<string[]>} parcelas cujas guias foram conferidas de novo
  */
 export async function afterGuidesDeleted(collected) {
-  if (!collected) return;
+  if (!collected) return [];
   for (const key of collected.fileKeys) await guideFiles.remove(key);
-  if (!collected.barcodes.length) return;
+  if (!collected.barcodes.length) return [];
+  let peers = [];
   try {
     await inTransaction(async (client) => {
       await lockBarcodes(client, collected.groupId, collected.barcodes);
-      await reevaluateBarcodes(client, collected.groupId, collected.barcodes);
+      peers = await reevaluateBarcodes(client, collected.groupId, collected.barcodes);
     });
   } catch (error) {
     logger.error({ err: error, groupId: collected.groupId }, "falha ao verificar de novo guias após exclusão de parcela");
   }
+  return peers;
 }
 
 // ---------------------------------------------------------------------------

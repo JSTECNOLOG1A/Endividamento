@@ -35,6 +35,7 @@ import {
   prepareTaxWrite,
 } from "../tax/rules.js";
 import { afterGuidesDeleted, refreshInstallmentGuide } from "../tax/guides.js";
+import { installmentIdsOfAgreement, queueTaxTitleSync, releaseTaxTitlesForDeletion } from "../tax/taxTitles.js";
 
 export const CONTRACT_WORKFLOW_FIELDS = [
   "status",
@@ -807,6 +808,9 @@ export async function update(name, id, data) {
       logger.error({ err: error, installmentId: id }, "falha ao verificar de novo a guia após mudar o vencimento da parcela");
     }
   }
+  // Título de tributo acompanha a parcela (cancelada, vencimento) e o parcelamento (rescindido): em segundo plano.
+  if (name === "TaxInstallment") queueTaxTitleSync([id]);
+  if (name === "TaxAgreement" && saved.situacao !== previous.situacao) queueTaxTitleSync(await installmentIdsOfAgreement(id));
   if (name === "LoanContract" && previous.status === "pendente_aprovacao" && previous.settlement_discount_mode) {
     if (saved.status === "quitado") {
       // Quitação aprovada: encerra o cronograma — remove só os títulos futuros em aberto.
@@ -863,6 +867,8 @@ export async function remove(name, id) {
     throw httpError(403, "O catálogo compartilhado não pode ser excluído");
   }
   if (name === "TaxAgreement") {
+    // Título de tributo no Protheus sai antes (estorno confirmado); sem confirmação, nada é excluído.
+    await releaseTaxTitlesForDeletion({ agreementId: id });
     let outcome;
     try {
       outcome = await deleteAgreementWithInstallments(id);
@@ -870,7 +876,7 @@ export async function remove(name, id) {
       throw mapDeleteError(name, error);
     }
     if (!outcome.deleted) throw httpError(404, TAX_NOT_FOUND[name]);
-    await afterGuidesDeleted(outcome.guides);
+    queueTaxTitleSync(await afterGuidesDeleted(outcome.guides));
     return {
       ...existing,
       parcelas_excluidas: outcome.installmentsDeleted,
@@ -879,6 +885,7 @@ export async function remove(name, id) {
     };
   }
   if (name === "TaxInstallment") {
+    await releaseTaxTitlesForDeletion({ installmentId: id });
     let outcome;
     try {
       outcome = await deleteInstallmentWithGuides(id);
@@ -886,7 +893,7 @@ export async function remove(name, id) {
       throw mapDeleteError(name, error);
     }
     if (!outcome.deleted) throw httpError(404, TAX_NOT_FOUND[name]);
-    await afterGuidesDeleted(outcome.guides);
+    queueTaxTitleSync(await afterGuidesDeleted(outcome.guides));
     return {
       ...existing,
       guia_anexada: outcome.guides.currentGuides > 0,

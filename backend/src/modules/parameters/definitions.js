@@ -4,6 +4,14 @@ import {
   TAX_SUPPLIERS_PARAMETER,
   normalizeTaxSuppliers,
 } from "../tax/taxSupplierConfig.js";
+import {
+  TAX_TITLE_NATURE_PARAMETER,
+  TAX_TITLE_PREFIX_PARAMETER,
+  TAX_TITLE_TYPE_PARAMETER,
+  normalizeTaxTitleNature,
+  normalizeTaxTitlePrefix,
+  normalizeTaxTitleType,
+} from "../tax/taxTitleConfig.js";
 
 /**
  * Catálogo de definições de parâmetros.
@@ -236,6 +244,45 @@ export const PARAMETER_DEFINITIONS = [
     defaultValue: EMPTY_TAX_SUPPLIERS,
     suggestedValue: SUGGESTED_TAX_SUPPLIERS,
     normalize: normalizeTaxSuppliers,
+    isEditable: true,
+    implemented: true,
+    writableScopes: ["TENANT"],
+  },
+
+  {
+    key: TAX_TITLE_TYPE_PARAMETER,
+    category: "finance",
+    type: "STRING",
+    label: "Tipo do título de tributo",
+    description: "Código do tipo de título no Protheus usado nos títulos a pagar das parcelas de tributo (ex.: TX). Vazio até o cliente informar: sem ele, o título de tributo não é enviado.",
+    defaultValue: "",
+    suggestedValue: "TX",
+    normalize: normalizeTaxTitleType,
+    isEditable: true,
+    implemented: true,
+    writableScopes: ["TENANT"],
+  },
+  {
+    key: TAX_TITLE_PREFIX_PARAMETER,
+    category: "finance",
+    type: "STRING",
+    label: "Prefixo do título de tributo",
+    description: "Prefixo dos títulos a pagar das parcelas de tributo no Protheus (ex.: TRB). Precisa ser diferente dos prefixos dos títulos de empréstimo. Vazio até o cliente informar.",
+    defaultValue: "",
+    suggestedValue: "TRB",
+    normalize: normalizeTaxTitlePrefix,
+    isEditable: true,
+    implemented: true,
+    writableScopes: ["TENANT"],
+  },
+  {
+    key: TAX_TITLE_NATURE_PARAMETER,
+    category: "finance",
+    type: "STRING",
+    label: "Natureza do título de tributo",
+    description: "Código da natureza no Protheus usado nos títulos a pagar das parcelas de tributo. Precisa existir no cadastro de naturezas da empresa. Vazio até o cliente informar.",
+    defaultValue: "",
+    normalize: normalizeTaxTitleNature,
     isEditable: true,
     implemented: true,
     writableScopes: ["TENANT"],

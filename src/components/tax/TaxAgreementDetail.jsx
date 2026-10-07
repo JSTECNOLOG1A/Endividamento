@@ -8,7 +8,8 @@ import { toast } from "@/lib/notify";
 import { formatCivilDate } from "@/lib/taxDates";
 import { AGREEMENT_STATUS_LABELS, SPHERE_LABELS, formatMoney, isInstallmentOverdue } from "@/lib/taxLabels";
 import { GUIDE_URL_PARAM, amountToPay, isGuideException } from "@/lib/taxGuides";
-import { useAgreementInstallments, useInvalidateTax } from "@/hooks/useTaxData";
+import { deletionBlockReasons } from "@/lib/taxTitles";
+import { useAgreementInstallments, useAgreementTaxTitles, useInvalidateTax } from "@/hooks/useTaxData";
 import { TaxErrorState } from "./TaxPageShell";
 import { AmountToPay, GuideStatusBadge, InstallmentStatusBadge, ProvenanceNote, TaxSignalBadge } from "./TaxBadges";
 import { NextInstallmentCell, SaldoCell } from "./TaxAgreementList";
@@ -17,6 +18,7 @@ import TaxPaymentDialog from "./TaxPaymentDialog";
 import TaxScheduleDialog from "./TaxScheduleDialog";
 import TaxConfirmDialog from "./TaxConfirmDialog";
 import TaxGuideDialog from "./TaxGuideDialog";
+import { TaxDeletionBlockedDialog, TaxTitleCell } from "./TaxTitleStatus";
 
 function Info({ label, children }) {
   return (
@@ -48,6 +50,8 @@ export default function TaxAgreementDetail({ row, guidesByInstallment, actions, 
   const installmentsReady = !installmentsLoading && !installmentsError;
   const { canWrite, portalName, today } = actions;
   const invalidateTax = useInvalidateTax();
+  const taxTitles = useAgreementTaxTitles(agreement.id);
+  const [blockedReasons, setBlockedReasons] = useState(null);
 
   const [installmentForm, setInstallmentForm] = useState({ open: false, installment: null });
   const [payingInstallment, setPayingInstallment] = useState(null);
@@ -81,7 +85,17 @@ export default function TaxAgreementDetail({ row, guidesByInstallment, actions, 
       setDeletingInstallment(null);
       await invalidateTax();
     },
-    onError: (err) => toast.error(err.message),
+    onError: async (err) => {
+      const reasons = deletionBlockReasons(err);
+      if (!reasons) {
+        toast.error(err.message);
+        return;
+      }
+      // A tentativa pode ter mexido no título (estorno, conferência): a tela mostra a situação nova.
+      setDeletingInstallment(null);
+      setBlockedReasons(reasons);
+      await invalidateTax();
+    },
   });
 
   const counts = countBy(installments, today, guidesByInstallment);
@@ -200,6 +214,17 @@ export default function TaxAgreementDetail({ row, guidesByInstallment, actions, 
           ) : null}
         </div>
 
+        {installmentsReady && taxTitles.error ? (
+          <div role="alert" className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              Não foi possível carregar a situação dos títulos no Protheus. {taxTitles.error.message}
+            </span>
+            <Button type="button" variant="outline" size="sm" className="h-7 bg-white text-xs" onClick={() => taxTitles.refetch()}>
+              Tentar novamente
+            </Button>
+          </div>
+        ) : null}
         {installmentsLoading ? (
           <p className="p-6 text-center text-xs text-slate-500">Carregando parcelas…</p>
         ) : installmentsError ? (
@@ -213,7 +238,7 @@ export default function TaxAgreementDetail({ row, guidesByInstallment, actions, 
           </p>
         ) : (
           <div className="relative overflow-x-auto">
-            <table className="w-full min-w-[900px] text-xs">
+            <table className="w-full min-w-[1080px] text-xs">
               <thead className="border-b-2 border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-3 py-2 font-semibold">Nº</th>
@@ -222,6 +247,7 @@ export default function TaxAgreementDetail({ row, guidesByInstallment, actions, 
                   <th className="px-3 py-2 font-semibold">Situação</th>
                   <th className="px-3 py-2 font-semibold">Guia</th>
                   <th className="px-3 py-2 font-semibold">Pagamento</th>
+                  <th className="px-3 py-2 font-semibold">Título no Protheus</th>
                   {canWrite ? <th className="px-3 py-2"><span className="sr-only">Ações</span></th> : null}
                 </tr>
               </thead>
@@ -276,6 +302,13 @@ export default function TaxAgreementDetail({ row, guidesByInstallment, actions, 
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <TaxTitleCell
+                          title={taxTitles.byInstallment.get(item.id) || null}
+                          isLoading={taxTitles.isLoading}
+                          error={taxTitles.error}
+                        />
                       </td>
                       {canWrite ? (
                         <td className="px-3 py-2">
@@ -356,12 +389,13 @@ export default function TaxAgreementDetail({ row, guidesByInstallment, actions, 
       <TaxConfirmDialog
         open={Boolean(deletingInstallment)}
         title={`Excluir a parcela ${deletingInstallment?.numero_parcela ?? ""}?`}
-        description={`Vencimento ${formatCivilDate(deletingInstallment?.vencimento)} · ${formatMoney(deletingInstallment?.valor)}. Essa ação não pode ser desfeita.`}
+        description={`Vencimento ${formatCivilDate(deletingInstallment?.vencimento)} · ${formatMoney(deletingInstallment?.valor)}. Se a parcela tiver título a pagar no Protheus, ele é estornado antes; se o Protheus não confirmar, nada é excluído. Essa ação não pode ser desfeita.`}
         confirmLabel="Excluir parcela"
         busy={deleteInstallmentMutation.isPending}
         onConfirm={() => deleteInstallmentMutation.mutate(deletingInstallment)}
         onCancel={() => setDeletingInstallment(null)}
       />
+      <TaxDeletionBlockedDialog reasons={blockedReasons} onClose={() => setBlockedReasons(null)} />
     </div>
   );
 }

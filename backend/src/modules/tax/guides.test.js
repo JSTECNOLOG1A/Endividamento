@@ -11,6 +11,7 @@ import { issueAuthResponse } from "../auth/token.js";
 import { lineFromBarcode, mod10, mod11, parseGuideLine } from "./guideLine.js";
 import { findGuideBarcodes, readGuidePdf } from "./guidePdf.js";
 import { amountToPay, guideExceptionReasons } from "./guideRules.js";
+import { settleTaxTitleSyncs } from "./taxTitles.js";
 
 // Guia da parcela (Gestão Tributária), de ponta a ponta: linha digitável, leitura do PDF, regras de exceção,
 // substituição, envio por e-mail (SMTP de teste, nada sai para fora), isolamento, módulo e perfil.
@@ -733,6 +734,9 @@ async function main() {
     config.uploadDir = previousUploadDir;
     Object.assign(config, { smtpHost: previousSmtp.host, smtpPort: previousSmtp.port, smtpSecure: previousSmtp.secure, smtpUser: previousSmtp.user });
     fs.rmSync(uploadDir, { recursive: true, force: true });
+    // Guia vinculada faz nascer o título de tributo (pendente, sem ERP neste teste): sai antes das parcelas.
+    await settleTaxTitleSyncs();
+    await pool.query(`DELETE FROM tax_payable_titles WHERE group_id IN ($1,$2)`, [groupA, groupB]);
     await pool.query(`DELETE FROM tax_agreements WHERE group_id IN ($1,$2)`, [groupA, groupB]);
     await pool.query(`DELETE FROM tenant_users WHERE group_id IN ($1,$2)`, [groupA, groupB]);
     await pool.query(`DELETE FROM users WHERE id = ANY($1::uuid[])`, [Object.values(users).map((u) => u.id)]);

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { taxGuidesApi } from "@/api/taxGuides";
+import { taxTitlesApi } from "@/api/taxTitles";
 import { DEFAULT_QUERY_RETRIES } from "@/lib/query-client";
 import { todayInBrazil } from "@/lib/taxDates";
 import { computeTaxSignal, groupInstallmentsByAgreement, nextOpenInstallment } from "@/lib/taxSignal";
@@ -17,6 +18,9 @@ export const TAX_QUERY_KEYS = {
   currentGuides: ["tax-guides", "atuais"],
   installmentGuide: (installmentId) => ["tax-guides", "parcela", installmentId],
   guideSends: (installmentId) => ["tax-guides", "envios", installmentId],
+  titles: ["tax-titles"],
+  payableTitles: ["tax-titles", "contas-a-pagar"],
+  agreementTitles: (agreementId) => ["tax-titles", "acordo", agreementId],
 };
 
 // O CRUD genérico devolve no máximo 20.000 linhas por chamada e não pagina. Resposta que bate no teto é tratada
@@ -137,6 +141,8 @@ export function useInvalidateTax() {
       queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.installments }),
       // Mudar ou excluir parcela faz o servidor verificar de novo as guias (vencimento, duplicidade).
       queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.guides }),
+      // ...e o título de tributo da parcela acompanha (em segundo plano no servidor).
+      queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.titles }),
     ]);
 }
 
@@ -160,8 +166,52 @@ export function useGuideSends(installmentId) {
   return { sends: query.data || [], isLoading: query.isLoading, error: query.error || null, refetch: query.refetch };
 }
 
-/** Recarrega tudo o que mostra guia: lista de guias atuais, guia de cada parcela e envios. */
+/**
+ * Recarrega tudo o que mostra guia: lista de guias atuais, guia de cada parcela e envios — e os títulos de tributo,
+ * que seguem a guia.
+ */
 export function useInvalidateTaxGuides() {
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.guides });
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.guides }),
+      queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.titles }),
+    ]);
+}
+
+/** Recarrega tudo o que mostra título de tributo (Contas a Pagar, parcelas e a guia, que traz o título junto). */
+export function useInvalidateTaxTitles() {
+  const queryClient = useQueryClient();
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.titles }),
+      queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.guides }),
+    ]);
+}
+
+/** Títulos de tributo de Contas a Pagar. `enabled: false` para quem não tem a Gestão Tributária. */
+export function usePayableTaxTitles({ enabled = true } = {}) {
+  const query = useQuery({
+    queryKey: TAX_QUERY_KEYS.payableTitles,
+    queryFn: async () => (await taxTitlesApi.list()) || [],
+    enabled,
+  });
+  return {
+    titles: query.data || [],
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error || null,
+    refetch: query.refetch,
+  };
+}
+
+/** Títulos de tributo das parcelas de um parcelamento, indexados pela parcela. */
+export function useAgreementTaxTitles(agreementId) {
+  const query = useQuery({
+    queryKey: TAX_QUERY_KEYS.agreementTitles(agreementId),
+    queryFn: async () => (await taxTitlesApi.list({ agreementId })) || [],
+    enabled: Boolean(agreementId),
+  });
+  const byInstallment = useMemo(() => new Map((query.data || []).map((title) => [title.installment_id, title])), [query.data]);
+  return { byInstallment, isLoading: query.isLoading, error: query.error || null, refetch: query.refetch };
 }

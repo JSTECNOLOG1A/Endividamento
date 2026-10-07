@@ -2,27 +2,7 @@ import bcrypt from "bcryptjs";
 import { pool } from "./pool.js";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
-
-const DELETE_ORDER = [
-  "scheduled_job_runs",
-  "scheduled_jobs",
-  "accounting_journal_entries",
-  "accounting_event_mappings",
-  "contract_settlements",
-  "accounting_closings",
-  "payable_titles",
-  "receivable_titles",
-  "calculation_snapshots",
-  "loan_contracts",
-  "natures",
-  "bank_accounts",
-  "chart_of_accounts",
-  "integrations",
-  "company_entities",
-  "tenant_users",
-  "tenants",
-  "audit_events",
-];
+import { DELETE_ORDER } from "./cleanupOrder.js";
 
 async function tableExists(name) {
   const result = await pool.query(

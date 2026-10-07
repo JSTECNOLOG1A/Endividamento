@@ -1,8 +1,9 @@
 import { Router } from "express";
 import multer from "multer";
 import { writeAudit } from "../../middleware/audit.js";
-import { requireCanWrite, requireModule } from "../../middleware/rbac.js";
+import { requireCanWrite, requireModule, requireOwner } from "../../middleware/rbac.js";
 import * as guides from "./guides.js";
+import * as taxTitles from "./taxTitles.js";
 
 // Rotas próprias da Gestão Tributária (o cadastro de parcelamentos e parcelas segue no CRUD genérico).
 export const taxRouter = Router();
@@ -78,7 +79,8 @@ taxRouter.get("/guides/:guideId/file", async (req, res, next) => {
 
 taxRouter.get("/installments/:installmentId/guide", async (req, res, next) => {
   try {
-    res.json(await guides.getInstallmentGuide(req.params.installmentId));
+    const guide = await guides.getInstallmentGuide(req.params.installmentId);
+    res.json({ ...guide, titulo_pagar: await taxTitles.getInstallmentTitle(req.params.installmentId) });
   } catch (error) {
     next(error);
   }
@@ -96,6 +98,7 @@ taxRouter.post("/installments/:installmentId/guide", requireCanWrite, readGuideF
       after: result.guide,
       payload: result.replaced ? { guia_substituida: result.replaced.id } : undefined,
     });
+    taxTitles.queueTaxTitleSync(result.afetadas);
     res.status(201).json({ guia: result.guide, substituida: result.replaced });
   } catch (error) {
     next(error);
@@ -106,6 +109,7 @@ taxRouter.patch("/installments/:installmentId/guide", requireCanWrite, async (re
   try {
     const result = await guides.correctGuide(req.params.installmentId, req.body || {}, req.user);
     await auditGuide(req, "TAX_GUIDE_CORRECTED", { ctx: result.ctx, guideId: result.guide.id, before: result.before, after: result.guide });
+    taxTitles.queueTaxTitleSync(result.afetadas);
     res.json({ guia: result.guide });
   } catch (error) {
     next(error);
@@ -116,6 +120,7 @@ taxRouter.delete("/installments/:installmentId/guide", requireCanWrite, async (r
   try {
     const result = await guides.removeGuide(req.params.installmentId, req.user);
     await auditGuide(req, "TAX_GUIDE_REMOVED", { ctx: result.ctx, guideId: result.before.id, before: result.before });
+    taxTitles.queueTaxTitleSync(result.afetadas);
     res.json({ removida: result.before });
   } catch (error) {
     next(error);
@@ -135,6 +140,8 @@ taxRouter.post("/installments/:installmentId/guide/send-email", requireCanWrite,
         recusados: result.send?.recusados?.length ? result.send.recusados : undefined,
       },
     });
+    // O envio confere a guia de novo: se ela mudou de situação, o título acompanha.
+    taxTitles.queueTaxTitleSync([result.ctx.id]);
     if (result.error) throw result.error;
     res.json({ envio: result.send });
   } catch (error) {
@@ -146,6 +153,57 @@ taxRouter.post("/installments/:installmentId/guide/send-email", requireCanWrite,
 taxRouter.get("/installments/:installmentId/guide/sends", async (req, res, next) => {
   try {
     res.json(await guides.listGuideSends(req.params.installmentId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Títulos a pagar de tributo (Contas a Pagar)
+// ---------------------------------------------------------------------------
+
+taxRouter.get("/payable-titles", async (req, res, next) => {
+  try {
+    res.json(await taxTitles.listTaxPayableTitles({
+      situacao: req.query.situacao,
+      agreementId: req.query.agreement_id,
+      installmentId: req.query.installment_id,
+    }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Mesma permissão dos títulos de empréstimo: integrar/estornar no ERP só o proprietário; consultar, quem escreve.
+const OWNER_ERP_MESSAGE = "Apenas o proprietário pode integrar ou estornar no ERP.";
+
+taxRouter.post("/payable-titles/consult", requireCanWrite, async (req, res, next) => {
+  try {
+    res.json(await taxTitles.consultTaxTitles({ req, onRequest: true }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+taxRouter.post("/payable-titles/:id/integrate", requireOwner(OWNER_ERP_MESSAGE), async (req, res, next) => {
+  try {
+    res.json(await taxTitles.integrateTaxTitle(req.params.id, { req }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+taxRouter.post("/payable-titles/:id/consult", requireCanWrite, async (req, res, next) => {
+  try {
+    res.json(await taxTitles.consultTaxTitle(req.params.id, { req, strict: true }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+taxRouter.post("/payable-titles/:id/confirm-absence", requireOwner(OWNER_ERP_MESSAGE), async (req, res, next) => {
+  try {
+    res.json(await taxTitles.confirmTaxTitleAbsence(req.params.id, { req }));
   } catch (error) {
     next(error);
   }

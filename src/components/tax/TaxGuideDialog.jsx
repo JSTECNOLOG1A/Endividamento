@@ -30,6 +30,7 @@ import { GuideSendHistory, PreviousGuides, openGuidePdf } from "./TaxGuideHistor
 import TaxGuideAttachForm from "./TaxGuideAttachForm";
 import TaxGuideEmailPanel from "./TaxGuideEmailPanel";
 import TaxConfirmDialog from "./TaxConfirmDialog";
+import { TaxTitlePanel } from "./TaxTitleStatus";
 
 function Info({ label, className, children }) {
   return (
@@ -289,6 +290,7 @@ function GuideDialogBody({ installment: listedInstallment, agreement, entityName
   const installment = data?.parcela ? { ...listedInstallment, ...data.parcela } : listedInstallment;
   const guide = data?.guia || null;
   const history = data?.historico || [];
+  const payableTitle = data?.titulo_pagar || null;
 
   const removeMutation = useMutation({
     mutationFn: () => taxGuidesApi.remove(installment.id),
@@ -327,6 +329,7 @@ function GuideDialogBody({ installment: listedInstallment, agreement, entityName
     const replacing = view === "substituir" && Boolean(guide);
     content = (
       <div className="space-y-5">
+        <TaxTitlePanel title={payableTitle} />
         {replacing ? (
           <TaxGuideAttachForm
             installmentId={installment.id}

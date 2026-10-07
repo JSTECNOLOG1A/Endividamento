@@ -5,6 +5,7 @@ import { refreshReceivableTitlesFromErp } from "../receivables/erpIntegrate.js";
 import { autoIntegrateReceivableTitles } from "../receivables/autoIntegrate.js";
 import { syncPtaxToCurrencies, syncRatesToCdiRates } from "../functions/bacen.js";
 import { runAutomaticClosingForGroup } from "../accounting/automaticClosing.js";
+import { consultTaxTitles, syncTaxTitles } from "../tax/taxTitles.js";
 
 export const TASKS = {
   integrar_titulos_pagar: {
@@ -152,6 +153,41 @@ export const TASKS = {
     defaultHoraExecucao: "22:00",
     async run() {
       return runAutomaticClosingForGroup();
+    },
+  },
+  integrar_titulos_tributos: {
+    key: "integrar_titulos_tributos",
+    label: "Integrar títulos de tributo no ERP",
+    rotina: "Gestão Tributária",
+    descricao:
+      "Envia ao Protheus os títulos das parcelas de tributo com guia vinculada e estorna os que a guia não sustenta mais. Só conta como feito o que o Protheus confirmar.",
+    defaultNome: "Integrar títulos de tributo",
+    defaultModo: "intervalo",
+    defaultIntervaloMinutos: 60,
+    async run() {
+      const s = await syncTaxTitles();
+      return {
+        ok: s.incertos === 0 && s.outros === 0,
+        message: `${s.enviados} integrado(s) · ${s.estornados} estornado(s) · ${s.pendentes} pendente(s) · ${s.incertos} sem confirmação · ${s.total} parcela(s) verificada(s)`,
+        detalhes: s,
+      };
+    },
+  },
+  consultar_titulos_tributos: {
+    key: "consultar_titulos_tributos",
+    label: "Consultar títulos de tributo no ERP",
+    rotina: "Gestão Tributária",
+    descricao: "Atualiza saldo e baixa dos títulos de tributo já integrados no Protheus. Não altera a parcela.",
+    defaultNome: "Consultar títulos de tributo",
+    defaultModo: "intervalo",
+    defaultIntervaloMinutos: 60,
+    async run() {
+      const s = await consultTaxTitles();
+      return {
+        ok: s.conferencia === 0,
+        message: `${s.consultados} título(s) consultado(s) · ${s.conferencia} precisando de conferência`,
+        detalhes: s,
+      };
     },
   },
 };

@@ -7,17 +7,23 @@ import { toast } from "@/lib/notify";
 import { todayInBrazil } from "@/lib/taxDates";
 import { canWriteTax } from "@/lib/taxLabels";
 import { GUIDE_URL_PARAM } from "@/lib/taxGuides";
+import { deletionBlockReasons } from "@/lib/taxTitles";
 import { useAgreementInstallments, useInvalidateTax, useTaxPortfolio } from "@/hooks/useTaxData";
 import { TaxEmptyState, TaxErrorState, TaxLoadingState } from "./TaxPageShell";
 import TaxAgreementList from "./TaxAgreementList";
 import TaxAgreementDetail from "./TaxAgreementDetail";
 import TaxAgreementFormDialog from "./TaxAgreementFormDialog";
 import TaxConfirmDialog from "./TaxConfirmDialog";
+import { TaxDeletionBlockedDialog } from "./TaxTitleStatus";
 
 const DETAIL_PARAM = "acordo";
 
+// Título a pagar da parcela no Protheus sai antes (estorno confirmado); sem confirmação, nada é excluído.
+const TAX_TITLE_DELETION_NOTE =
+  "Se alguma parcela tiver título a pagar no Protheus, ele é estornado antes; se o Protheus não confirmar, nada é excluído.";
+
 function deleteDescription({ installments, isLoading, error }) {
-  const irreversible = "Essa ação não pode ser desfeita.";
+  const irreversible = `${TAX_TITLE_DELETION_NOTE} Essa ação não pode ser desfeita.`;
   if (isLoading) return "Contando as parcelas cadastradas nele…";
   if (error) return `Todas as parcelas cadastradas nele também serão apagadas. ${irreversible}`;
   const count = installments.length;
@@ -36,6 +42,7 @@ export default function TaxAgreementsWorkspace({ esfera }) {
   const [formOpen, setFormOpen] = useState(false);
   const [editingAgreement, setEditingAgreement] = useState(null);
   const [deletingRow, setDeletingRow] = useState(null);
+  const [blockedReasons, setBlockedReasons] = useState(null);
 
   const deletingInstallments = useAgreementInstallments(deletingRow?.agreement.id);
   const sphereRows = rows.filter((row) => row.agreement.esfera === esfera);
@@ -75,7 +82,17 @@ export default function TaxAgreementsWorkspace({ esfera }) {
       setDeletingRow(null);
       await invalidateTax();
     },
-    onError: (err) => toast.error(err.message),
+    onError: async (err) => {
+      const reasons = deletionBlockReasons(err);
+      if (!reasons) {
+        toast.error(err.message);
+        return;
+      }
+      // A tentativa pode ter mexido nos títulos (estorno, conferência): a tela mostra a situação nova.
+      setDeletingRow(null);
+      setBlockedReasons(reasons);
+      await invalidateTax();
+    },
   });
 
   const actions = {
@@ -158,6 +175,7 @@ export default function TaxAgreementsWorkspace({ esfera }) {
         onConfirm={() => deleteMutation.mutate(deletingRow.agreement)}
         onCancel={() => setDeletingRow(null)}
       />
+      <TaxDeletionBlockedDialog reasons={blockedReasons} onClose={() => setBlockedReasons(null)} />
     </>
   );
 }

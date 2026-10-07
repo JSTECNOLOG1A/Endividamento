@@ -30,6 +30,7 @@ const ROTINA_BY_RESOURCE = {
   TaxAgreement: "Gestão Tributária",
   TaxInstallment: "Gestão Tributária",
   TaxInstallmentGuide: "Gestão Tributária",
+  TaxPayableTitle: "Gestão Tributária",
   CDIRate: "Indexadores",
   Holiday: "Indexadores",
   Currency: "Indexadores",

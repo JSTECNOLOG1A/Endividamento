@@ -2,7 +2,7 @@ import { z } from "zod";
 import { generateCode } from "../integrations/crypto.js";
 import { writeAudit } from "../../middleware/audit.js";
 import { snapshotForAudit } from "../audit/records.js";
-import { TASKS, taskCatalog, taskMeta } from "./tasks.js";
+import { TASKS, TASK_KEYS, taskCatalog, taskMeta } from "./tasks.js";
 import * as store from "./store.js";
 import { initialRunAt, nextRunAt, formatHoraExecucao } from "./nextRun.js";
 import { loadTenantByGroupId, runWithTenant } from "../tenants/access.js";
@@ -14,16 +14,8 @@ function httpError(status, message, details) {
   return err;
 }
 
-const TAREFA_ENUM = [
-  "integrar_titulos_pagar",
-  "integrar_titulos_receber",
-  "consultar_titulos_pagar",
-  "consultar_titulos_receber",
-  "converter_titulos_pr_tx",
-  "atualizar_ptax_bacen",
-  "atualizar_indices_bacen",
-  "fechamento_contabil_automatico",
-];
+// Tarefas aceitas = as cadastradas em tasks.js (fonte única: o catálogo da tela e a validação não divergem).
+const TAREFA_ENUM = TASK_KEYS;
 const MODO_ENUM = ["intervalo", "mensal"];
 
 function normalizeSchedule(data = {}) {

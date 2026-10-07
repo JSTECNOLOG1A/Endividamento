@@ -222,7 +222,7 @@ async function consultIncludedTitle({ linked, credential, ctx, body, includePath
   });
 }
 
-function restJobContext(linked) {
+export function restJobContext(linked) {
   return {
     erpNome: linked.integration.erpNome,
     grupoEmpresas: linked.integration.grupoEmpresas || "01",
@@ -231,7 +231,7 @@ function restJobContext(linked) {
   };
 }
 
-async function loadLinkedPayableEndpoint(cadastroKey = "titulos_pagar") {
+export async function loadLinkedPayableEndpoint(cadastroKey = "titulos_pagar") {
   const labels = {
     titulos_pagar: "Títulos a pagar",
     titulos_pagar_extornar: "Estorno de títulos a pagar",
@@ -257,7 +257,7 @@ async function loadLinkedPayableEndpoint(cadastroKey = "titulos_pagar") {
   return { linked, credential };
 }
 
-async function loadPayableActionEndpoint(cadastroKey, derivePath) {
+export async function loadPayableActionEndpoint(cadastroKey, derivePath) {
   const dedicated = await integrationStore.findLinkedCadastro(cadastroKey, "POST");
   if (dedicated) return loadLinkedPayableEndpoint(cadastroKey);
   const fallback = await loadLinkedPayableEndpoint("titulos_pagar");

@@ -14,6 +14,7 @@ import { AccountingMatrixFields } from "@/components/accounting/AccountingMatrix
 import { SETTLEMENT_MATERIALITY_CONFIG } from "@/lib/accountingClosing";
 import { ChartRecommendationCard, BankAccountAccountsCard, TitleClassificationCard } from "@/components/settings/AccountingLogicExtras";
 import { TaxSuppliersCard } from "@/components/settings/TaxSuppliersCard";
+import { TaxTitleSettingsCard } from "@/components/settings/TaxTitleSettingsCard";
 
 // Referência viva da lógica do motor de fechamento contábil
 // (src/lib/accountingClosing.js) — cada mudança de regra ali (novo evento,
@@ -148,6 +149,8 @@ export default function AccountingLogicPanel() {
       <TitleClassificationCard />
 
       <TaxSuppliersCard />
+
+      <TaxTitleSettingsCard />
 
       <Card className="border-slate-200 shadow-sm">
         <CardHeader>
