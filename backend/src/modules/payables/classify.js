@@ -74,6 +74,9 @@ export async function classifyPayableTitles(payload = {}) {
   if (fornecedor !== undefined) {
     params.push(fornecedor);
     sets.push(`fornecedor = $${params.length}`);
+    if (fornecedor) {
+      sets.push(`erp_mensagem = CASE WHEN erp_mensagem LIKE 'Fornecedor não cadastrado%' OR erp_mensagem LIKE 'Não foi possível consultar no Protheus o fornecedor%' THEN NULL ELSE erp_mensagem END`);
+    }
   }
   if (fornecedorLoja !== undefined) {
     params.push(fornecedorLoja);

@@ -546,31 +546,36 @@ export async function lookupPayableErp(payload = {}) {
 }
 
 /**
- * Localiza fornecedor SA2 pelo CNPJ (A2_CGC) e devolve código/loja/nome
- * no formato usado em payable_titles.
+ * Localiza fornecedor SA2 pelo CNPJ (A2_CGC).
+ * status: "encontrado" (supplier preenchido no formato de payable_titles),
+ * "nao_cadastrado", "erro" (consulta ao ERP falhou) ou "invalido".
  */
 export async function resolveSupplierByCnpj(cnpj) {
   const digits = String(cnpj || "").replace(/\D/g, "");
-  if (digits.length !== 14) return null;
+  if (digits.length !== 14) return { status: "invalido", supplier: null, cnpj: digits };
 
   let result;
   try {
     result = await lookupPayableErp({ kind: "fornecedores", search: digits, limit: 20 });
   } catch (error) {
     logger.warn({ err: error, cnpj: digits }, "lookup SA2 por CNPJ falhou");
-    return null;
+    return { status: "erro", supplier: null, cnpj: digits, message: error.message || "Falha ao consultar o Protheus" };
   }
 
   const items = Array.isArray(result?.items) ? result.items : [];
   const exact = items.find((item) => String(item.cnpj || "").replace(/\D/g, "") === digits) || null;
-  if (!exact?.codigo) return null;
+  if (!exact?.codigo) return { status: "nao_cadastrado", supplier: null, cnpj: digits };
 
   return {
-    fornecedor: padCode(exact.codigo, 6),
-    fornecedor_loja: padCode(exact.loja || "01", 2) || "01",
-    fornecedor_nome: String(exact.nome || exact.razao || "").trim(),
+    status: "encontrado",
     cnpj: digits,
-    origem: result?.origem || "erp",
+    supplier: {
+      fornecedor: padCode(exact.codigo, 6),
+      fornecedor_loja: padCode(exact.loja || "01", 2) || "01",
+      fornecedor_nome: String(exact.nome || exact.razao || "").trim(),
+      cnpj: digits,
+      origem: result?.origem || "erp",
+    },
   };
 }
 

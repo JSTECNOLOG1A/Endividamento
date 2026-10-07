@@ -822,10 +822,12 @@ export async function update(name, id, data) {
       );
     }
   }
+  let titleWarnings = [];
   if (name === "LoanContract" && saved.status === "aprovado" && previous.status !== "aprovado") {
     try {
       const { generatePayableTitlesForContract } = await import("../payables/generate.js");
-      await generatePayableTitlesForContract(saved, saved.created_by || "system");
+      const generated = await generatePayableTitlesForContract(saved, saved.created_by || "system");
+      titleWarnings = generated?.avisos || [];
     } catch (error) {
       logger.error({ err: error, contractId: saved.id }, "falha ao gerar contas a pagar do contrato aprovado");
     }
@@ -847,7 +849,7 @@ export async function update(name, id, data) {
       logger.error({ err: error, contractId: saved.id }, "falha ao notificar mudança de status do contrato");
     }
   }
-  return saved;
+  return titleWarnings.length ? { ...saved, avisos_titulos: titleWarnings } : saved;
 }
 
 export async function remove(name, id) {
