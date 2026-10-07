@@ -35,6 +35,7 @@ import {
   prepareTaxWrite,
 } from "../tax/rules.js";
 import { afterGuidesDeleted, refreshInstallmentGuide } from "../tax/guides.js";
+import { isValidCnpj } from "../signup/cnpj.js";
 
 export const CONTRACT_WORKFLOW_FIELDS = [
   "status",
@@ -557,6 +558,7 @@ export async function create(name, data, createdBy, { client = pool } = {}) {
     for (const key of CONTRACT_WORKFLOW_FIELDS) delete row[key];
     row.status = "rascunho";
     if (row.contract_number != null) row.contract_number = alphanumericContractNumber(row.contract_number);
+    normalizeCreditorCnpj(row);
   }
   if (row.entity_id) await assertEntityInTenant(row.entity_id);
   if (row.contract_id && (name === "AccountMovement" || name === "NotificationLog" || name === "CalculationSnapshot")) {
@@ -631,8 +633,39 @@ function parseStatusHistory(raw) {
   }
 }
 
+function normalizeCreditorCnpj(row) {
+  if (row.creditor_cnpj === undefined) return;
+  const digits = String(row.creditor_cnpj || "").replace(/\D/g, "");
+  if (digits && !isValidCnpj(digits)) {
+    throw httpError(400, "CNPJ da instituição financeira do contrato inválido.");
+  }
+  row.creditor_cnpj = digits || null;
+}
+
+// Obrigatório para enviar/aprovar: é por ele que a geração dos títulos localiza o fornecedor no Protheus.
+// Conta garantida não tem o campo no cadastro; a cobrança fica na aprovação para não travar
+// edição/renegociação de contratos antigos ainda sem CNPJ.
+function assertCreditorCnpjForApproval(contract) {
+  if (contract.calculation_system === "CONTA_GARANTIDA") return;
+  const digits = String(contract.creditor_cnpj || "").replace(/\D/g, "");
+  if (!digits) {
+    throw httpError(400, "Informe o CNPJ da instituição financeira do contrato antes de enviar para aprovação ou aprovar.");
+  }
+  if (!isValidCnpj(digits)) {
+    throw httpError(400, "CNPJ da instituição financeira do contrato inválido.");
+  }
+}
+
 async function applyLoanContractRules(previous, data) {
+  normalizeCreditorCnpj(data);
   const nextStatus = data.status;
+  if (
+    (nextStatus === "pendente_aprovacao" || nextStatus === "aprovado")
+    && nextStatus !== previous.status
+    && !previous.settlement_discount_mode
+  ) {
+    assertCreditorCnpjForApproval({ ...previous, ...data });
+  }
   // Gatilho da aprovação de nível 1: chave fora de CONTRACT_WORKFLOW_FIELDS,
   // então sobrevive ao strip acima e chega aqui; nunca vai pro banco (é
   // removida logo abaixo, o valor real gravado é level1_approved_by/at).
