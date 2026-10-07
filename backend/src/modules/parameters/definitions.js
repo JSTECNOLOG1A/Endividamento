@@ -1,3 +1,10 @@
+import {
+  EMPTY_TAX_SUPPLIERS,
+  SUGGESTED_TAX_SUPPLIERS,
+  TAX_SUPPLIERS_PARAMETER,
+  normalizeTaxSuppliers,
+} from "../tax/taxSupplierConfig.js";
+
 /**
  * Catálogo de definições de parâmetros.
  * Novos parâmetros: adicionar aqui — sem migration de schema.
@@ -31,6 +38,8 @@ export const PARAMETER_CATEGORIES = {
  * @property {boolean} [isSecret]
  * @property {boolean} [implemented] — false = planejado, oculto na UI
  * @property {('GLOBAL'|'TENANT'|'USER')[]} [writableScopes]
+ * @property {(value: *) => *} [normalize] — confere e padroniza o valor ao gravar (lança erro 400 com mensagem)
+ * @property {*} [suggestedValue] — sugestão exibida na tela; nunca gravada sem o usuário confirmar
  */
 
 /** @type {ParameterDefinition[]} */
@@ -213,6 +222,20 @@ export const PARAMETER_DEFINITIONS = [
     label: "Integra com outro ERP",
     description: "Indica se este cliente integra títulos e cadastros com um ERP externo (ex.: Protheus). Desative se o AllDebt operar de forma isolada.",
     defaultValue: true,
+    isEditable: true,
+    implemented: true,
+    writableScopes: ["TENANT"],
+  },
+
+  {
+    key: TAX_SUPPLIERS_PARAMETER,
+    category: "finance",
+    type: "JSON",
+    label: "Fornecedores dos títulos de tributo",
+    description: "Fornecedor e loja do Protheus usados como credor dos títulos de tributo: um para os tributos federais (Receita Federal e PGFN; no Protheus, parâmetro MV_UNIAO, normalmente UNIAO loja 00), um padrão para os estaduais (MV_RECEST) e, se precisar, um por UF. Vazio até o cliente informar.",
+    defaultValue: EMPTY_TAX_SUPPLIERS,
+    suggestedValue: SUGGESTED_TAX_SUPPLIERS,
+    normalize: normalizeTaxSuppliers,
     isEditable: true,
     implemented: true,
     writableScopes: ["TENANT"],

@@ -1,6 +1,7 @@
 import { pool } from "../../db/pool.js";
 import { requireTenantContext, selectResourceForTenant } from "../tenants/scope.js";
 import { installmentStatusLabel } from "./labels.js";
+import { BRAZILIAN_STATES } from "./brazilianStates.js";
 import { collectGuidesForDeletion } from "./guideFiles.js";
 
 // Regras de gravação dos parcelamentos de tributos (Gestão Tributária) quando chegam pelo CRUD genérico.
@@ -20,11 +21,6 @@ const RESERVED_SPHERES = new Set(["municipal"]);
 const AGREEMENT_STATUSES = new Set(["ativo", "quitado", "rescindido", "suspenso"]);
 const INSTALLMENT_STATUSES = new Set(["em_aberto", "paga_aguardando_reconhecimento", "reconhecida", "cancelada"]);
 const PAID_STATUSES = new Set(["paga_aguardando_reconhecimento", "reconhecida"]);
-
-const BRAZILIAN_STATES = new Set([
-  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA",
-  "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
-]);
 
 const AGREEMENT_WRITABLE = [
   "entity_id", "esfera", "orgao", "uf", "modalidade", "tributo", "codigo_parcelamento", "data_adesao",

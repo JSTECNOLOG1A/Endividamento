@@ -77,7 +77,7 @@ export function validateParameterValue(definition, value) {
     default:
       throw httpError(500, `Tipo de parâmetro não suportado: ${type}`, "PARAMETER_TYPE");
   }
-  return value;
+  return definition.normalize ? definition.normalize(value) : value;
 }
 
 async function fetchScopedValue(scope, { groupId, userId, key }) {
@@ -359,6 +359,7 @@ export async function listParametersForTenant({ category, search, implementedOnl
       label: def.label,
       description: def.description,
       defaultValue: def.defaultValue,
+      suggestedValue: def.suggestedValue ?? null,
       allowedValues: def.allowedValues || null,
       isEditable: def.isEditable !== false,
       value: resolved,

@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { writeAudit } from "../../middleware/audit.js";
+import { logger } from "../../logger.js";
 import { assertParameterAdmin } from "../tenants/policy.js";
+import { runParameterChecks } from "./checks.js";
 import * as service from "./service.js";
 
 export const parametersRouter = Router();
@@ -88,7 +90,15 @@ parametersRouter.patch("/:key", async (req, res, next) => {
       after: result.definition?.isSecret ? null : { value: result.newValue, scope: result.scope },
       payload: { key: req.params.key, scope: result.scope },
     });
-    res.json({ data: result });
+    // Conferência posterior (ex.: fornecedor existe no Protheus?): avisa, não desfaz a gravação.
+    let conferencia = null;
+    try {
+      conferencia = await runParameterChecks(req.params.key, result.newValue);
+    } catch (checkError) {
+      logger.warn({ err: checkError, key: req.params.key }, "conferência posterior do parâmetro falhou");
+      conferencia = { conferido: false, fornecedores: [], avisos: ["O valor foi salvo, mas não foi possível conferi-lo agora."] };
+    }
+    res.json({ data: conferencia ? { ...result, conferencia } : result });
   } catch (error) {
     next(error);
   }

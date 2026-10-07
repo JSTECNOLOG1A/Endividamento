@@ -185,7 +185,9 @@ export function parseSuppliersFromErp(payload) {
   return parsed;
 }
 
-async function tryFinRestLookup(resource, search, limit) {
+// `raw`: devolve os registros como vieram do Protheus (para conferência de presença), sem o tratamento da busca
+// das telas.
+async function tryFinRestLookup(resource, search, limit, { raw = false } = {}) {
   const family = resource === "clientes" ? "receber" : "pagar";
   const cadastroKeys = resource === "clientes"
     ? ["titulos_receber", "titulos_pagar"]
@@ -220,6 +222,7 @@ async function tryFinRestLookup(resource, search, limit) {
           logger.warn({ path, statusCode: fetched.statusCode }, "FinRest lookup falhou neste caminho");
           continue;
         }
+        if (raw) return { rows: supplierRowsOf(fetched.data), truncated: Boolean(fetched.data?.truncated) };
         const parsed = resource === "tipos"
           ? parseTitleTypesFromErp(fetched.data)
           : parseSuppliersFromErp(fetched.data);
@@ -268,46 +271,135 @@ async function mapPool(items, limit, mapper) {
   return results;
 }
 
+/**
+ * Lê o SA2 página a página e diz se a leitura foi completa.
+ * Completa = chegou ao fim dos dados sem página com falha e sem parar no teto de páginas:
+ * - com `total` informado: todas as páginas necessárias cabem no teto E vieram pelo menos `total` registros (se o
+ *   servidor limitar a página abaixo do tamanho pedido, faltam registros e a leitura não é completa);
+ * - sem `total`: a primeira página lida com `hasNext: false` (ou sem registros) marca o fim. Sem `hasNext` nenhum,
+ *   não há como saber se acabou — só uma primeira página vazia é conclusiva.
+ * Página que falha não derruba a leitura (as demais seguem), mas a marca como incompleta.
+ * @param {(page: number) => Promise<object>} fetchPage devolve o corpo da página (lança se falhar)
+ * @param {object} [options] `extract` tira a lista de registros do corpo (padrão: extractArray, o das telas); se
+ *   lançar, a página conta como falha
+ * @returns {Promise<{ items: object[], rows: object[], complete: boolean, failedPages: number[], limitReached: boolean, pages: number }>}
+ *   `items` no formato da busca das telas; `rows` os registros como vieram do Protheus
+ */
+export async function readSupplierPages(fetchPage, { maxPages = TABLEDATA_MAX_PAGES, pageSize = TABLEDATA_PAGE_SIZE, extract = extractArray } = {}) {
+  const first = await fetchPage(1);
+  const firstItems = extract(first);
+  const total = Number(first?.total) || 0;
+  const neededPages = total ? Math.ceil(total / pageSize) : (first?.hasNext ? Infinity : 1);
+  const pageCount = Math.min(maxPages, Math.max(1, neededPages));
+
+  const pages = [];
+  for (let page = 2; page <= pageCount; page += 1) pages.push(page);
+
+  const failedPages = [];
+  const rest = await mapPool(pages, TABLEDATA_CONCURRENCY, async (page) => {
+    try {
+      const body = await fetchPage(page);
+      return { page, items: extract(body), hasNext: body?.hasNext };
+    } catch (error) {
+      logger.warn({ err: error, page }, "falha ao ler página SA2");
+      failedPages.push(page);
+      return { page, items: [], failed: true };
+    }
+  });
+
+  const read = [{ page: 1, items: firstItems, hasNext: first?.hasNext }, ...rest];
+  let reachedEnd;
+  if (total) {
+    const rowCount = read.reduce((sum, item) => sum + item.items.length, 0);
+    reachedEnd = neededPages <= maxPages && rowCount >= total;
+  } else {
+    const endPage = read.find((item) => !item.failed && (item.hasNext === false || item.items.length === 0));
+    // Sem página de fim entre as lidas, a leitura parou no teto (ou o servidor não diz se acabou).
+    reachedEnd = Boolean(endPage);
+  }
+  const rows = read.flatMap((item) => item.items);
+  return {
+    items: parseSuppliersFromErp(rows),
+    rows,
+    complete: reachedEnd && failedPages.length === 0,
+    failedPages: failedPages.sort((x, y) => x - y),
+    limitReached: !reachedEnd,
+    pages: pageCount,
+  };
+}
+
+// Envelopes de lista que extractArray reconhece (integrations/erpJson.js), na mesma ordem.
+const ROW_ENVELOPE_KEYS = [
+  "items", "data", "value", "results", "content", "tables", "companies", "branches", "naturezas", "contas", "bancos",
+  "sa6", "sa2", "sx5", "ct1", "plano", "planoContas", "fornecedores", "tipos",
+];
+
+function findRows(payload, depth) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object" || depth > 4) return null;
+  for (const key of ROW_ENVELOPE_KEYS) {
+    const entry = Object.entries(payload).find(([name]) => name.toLowerCase() === key.toLowerCase());
+    if (!entry || entry[1] == null || entry[1] === "") continue;
+    const found = findRows(entry[1], depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+// Lista de registros da página para a conferência, sem desembrulhar lista de um item só (extractArray devolve []
+// nesse caso) e aceitando envelope aninhado. Formato não reconhecido lança: a página conta como falha, nunca
+// como vazia — vazia faria a conferência afirmar "não encontrado".
+export function supplierRowsOf(payload) {
+  const rows = findRows(payload, 0);
+  if (!rows) throw new Error("formato de página SA2 não reconhecido");
+  return rows;
+}
+
+function readSuppliersFromIntegration(linked, credential, { extract } = {}) {
+  return readSupplierPages(async (page) => {
+    const path = setQueryParams(linked.endpoint.path, {
+      pageSize: String(TABLEDATA_PAGE_SIZE),
+      page: String(page),
+      fields: SUPPLIER_FIELDS,
+    });
+    const fetched = await fetchTabledataPage(linked.integration, credential, path);
+    return fetched.data;
+  }, { extract });
+}
+
+// Leitura do SA2 em andamento, por integração: quem pedir enquanto ela corre recebe a mesma promessa, em vez de
+// disparar outra leitura completa no Protheus.
+const inflightSupplierReads = new Map();
+
+export function shareInflight(map, key, start) {
+  const running = map.get(key);
+  if (running) return running;
+  const promise = Promise.resolve().then(start).finally(() => map.delete(key));
+  map.set(key, promise);
+  return promise;
+}
+
+async function readSuppliersFresh(linked, credential) {
+  const read = await shareInflight(
+    inflightSupplierReads,
+    linked.integration.id,
+    () => readSuppliersFromIntegration(linked, credential, { extract: supplierRowsOf })
+  );
+  // Leitura completa e recente também serve às telas de busca.
+  if (read.complete) supplierCache.set(linked.integration.id, { at: Date.now(), items: read.items });
+  return read;
+}
+
+// Busca das telas: usa o cache de até 10 min e aceita leitura parcial (lista de sugestões, não conferência).
 async function loadAllSuppliersTabledata(linked, credential) {
   const cacheKey = linked.integration.id;
   const cached = supplierCache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_MS) return cached.items;
 
-  const basePath = setQueryParams(linked.endpoint.path, {
-    pageSize: String(TABLEDATA_PAGE_SIZE),
-    page: "1",
-    fields: SUPPLIER_FIELDS,
-  });
-  const first = await fetchTabledataPage(linked.integration, credential, basePath);
-  const firstItems = extractArray(first.data);
-  const total = Number(first.data?.total) || 0;
-  const pageCount = Math.min(
-    TABLEDATA_MAX_PAGES,
-    Math.max(1, total ? Math.ceil(total / TABLEDATA_PAGE_SIZE) : (first.data?.hasNext ? TABLEDATA_MAX_PAGES : 1))
-  );
-
-  const pages = [];
-  for (let page = 2; page <= pageCount; page += 1) pages.push(page);
-
-  const rest = await mapPool(pages, TABLEDATA_CONCURRENCY, async (page) => {
-    try {
-      const path = setQueryParams(linked.endpoint.path, {
-        pageSize: String(TABLEDATA_PAGE_SIZE),
-        page: String(page),
-        fields: SUPPLIER_FIELDS,
-      });
-      const fetched = await fetchTabledataPage(linked.integration, credential, path);
-      return extractArray(fetched.data);
-    } catch (error) {
-      logger.warn({ err: error, page }, "falha ao ler página SA2");
-      return [];
-    }
-  });
-
-  const items = parseSuppliersFromErp([...firstItems, ...rest.flat()]);
-  supplierCache.set(cacheKey, { at: Date.now(), items });
-  logger.info({ total: items.length, pages: pageCount, connection: linked.integration.nome }, "SA2 carregado para lookup de fornecedores");
-  return items;
+  const read = await readSuppliersFromIntegration(linked, credential);
+  supplierCache.set(cacheKey, { at: Date.now(), items: read.items });
+  logger.info({ total: read.items.length, pages: read.pages, connection: linked.integration.nome }, "SA2 carregado para lookup de fornecedores");
+  return read.items;
 }
 
 function sa1PathFromSa2(path) {
@@ -480,4 +572,137 @@ export async function resolveSupplierByCnpj(cnpj) {
     cnpj: digits,
     origem: result?.origem || "erp",
   };
+}
+
+const RAW_CODE_KEYS = ["a2_cod", "codigo", "code", "fornecedor", "codfor", "vendor", "supplier"];
+const RAW_STORE_KEYS = ["a2_loja", "loja", "store", "branch"];
+
+/**
+ * Código e loja do registro do SA2 exatamente como vieram do Protheus, só sem espaços nas pontas. A busca das telas
+ * (parseSuppliersFromErp) completa com zeros o que tiver dígito — "F00010" vira "000010" —, então a conferência
+ * não pode comparar com ela. Registro excluído ou bloqueado não conta.
+ */
+export function rawSupplierKey(row) {
+  const values = rawSupplierValues(row);
+  if (!values) return null;
+  return { codigo: String(values.codigo).trim(), loja: String(values.loja ?? "").trim() };
+}
+
+// Código e loja com o tipo original (texto ou número JSON): o tipo decide se zeros à esquerda podem ter sumido.
+function rawSupplierValues(row) {
+  const record = flattenItem(row);
+  if (!record || isErpDeletedRecord(record) || isErpBlockedRecord(record)) return null;
+  const codigo = lookupLoose(record, RAW_CODE_KEYS);
+  if (codigo == null || String(codigo).trim() === "") return null;
+  const loja = lookupLoose(record, RAW_STORE_KEYS);
+  return { codigo, loja: loja == null || String(loja).trim() === "" ? null : loja };
+}
+
+/**
+ * Valor do Protheus contra o configurado:
+ * - "igual": o mesmo texto (aparado) ou um NÚMERO JSON que, completado com zeros, dá o configurado numérico — o
+ *   tipo número prova que os zeros se perderam na serialização;
+ * - "incerto": TEXTO só com dígitos que só bate completando com zeros ("10" para 000010): pode ser outro registro;
+ * - "diferente": o resto. Código com letras nunca é completado.
+ */
+function compareCodeValue(fromErp, configured, size) {
+  if (typeof fromErp === "number") {
+    const text = Number.isInteger(fromErp) && fromErp >= 0 ? String(fromErp) : "";
+    return text && /^\d+$/.test(configured) && text.padStart(size, "0") === configured.padStart(size, "0") ? "igual" : "diferente";
+  }
+  const text = String(fromErp).trim();
+  if (text === configured) return "igual";
+  if (/^\d+$/.test(text) && /^\d+$/.test(configured) && text.padStart(size, "0") === configured.padStart(size, "0")) return "incerto";
+  return "diferente";
+}
+
+/**
+ * Presença do fornecedor+loja nos registros:
+ * - "presente": algum registro com código e loja iguais (ver compareCodeValue);
+ * - "sem_loja" / "sem_zeros": nenhum presente, mas há registro que pode ser ele — mesmo código sem loja, ou código
+ *   ou loja em texto que só bate completando com zeros. Não prova presença nem ausência;
+ * - "ausente": nenhum registro que possa ser ele.
+ */
+function supplierPresence(rows, codigo, loja) {
+  let doubt = null;
+  for (const row of rows || []) {
+    const values = rawSupplierValues(row);
+    if (!values) continue;
+    const code = compareCodeValue(values.codigo, codigo, 6);
+    if (code === "diferente") continue;
+    if (values.loja === null) {
+      doubt ??= "sem_loja";
+      continue;
+    }
+    const store = compareCodeValue(values.loja, loja, 2);
+    if (store === "diferente") continue;
+    if (code === "igual" && store === "igual") return "presente";
+    doubt ??= "sem_zeros";
+  }
+  return doubt || "ausente";
+}
+
+const DOUBT_REASONS = { sem_loja: "registro_sem_loja", sem_zeros: "codigo_sem_zeros" };
+
+async function indexedSupplierSearch(codigo) {
+  return tryFinRestLookup("fornecedores", codigo, RESULT_LIMIT * 2, { raw: true });
+}
+
+async function freshSupplierRead() {
+  const { linked, credential } = await loadLinkedGet("fornecedores", "Fornecedores");
+  return readSuppliersFresh(linked, credential);
+}
+
+/**
+ * Confere se o fornecedor (código + loja) existe no SA2 do Protheus do cliente, com dado fresco.
+ * - "encontrado": apareceu na busca indexada ou na leitura do SA2.
+ * - "nao_encontrado": só pela leitura COMPLETA do SA2 (todas as páginas, sem falha, sem bater no teto) sem ele.
+ * - "nao_conferido": qualquer outra coisa (sem conexão, falha, leitura parcial).
+ * Fornecedor bloqueado ou excluído conta como não encontrado (as duas leituras os descartam).
+ * @returns {Promise<{ situacao: "encontrado"|"nao_encontrado"|"nao_conferido", motivo: string }>}
+ */
+export async function checkSupplierInErp(codigo, loja, { indexLookup = indexedSupplierSearch, fullRead = freshSupplierRead } = {}) {
+  const code = String(codigo || "").trim();
+  const store = String(loja || "").trim();
+  let indexed = null;
+  try {
+    indexed = await indexLookup(code);
+  } catch (error) {
+    logger.warn({ err: error, codigo: code }, "busca indexada de fornecedor falhou");
+  }
+  const viaIndex = supplierPresence(indexed?.rows, code, store);
+  if (viaIndex === "presente") return { situacao: "encontrado", motivo: "indice" };
+  // A busca indexada só prova presença: no FinRestTitulos ela procura por código apenas quando o termo é numérico
+  // e, fora isso, pelo nome — um código como "UNIAO" pode não aparecer nela mesmo existindo. Ausência só se
+  // afirma pela leitura completa do SA2.
+
+  let read;
+  try {
+    read = await fullRead();
+  } catch (error) {
+    logger.warn({ err: error, codigo: code }, "leitura do SA2 para conferência falhou");
+    return { situacao: "nao_conferido", motivo: "leitura_falhou" };
+  }
+  const viaRead = supplierPresence(read.rows, code, store);
+  if (viaRead === "presente") return { situacao: "encontrado", motivo: "sa2" };
+  // Registro que pode ser ele (sem loja, ou sem os zeros em texto): não dá para afirmar que aquela chave não existe.
+  const doubt = DOUBT_REASONS[viaRead] || DOUBT_REASONS[viaIndex];
+  if (doubt) return { situacao: "nao_conferido", motivo: doubt };
+  if (!read.complete) {
+    return { situacao: "nao_conferido", motivo: read.limitReached ? "limite_de_paginas" : "pagina_falhou" };
+  }
+  return { situacao: "nao_encontrado", motivo: "sa2" };
+}
+
+/**
+ * Conferências de um mesmo salvamento: todas usam UMA leitura completa do SA2 (feita na primeira que precisar),
+ * além de dividirem a leitura em andamento com outros salvamentos simultâneos da mesma integração.
+ */
+export function createSupplierCheckSession() {
+  let read = null;
+  const fullRead = () => {
+    read ??= freshSupplierRead();
+    return read;
+  };
+  return { check: (codigo, loja) => checkSupplierInErp(codigo, loja, { fullRead }) };
 }

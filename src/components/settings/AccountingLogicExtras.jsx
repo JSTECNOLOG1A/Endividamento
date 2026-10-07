@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
-import { ACCOUNTING_LOGIC_PARAM_KEYS } from "@/lib/accountingLogicParams";
+import { TITLE_CLASSIFICATION_PARAM_KEYS } from "@/lib/accountingLogicParams";
 
 export function ChartRecommendationCard() {
   return (
@@ -120,8 +120,8 @@ export function TitleClassificationCard() {
   const load = async () => {
     try {
       const result = await parametersApi.list({});
-      const rows = (result.data || []).filter((p) => ACCOUNTING_LOGIC_PARAM_KEYS.includes(p.key));
-      rows.sort((a, b) => ACCOUNTING_LOGIC_PARAM_KEYS.indexOf(a.key) - ACCOUNTING_LOGIC_PARAM_KEYS.indexOf(b.key));
+      const rows = (result.data || []).filter((p) => TITLE_CLASSIFICATION_PARAM_KEYS.includes(p.key));
+      rows.sort((a, b) => TITLE_CLASSIFICATION_PARAM_KEYS.indexOf(a.key) - TITLE_CLASSIFICATION_PARAM_KEYS.indexOf(b.key));
       setItems(rows);
       setDraft(Object.fromEntries(rows.map((r) => [r.key, r.value ?? ""])));
     } catch {
