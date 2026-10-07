@@ -367,15 +367,65 @@ async function prepareInstallment(data, previous, client) {
   delete changes.agreement_id;
   const merged = { situacao: "em_aberto", ...(previous || {}), ...changes, agreement_id: agreementId };
   assertInstallmentRules(merged);
+  const versioned = previous ? assertInstallmentVersion(data, previous) : false;
 
   const row = previous ? { ...changes } : { ...merged };
   if (!previous) {
     const agreement = await loadAgreementForInstallment(merged.agreement_id, client);
     row.agreement_id = agreement.id;
     row.group_id = agreement.group_id;
+    delete row.pagamento_origem;
+    delete row.pagamento_titulo_id;
+    delete row.pagamento_registrado_em;
+  } else if (previous.pagamento_origem === "protheus" && undoesErpPayment(previous, merged)) {
+    // Pagamento registrado pelo Protheus só muda à mão com a parcela recarregada (versão enviada): sem ela, a tela
+    // pode estar mostrando a parcela de antes da baixa e desfaria o pagamento sem saber.
+    if (!versioned) {
+      const err = validationError(
+        "situacao",
+        "O pagamento desta parcela foi registrado pela baixa no Protheus. Recarregue a parcela antes de alterar o pagamento.",
+        409
+      );
+      err.code = "TAX_INSTALLMENT_PAID_BY_ERP";
+      throw err;
+    }
+    // Mudou à mão: o pagamento deixa de ser o que veio do Protheus.
+    row.pagamento_origem = null;
+    row.pagamento_titulo_id = null;
+    row.pagamento_registrado_em = null;
   }
   row.origem_dado = MANUAL_ORIGIN;
   return row;
+}
+
+// Desfaz (ou troca) o pagamento que veio do Protheus: volta a "a vencer/vencida", cancela, ou muda data/valor.
+// Passar para "Paga" (reconhecida) não desfaz: é o passo manual seguinte, e a origem continua o Protheus.
+function undoesErpPayment(previous, merged) {
+  return !["paga_aguardando_reconhecimento", "reconhecida"].includes(merged.situacao)
+    || (merged.data_pagamento ?? null) !== (previous.data_pagamento ?? null)
+    || !sameMoney(merged.valor_pago, previous.valor_pago);
+}
+
+function epochMs(value) {
+  const ms = new Date(value ?? "").getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Versão da parcela que a tela carregou (`updated_date`), quando enviada: diferente da atual = alguém (ou a baixa no
+ * Protheus) mudou a parcela depois. Quem gravou primeiro vence.
+ * @returns {boolean} se a versão foi enviada (e confere)
+ */
+function assertInstallmentVersion(data, previous) {
+  if (!data || typeof data !== "object" || data.updated_date === undefined || data.updated_date === null) return false;
+  const expected = epochMs(data.updated_date);
+  if (expected === null || expected !== epochMs(previous.updated_date)) {
+    const err = new Error("A parcela foi alterada enquanto você editava (por exemplo, o pagamento foi registrado pela baixa no Protheus). Recarregue a parcela e confira antes de salvar.");
+    err.status = 409;
+    err.code = "TAX_INSTALLMENT_CHANGED";
+    throw err;
+  }
+  return true;
 }
 
 // Títulos de tributo das parcelas que vão sair: só saem os que não estão no Protheus (pendente ou estornado) e sem

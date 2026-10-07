@@ -812,13 +812,23 @@ export async function update(name, id, data) {
   if (keys.length === 1 && keys[0] === "updated_date") return getById(name, id);
   const assignments = keys.map((key, idx) => `${key} = $${idx + 1}`).join(", ");
   const scope = tenantClause(name, { startIndex: keys.length + 2 });
+  // Parcela de tributo: só grava se ninguém (nem a baixa no Protheus) a mudou desde a leitura acima.
+  const versionCheck = name === "TaxInstallment"
+    ? { sql: ` AND date_trunc('milliseconds', updated_date) = $${keys.length + 2 + scope.params.length}::timestamptz`, params: [new Date(previous.updated_date).toISOString()] }
+    : { sql: "", params: [] };
+  let updated;
   try {
-    await pool.query(
-      `UPDATE ${entity.table} SET ${assignments} WHERE id = $${keys.length + 1} AND ${scope.sql}`,
-      [...keys.map((key) => row[key]), id, ...scope.params]
+    updated = await pool.query(
+      `UPDATE ${entity.table} SET ${assignments} WHERE id = $${keys.length + 1} AND ${scope.sql}${versionCheck.sql}`,
+      [...keys.map((key) => row[key]), id, ...scope.params, ...versionCheck.params]
     );
   } catch (error) {
     throw mapDbError(error);
+  }
+  if (name === "TaxInstallment" && updated.rowCount === 0) {
+    const err = httpError(409, "A parcela foi alterada enquanto você editava (por exemplo, o pagamento foi registrado pela baixa no Protheus). Recarregue a parcela e confira antes de salvar.");
+    err.code = "TAX_INSTALLMENT_CHANGED";
+    throw err;
   }
   if (name === "CompanyEntity") {
     const saved = await getById(name, id);

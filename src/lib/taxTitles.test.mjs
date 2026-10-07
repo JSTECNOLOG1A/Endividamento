@@ -9,6 +9,7 @@ import {
   isTaxTitleForecast,
   taxTitlesConsultOutcome,
   taxTitleActionOutcome,
+  taxTitleInstallmentNote,
   taxTitleKey,
   taxTitleLink,
   taxTitleNeedsAttention,
@@ -101,6 +102,17 @@ assert.deepEqual(
   ["Parcela 1 paga."]
 );
 assert.deepEqual(deletionBlockReasons({ code: "TAX_TITLE_BLOCKS_DELETION", message: "Nada foi excluído." }), ["Nada foi excluído."]);
+
+// Parcela atualizada pela baixa
+assert.equal(taxTitleInstallmentNote({ parcela_atualizada: false }), null);
+assert.equal(
+  taxTitleInstallmentNote({ parcela_atualizada: true, parcela_atualizada_em: "2026-04-02T12:00:00Z" }, () => "02/04/2026 às 09:00"),
+  "A parcela passou a “Paga, aguardando reconhecimento” pela baixa no Protheus em 02/04/2026 às 09:00."
+);
+assert.equal(
+  taxTitleInstallmentNote({ parcela_atualizada: true, parcela_atualizada_em: null }, () => "—"),
+  "A parcela passou a “Paga, aguardando reconhecimento” pela baixa no Protheus."
+);
 
 // Previsto
 assert.equal(isTaxTitleForecast({ previsto: true }), true);

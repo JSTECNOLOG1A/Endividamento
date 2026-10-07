@@ -17,8 +17,10 @@ import {
   parseCurrencyField,
   toCurrencyField,
 } from "@/lib/taxLabels";
+import { isInstallmentConflict, undoesErpPayment, withInstallmentVersion } from "@/lib/taxInstallmentPayment";
 import { useInvalidateTax } from "@/hooks/useTaxData";
 import { FieldError, serverErrorField } from "./TaxBadges";
+import { ErpPaymentNote, InstallmentConflictNotice, UndoErpPaymentDialog, useReloadInstallment } from "./TaxInstallmentConflict";
 
 function nextNumber(installments) {
   return installments.reduce((max, item) => Math.max(max, item.numero_parcela || 0), 0) + 1;
@@ -63,13 +65,23 @@ export default function TaxInstallmentFormDialog({ open, onOpenChange, agreement
   const isEdit = Boolean(installment);
   const [form, setForm] = useState(() => toForm(null, []));
   const [fieldErrors, setFieldErrors] = useState({});
+  // Parcela como a tela a carregou (a versão vai junto ao salvar); troca só ao recarregar depois de um conflito.
+  const [base, setBase] = useState(installment);
+  const [conflict, setConflict] = useState("");
+  const [reloaded, setReloaded] = useState(null);
+  const [confirmUndo, setConfirmUndo] = useState(false);
   const invalidateTax = useInvalidateTax();
+  const reloader = useReloadInstallment();
   const today = todayInBrazil();
 
   useEffect(() => {
     if (!open) return;
     setForm(toForm(installment, installments));
     setFieldErrors({});
+    setBase(installment);
+    setConflict("");
+    setReloaded(null);
+    setConfirmUndo(false);
   }, [open]); // preenchido só na abertura, para um refetch não apagar o que foi digitado
 
   const update = (field, value) => {
@@ -78,30 +90,39 @@ export default function TaxInstallmentFormDialog({ open, onOpenChange, agreement
   };
 
   const isPaid = PAID_INSTALLMENT_STATUSES.has(form.situacao);
-  const wasPaid = isEdit && PAID_INSTALLMENT_STATUSES.has(installment.situacao);
+  const wasPaid = isEdit && PAID_INSTALLMENT_STATUSES.has(base?.situacao);
+
+  const buildPayload = () => ({
+    numero_parcela: form.numero_parcela === "" ? null : Number(form.numero_parcela),
+    vencimento: form.vencimento || null,
+    valor: parseCurrencyField(form.valor),
+    situacao: form.situacao,
+    // A vencer/vencida e cancelada não aceitam pagamento: limpar os dois campos é o que reabre uma parcela paga.
+    data_pagamento: isPaid ? form.data_pagamento || null : null,
+    valor_pago: isPaid ? parseCurrencyField(form.valor_pago) : null,
+    observacoes: form.observacoes,
+  });
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const payload = {
-        numero_parcela: form.numero_parcela === "" ? null : Number(form.numero_parcela),
-        vencimento: form.vencimento || null,
-        valor: parseCurrencyField(form.valor),
-        situacao: form.situacao,
-        // A vencer/vencida e cancelada não aceitam pagamento: limpar os dois campos é o que reabre uma parcela paga.
-        data_pagamento: isPaid ? form.data_pagamento || null : null,
-        valor_pago: isPaid ? parseCurrencyField(form.valor_pago) : null,
-        observacoes: form.observacoes,
-      };
+      const payload = buildPayload();
       return isEdit
-        ? base44.entities.TaxInstallment.update(installment.id, payload)
+        ? base44.entities.TaxInstallment.update(base.id, withInstallmentVersion(payload, base))
         : base44.entities.TaxInstallment.create({ ...payload, agreement_id: agreement.id });
     },
     onSuccess: async () => {
       toast.success(isEdit ? "Parcela atualizada" : "Parcela incluída");
+      setConfirmUndo(false);
       await invalidateTax();
       onOpenChange(false);
     },
     onError: (error) => {
+      setConfirmUndo(false);
+      if (isInstallmentConflict(error)) {
+        setReloaded(null);
+        setConflict(error.message);
+        return;
+      }
       const field = serverErrorField(error);
       if (field) setFieldErrors({ [field]: error.message });
       toast.error(error.message);
@@ -110,11 +131,24 @@ export default function TaxInstallmentFormDialog({ open, onOpenChange, agreement
 
   const busy = saveMutation.isPending;
 
+  const submit = () => {
+    if (isEdit && undoesErpPayment(base, buildPayload())) setConfirmUndo(true);
+    else saveMutation.mutate();
+  };
+
+  const reload = async () => {
+    const fresh = await reloader.reload(base.id);
+    if (!fresh) return;
+    setBase(fresh);
+    setConflict("");
+    setReloaded(fresh);
+  };
+
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <DialogContent className="max-h-[92vh] max-w-lg overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? `Editar parcela ${installment.numero_parcela}` : "Nova parcela"}</DialogTitle>
+          <DialogTitle>{isEdit ? `Editar parcela ${base?.numero_parcela ?? installment.numero_parcela}` : "Nova parcela"}</DialogTitle>
           <DialogDescription>Parcelamento nº {agreement?.codigo_parcelamento}. Os dados ficam marcados como informados manualmente.</DialogDescription>
         </DialogHeader>
 
@@ -123,9 +157,23 @@ export default function TaxInstallmentFormDialog({ open, onOpenChange, agreement
           className="grid gap-3"
           onSubmit={(event) => {
             event.preventDefault();
-            saveMutation.mutate();
+            submit();
           }}
         >
+          {isEdit ? <ErpPaymentNote installment={base} /> : null}
+          <InstallmentConflictNotice
+            message={conflict}
+            reloaded={reloaded}
+            reloading={reloader.reloading}
+            reloadError={reloader.error}
+            today={today}
+            onReload={reload}
+            onUseCurrent={() => {
+              setForm(toForm(reloaded, installments));
+              setFieldErrors({});
+              setReloaded(null);
+            }}
+          />
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label className="text-xs" htmlFor="inst-numero">Nº da parcela</Label>
@@ -207,10 +255,17 @@ export default function TaxInstallmentFormDialog({ open, onOpenChange, agreement
 
         <DialogFooter className="gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button type="submit" form="tax-installment-form" disabled={busy}>
+          <Button type="submit" form="tax-installment-form" disabled={busy || Boolean(conflict)}>
             {busy ? "Salvando…" : isEdit ? "Salvar alterações" : "Incluir parcela"}
           </Button>
         </DialogFooter>
+        <UndoErpPaymentDialog
+          open={confirmUndo}
+          installment={base}
+          busy={busy}
+          onConfirm={() => saveMutation.mutate()}
+          onCancel={() => setConfirmUndo(false)}
+        />
       </DialogContent>
     </Dialog>
   );

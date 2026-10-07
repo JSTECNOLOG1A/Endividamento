@@ -34,6 +34,12 @@ export const TITLE_STATUS_LABELS = {
 };
 
 const LEASE_MINUTES = 5;
+/**
+ * Baixa sem data no Protheus: por quantos dias, desde a primeira vez, o agendador volta a consultar o título para
+ * tentar registrar o pagamento na parcela. Uma semana cobre a correção do lançamento no Protheus sem deixar o título
+ * na fila do agendador para sempre; consultar pela tela continua tentando.
+ */
+export const UNDATED_BAIXA_RETRY_DAYS = 7;
 const MAX_STEPS = 4;
 const PAID_INSTALLMENT_STATUSES = new Set(["paga_aguardando_reconhecimento", "reconhecida"]);
 const FROZEN = new Set(["baixado", "parcial"]);
@@ -80,7 +86,7 @@ const TITLE_COLUMNS = `t.id, t.group_id, t.installment_id, t.numero_e2, t.parcel
   t.filial, t.fil_orig, t.prefixo, t.tipo, t.natureza, t.fornecedor, t.loja, t.emissao::text AS emissao,
   t.vencimento::text AS vencimento, t.valor::float8 AS valor, t.codigo_barras, t.linha_digitavel, t.historico,
   t.saldo::float8 AS saldo, t.baixa_data::text AS baixa_data, t.erp_mensagem, t.enviado_em, t.estornado_em,
-  t.consultado_em, t.trava_ate, t.dados_enviados AS snapshot_enviado, t.created_date, t.updated_date`;
+  t.consultado_em, t.trava_ate, t.dados_enviados AS snapshot_enviado, t.parcela_atualizada_em, t.baixa_sem_data_desde, t.created_date, t.updated_date`;
 
 async function loadContext(installmentId, groupId) {
   const result = await pool.query(
@@ -334,20 +340,142 @@ async function consultStep(op, row, ctx) {
     return { result: "divergente", row: updated };
   }
   if (answer.result === "encontrado") {
-    const updated = await updateTitle(row.id, {
-      situacao: CONSULT_SITUATION[answer.situacao],
-      saldo: answer.saldo,
-      baixa_data: answer.baixa,
-      consultado_em: new Date().toISOString(),
-      erp_mensagem: answer.message,
-      motivo: FROZEN.has(CONSULT_SITUATION[answer.situacao]) ? "Pago no Protheus: o título não muda mais por troca ou remoção da guia." : null,
-    });
-    return { result: "encontrado", row: updated };
+    const next = CONSULT_SITUATION[answer.situacao];
+    if (row.parcela_atualizada_em && next !== "baixado") {
+      // A baixa que registrou o pagamento da parcela foi desfeita no Protheus. A parcela não volta sozinha.
+      const updated = await updateTitle(row.id, {
+        situacao: "conferencia",
+        saldo: answer.saldo,
+        baixa_data: answer.baixa,
+        consultado_em: new Date().toISOString(),
+        erp_mensagem: answer.message,
+        motivo: undoneBaixaMessage(ctx),
+      });
+      await audit(op, "UPDATE", updated, ctx, { situacao: TITLE_STATUS_LABELS.conferencia, mensagem: updated.motivo });
+      return { result: "encontrado", row: updated };
+    }
+    return { result: "encontrado", row: await recordFound(op, row, ctx, answer, next) };
   }
   if (answer.result === "nao_encontrado") {
     return { result: "nao_encontrado", row: await updateTitle(row.id, { consultado_em: new Date().toISOString(), erp_mensagem: answer.message }) };
   }
   return { result: "inconclusivo", row: await updateTitle(row.id, { erp_mensagem: answer.message }) };
+}
+
+function undoneBaixaMessage(ctx) {
+  return `A baixa deste título no Protheus foi desfeita, mas a parcela ${ctx.numero_parcela} continua registrada como paga: ela não é revertida sozinha. Confira no Protheus e corrija a parcela se for o caso.`;
+}
+
+function round2(value) {
+  return Math.round(Number(value) * 100) / 100;
+}
+
+/**
+ * Baixa total no Protheus → parcela "Paga, aguardando reconhecimento", na mesma transação do título. Só parcela "a
+ * vencer/vencida" (em_aberto) — marcada à mão, fica como está —, com data de baixa conhecida e não futura (a regra
+ * da parcela não aceita pagamento no futuro; volta a tentar na próxima consulta).
+ * valor_pago = valor do título − saldo, os dois da consulta ao Protheus (E2_VALOR − E2_SALDO): o que a consulta
+ * prova que foi baixado. Juros e multa pagos na baixa não aparecem na consulta e não entram.
+ */
+async function applyPayment(client, row, answer) {
+  const result = await client.query(
+    `SELECT id, numero_parcela, vencimento::text AS vencimento, situacao, data_pagamento::text AS data_pagamento,
+            valor_pago::float8 AS valor_pago
+       FROM tax_installments WHERE id = $1 AND group_id = $2 FOR UPDATE`,
+    [row.installment_id, row.group_id]
+  );
+  const installment = result.rows[0];
+  if (!installment) return { moved: false, note: null };
+  if (installment.situacao !== "em_aberto") {
+    return { moved: false, note: "A parcela já tinha outra situação registrada no AllDebt e não foi alterada." };
+  }
+  if (!answer.baixa) {
+    return {
+      moved: false,
+      undated: true,
+      note: `O Protheus não informou a data da baixa, então a parcela não foi alterada. Registre o pagamento da parcela à mão ou confira a baixa no Protheus. O agendador tenta de novo por até ${UNDATED_BAIXA_RETRY_DAYS} dias.`,
+    };
+  }
+  if (answer.baixa > todayInSaoPaulo()) {
+    return { moved: false, note: `A baixa no Protheus tem data futura (${civilDateLabel(answer.baixa)}): a parcela será atualizada quando a data chegar.` };
+  }
+  const paid = round2(Number(answer.valor) - Number(answer.saldo));
+  if (!(paid > 0)) return { moved: false, note: "A consulta não mostra valor baixado: a parcela não foi alterada." };
+  const moved = await client.query(
+    `UPDATE tax_installments
+        SET situacao = 'paga_aguardando_reconhecimento', data_pagamento = $3, valor_pago = $4,
+            pagamento_origem = 'protheus', pagamento_titulo_id = $5, pagamento_registrado_em = now(), updated_date = now()
+      WHERE id = $1 AND group_id = $2 AND situacao = 'em_aberto'
+      RETURNING id`,
+    [installment.id, row.group_id, answer.baixa, paid, row.id]
+  );
+  if (!moved.rows[0]) return { moved: false, note: null };
+  await client.query(`UPDATE tax_payable_titles SET parcela_atualizada_em = now() WHERE id = $1`, [row.id]);
+  return { moved: true, installment, dataPagamento: answer.baixa, valorPago: paid };
+}
+
+// Título achado na consulta: grava saldo/baixa e, se baixado, registra o pagamento na parcela — tudo junto.
+async function recordFound(op, row, ctx, answer, next) {
+  const client = await pool.connect();
+  let applied = { moved: false, note: null };
+  let updated;
+  try {
+    await client.query("BEGIN");
+    if (next === "baixado" && !row.parcela_atualizada_em) applied = await applyPayment(client, row, answer);
+    const paidMotivo = "Pago no Protheus: o título não muda mais por troca ou remoção da guia.";
+    const fields = {
+      situacao: next,
+      saldo: answer.saldo,
+      baixa_data: answer.baixa,
+      consultado_em: new Date().toISOString(),
+      erp_mensagem: answer.message,
+      motivo: FROZEN.has(next) ? [paidMotivo, applied.moved ? "A parcela passou a paga, aguardando reconhecimento." : applied.note].filter(Boolean).join(" ") : null,
+    };
+    const keys = Object.keys(fields);
+    const result = await client.query(
+      `UPDATE tax_payable_titles t SET ${keys.map((key, i) => `${key} = $${i + 2}`).join(", ")}, updated_date = now(),
+              updated_by = $${keys.length + 2}
+        WHERE t.id = $1 RETURNING ${TITLE_COLUMNS}`,
+      [row.id, ...keys.map((key) => fields[key]), actorEmail()]
+    );
+    updated = result.rows[0];
+    // Desde quando a baixa veio sem data (a primeira vez vale; com data, ou fora do caso, zera).
+    const undated = await client.query(
+      `UPDATE tax_payable_titles t
+          SET baixa_sem_data_desde = CASE WHEN $2::boolean THEN COALESCE(t.baixa_sem_data_desde, now()) ELSE NULL END
+        WHERE t.id = $1 RETURNING ${TITLE_COLUMNS}`,
+      [row.id, Boolean(applied.undated)]
+    );
+    updated = undated.rows[0];
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+  if (applied.moved) {
+    const req = auditReq(op.req);
+    await writeAudit({
+      req,
+      action: "UPDATE",
+      resourceType: "TaxInstallment",
+      resourceId: row.installment_id,
+      rotina: "Gestão Tributária",
+      before: { numero_parcela: applied.installment.numero_parcela, vencimento: applied.installment.vencimento, situacao: applied.installment.situacao, data_pagamento: applied.installment.data_pagamento, valor_pago: applied.installment.valor_pago },
+      after: {
+        numero_parcela: applied.installment.numero_parcela,
+        vencimento: applied.installment.vencimento,
+        situacao: "paga_aguardando_reconhecimento",
+        data_pagamento: applied.dataPagamento,
+        valor_pago: applied.valorPago,
+        pagamento_origem: `Baixa no Protheus — título ${row.prefixo} ${row.numero_e2}/${row.parcela_e2}`,
+      },
+      origem: req ? undefined : "automatico",
+      payload: { pagamento_origem: "protheus", titulo_id: row.id },
+    });
+  }
+  return updated;
 }
 
 // Envio sem confirmação (ou recusado): só a consulta decide. Achou → está no Protheus; não achou → pode ser enviado
@@ -833,7 +961,9 @@ async function consultOne(id, { req = null, strict = false } = {}) {
     if (consulted.result === "nao_encontrado" && ["enviado", "parcial", "baixado"].includes(fresh.situacao)) {
       const final = await updateTitle(row.id, {
         situacao: "conferencia",
-        motivo: "A consulta não encontrou no Protheus um título que estava integrado. Confira no Protheus e, se ele não existir mesmo, confirme a ausência.",
+        motivo: fresh.parcela_atualizada_em
+          ? undoneBaixaMessage(ctx)
+          : "A consulta não encontrou no Protheus um título que estava integrado. Confira no Protheus e, se ele não existir mesmo, confirme a ausência.",
       });
       await audit(op, "UPDATE", final, ctx, { situacao: TITLE_STATUS_LABELS.conferencia, mensagem: final.motivo });
     }
@@ -865,9 +995,18 @@ const CONSULTABLE_ON_REQUEST = ["enviado", "parcial", "baixado", "incerto", "rec
  */
 export async function consultTaxTitles({ req = null, onRequest = false } = {}) {
   const groupId = requireTenantContext();
+  // Pagos também entram quando ainda falta registrar o pagamento na parcela (ex.: baixa com data futura) ou quando a
+  // parcela movida pela baixa ainda aguarda reconhecimento (para notar baixa desfeita).
   const result = await pool.query(
-    `SELECT id FROM tax_payable_titles WHERE group_id = $1 AND situacao = ANY($2::text[]) ORDER BY updated_date`,
-    [groupId, onRequest ? CONSULTABLE_ON_REQUEST : CONSULTABLE]
+    `SELECT t.id FROM tax_payable_titles t JOIN tax_installments i ON i.id = t.installment_id
+      WHERE t.group_id = $1
+        AND (t.situacao = ANY($2::text[])
+          OR (t.situacao = 'baixado' AND (
+            (t.parcela_atualizada_em IS NULL AND i.situacao = 'em_aberto'
+              AND ($3::boolean OR t.baixa_sem_data_desde IS NULL OR t.baixa_sem_data_desde > now() - ($4::int * interval '1 day')))
+            OR (t.parcela_atualizada_em IS NOT NULL AND i.situacao = 'paga_aguardando_reconhecimento'))))
+      ORDER BY t.updated_date`,
+    [groupId, onRequest ? CONSULTABLE_ON_REQUEST : CONSULTABLE, onRequest, UNDATED_BAIXA_RETRY_DAYS]
   );
   const summary = {
     total: result.rows.length,
@@ -987,6 +1126,11 @@ export function presentTitle(row, ctx = null, forecast = null) {
     estornado_em: row.estornado_em,
     consultado_em: row.consultado_em,
     em_andamento: busy,
+    // A baixa deste título registrou o pagamento da parcela ("Paga, aguardando reconhecimento").
+    parcela_atualizada: Boolean(row.parcela_atualizada_em),
+    parcela_atualizada_em: row.parcela_atualizada_em || null,
+    // Pago no Protheus sem data de baixa: desde quando (o agendador desiste depois de UNDATED_BAIXA_RETRY_DAYS dias).
+    baixa_sem_data_desde: row.baixa_sem_data_desde || null,
     pode_integrar: !busy && ["pendente", "incerto", "recusado", "enviado", "estornado"].includes(row.situacao),
     pode_consultar: !busy && ["incerto", "recusado", "enviado", "parcial", "baixado", "conferencia"].includes(row.situacao),
     pode_confirmar_ausencia: !busy && row.situacao === "conferencia",

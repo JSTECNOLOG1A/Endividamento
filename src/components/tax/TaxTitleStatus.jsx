@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "@/lib/notify";
-import { taxTitleLink, taxTitleNotes, taxTitleStatusLabel, taxTitleTone } from "@/lib/taxTitles";
+import { formatDateTime } from "@/lib/taxGuides";
+import { taxTitleInstallmentNote, taxTitleLink, taxTitleNotes, taxTitleStatusLabel, taxTitleTone } from "@/lib/taxTitles";
 
 const TONE_STYLES = {
   warning: { dot: "bg-amber-400", text: "text-amber-800", box: "border-amber-200 bg-amber-50" },
@@ -40,13 +41,20 @@ export function TaxTitleBadge({ title, className }) {
   );
 }
 
-/** Motivo (o que o AllDebt decidiu) e resposta do Protheus, quando houver. `compact` corta em uma linha cada. */
+/**
+ * Motivo (o que o AllDebt decidiu), resposta do Protheus e, quando a baixa já atualizou a parcela, o aviso disso.
+ * `compact` corta em uma linha cada.
+ */
 export function TaxTitleNotes({ title, compact = false, className }) {
   const { motivo, erpMensagem } = taxTitleNotes(title);
-  if (!motivo && !erpMensagem) return null;
+  const installmentNote = taxTitleInstallmentNote(title, formatDateTime);
+  if (!motivo && !erpMensagem && !installmentNote) return null;
   const lineClass = compact ? "truncate" : "break-words";
   return (
     <div className={cn("min-w-0 space-y-0.5 text-[11px] leading-snug", className)}>
+      {installmentNote ? (
+        <p className={cn("font-medium text-emerald-800", lineClass)} title={compact ? installmentNote : undefined}>{installmentNote}</p>
+      ) : null}
       {motivo ? (
         <p className={cn("text-slate-600", lineClass)} title={compact ? motivo : undefined}>{motivo}</p>
       ) : null}

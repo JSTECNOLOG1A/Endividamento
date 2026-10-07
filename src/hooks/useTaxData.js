@@ -166,27 +166,32 @@ export function useGuideSends(installmentId) {
   return { sends: query.data || [], isLoading: query.isLoading, error: query.error || null, refetch: query.refetch };
 }
 
+// Guia e título mudam a parcela no servidor (o título segue a guia; a baixa no Protheus registra o pagamento da
+// parcela). Uma invalidação por prefixo cobre todas as leituras de cada grupo — parcelas pendentes (semáforo e Visão
+// geral) e parcelas de cada parcelamento — e só as que estão na tela são buscadas de novo; as demais ficam marcadas
+// como velhas para a próxima vez que abrirem.
+const GUIDE_AND_TITLE_KEYS = [TAX_QUERY_KEYS.guides, TAX_QUERY_KEYS.titles, TAX_QUERY_KEYS.installments];
+
+function invalidateGuidesAndTitles(queryClient) {
+  return Promise.all(GUIDE_AND_TITLE_KEYS.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+}
+
 /**
  * Recarrega tudo o que mostra guia: lista de guias atuais, guia de cada parcela e envios — e os títulos de tributo,
- * que seguem a guia.
+ * que seguem a guia, e as parcelas, que o título pode ter atualizado.
  */
 export function useInvalidateTaxGuides() {
   const queryClient = useQueryClient();
-  return () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.guides }),
-      queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.titles }),
-    ]);
+  return () => invalidateGuidesAndTitles(queryClient);
 }
 
-/** Recarrega tudo o que mostra título de tributo (Contas a Pagar, parcelas e a guia, que traz o título junto). */
+/**
+ * Recarrega tudo o que mostra título de tributo (Contas a Pagar, parcelas e a guia, que traz o título junto) e as
+ * parcelas, que a baixa no Protheus pode ter marcado como pagas.
+ */
 export function useInvalidateTaxTitles() {
   const queryClient = useQueryClient();
-  return () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.titles }),
-      queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.guides }),
-    ]);
+  return () => invalidateGuidesAndTitles(queryClient);
 }
 
 /** Títulos de tributo de Contas a Pagar. `enabled: false` para quem não tem a Gestão Tributária. */

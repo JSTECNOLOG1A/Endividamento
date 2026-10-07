@@ -88,7 +88,8 @@ function guideColumns(alias = "") {
 async function loadInstallmentContext(client, installmentId, groupId, { lock = false } = {}) {
   const result = await client.query(
     `SELECT i.id, i.group_id, i.agreement_id, i.numero_parcela, i.vencimento::text AS vencimento,
-            i.valor::float8 AS valor, i.situacao,
+            i.valor::float8 AS valor, i.situacao, i.data_pagamento::text AS data_pagamento,
+            i.valor_pago::float8 AS valor_pago, i.pagamento_origem, i.pagamento_registrado_em,
             a.codigo_parcelamento, a.orgao, a.uf, a.esfera, a.modalidade, a.tributo, a.qtd_parcelas,
             e.entity_name, e.document_number
        FROM tax_installments i
@@ -175,6 +176,11 @@ export async function getInstallmentGuide(installmentId) {
       vencimento: ctx.vencimento,
       valor: ctx.valor,
       situacao: ctx.situacao,
+      data_pagamento: ctx.data_pagamento,
+      valor_pago: ctx.valor_pago,
+      // "protheus" = pagamento registrado pela baixa do título de tributo no Protheus; null = registrado à mão.
+      pagamento_origem: ctx.pagamento_origem,
+      pagamento_registrado_em: ctx.pagamento_registrado_em,
     },
     guia: presentGuide(current, ctx),
     historico: history.map((row) => presentGuide(row, ctx)),

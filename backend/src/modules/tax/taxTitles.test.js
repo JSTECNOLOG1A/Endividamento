@@ -33,6 +33,16 @@ function check(condition, message) {
   if (!condition) failures.push(message);
 }
 
+function todayInSaoPaulo() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
+function shiftDays(civil, days) {
+  const date = new Date(`${civil}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 // ---------------------------------------------------------------------------
 // FinRestTitulos de teste
 // ---------------------------------------------------------------------------
@@ -48,6 +58,7 @@ function startFakeProtheus() {
     consultDelayMs: 0,
     consultPatch: null,
     gets: 0,
+    baixaDate: todayInSaoPaulo(),
   };
   const keyOf = (b) => [b.filial, b.prefixo, b.numero, b.parcela, b.tipo, b.fornecedor, b.loja].map((v) => String(v ?? "").trim()).join("|");
   const reply = (res, status, body) => {
@@ -88,7 +99,7 @@ function startFakeProtheus() {
         if (state.consult === "drop") return req.socket.destroy();
         const found = state.se2.get(key);
         if (!found) return reply(res, 200, { code: "200", message: "Titulo nao encontrado no SE2", encontrado: 0, situacao: "nao_encontrado", ...echo, fornecedor: body.fornecedor });
-        return reply(res, 200, { code: "200", encontrado: 1, situacao: found.situacao, ...echo, fornecedor: body.fornecedor, valor: found.valor, saldo: found.saldo, baixa: found.situacao === "aberto" ? "" : "2026-10-07", filial: body.filial, ...(state.consultPatch || {}) });
+        return reply(res, 200, { code: "200", encontrado: 1, situacao: found.situacao, ...echo, fornecedor: body.fornecedor, valor: found.valor, saldo: found.saldo, baixa: found.situacao === "aberto" || found.semData ? "" : (found.baixa || state.baixaDate), filial: body.filial, ...(state.consultPatch || {}) });
       }
       if (op === "extornar") {
         const found = state.se2.get(key);
@@ -206,7 +217,7 @@ async function main() {
   const agreementA = randomUUID();
   const agreementA2 = randomUUID();
   const agreementB = randomUUID();
-  const inst = Object.fromEntries(["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "a10", "a11", "a12", "a13", "a14", "a15", "r1", "b1"].map((k) => [k, randomUUID()]));
+  const inst = Object.fromEntries(["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "a10", "a11", "a12", "a13", "a14", "a15", "a16", "a17", "a18", "a19", "a20", "a21", "a22", "a23", "r1", "b1"].map((k) => [k, randomUUID()]));
 
   await pool.query("BEGIN");
   try {
@@ -257,6 +268,9 @@ async function main() {
       [inst.a4, agreementA, 4, "2026-06-30"], [inst.a5, agreementA, 5, "2026-07-31"], [inst.a6, agreementA, 6, "2026-08-31"],
       [inst.a7, agreementA, 7, "2026-09-30"], [inst.a8, agreementA, 8, "2026-10-30"], [inst.a9, agreementA, 9, "2026-11-30"], [inst.a10, agreementA, 10, "2026-12-30"],
       [inst.a11, agreementA, 11, "2027-01-29"], [inst.a12, agreementA, 12, "2027-02-26"], [inst.a13, agreementA, 13, "2027-03-31"], [inst.a14, agreementA, 14, "2027-04-30"], [inst.a15, agreementA, 15, "2027-05-31"],
+      [inst.a16, agreementA, 16, "2027-06-30"], [inst.a17, agreementA, 17, "2027-07-30"], [inst.a18, agreementA, 18, "2027-08-31"],
+      [inst.a19, agreementA, 19, "2027-09-30"], [inst.a20, agreementA, 20, "2027-10-29"], [inst.a21, agreementA, 21, "2027-11-30"],
+      [inst.a22, agreementA, 22, "2027-12-30"], [inst.a23, agreementA, 23, "2028-01-31"],
       [inst.r1, agreementA2, 1, "2026-03-31"],
     ];
     for (const [id, agreement, n, due] of rows) {
@@ -415,8 +429,18 @@ async function main() {
     fake.state.se2.get(keyA1).saldo = 0;
     const consulted = await asA(() => consultTaxTitle(t1.id));
     check(consulted.situacao === "baixado" && consulted.saldo === 0, `consulta da baixa: ${consulted.situacao}`);
-    const parcelAfterPay = (await pool.query(`SELECT situacao FROM tax_installments WHERE id = $1`, [inst.a1])).rows[0];
-    check(parcelAfterPay.situacao === "em_aberto", "baixa no Protheus não muda a parcela");
+    // Baixa total: a parcela passa sozinha a "Paga, aguardando reconhecimento", com data e valor do Protheus.
+    const parcelAfterPay = (await pool.query(
+      `SELECT situacao, data_pagamento::text AS data_pagamento, valor_pago::float8 AS valor_pago, pagamento_origem, pagamento_titulo_id, pagamento_registrado_em
+         FROM tax_installments WHERE id = $1`, [inst.a1])).rows[0];
+    check(parcelAfterPay.situacao === "paga_aguardando_reconhecimento" && parcelAfterPay.data_pagamento === todayInSaoPaulo() && parcelAfterPay.valor_pago === 1300,
+      `baixa total move a parcela: ${JSON.stringify(parcelAfterPay)}`);
+    check(parcelAfterPay.pagamento_origem === "protheus" && parcelAfterPay.pagamento_titulo_id === t1.id && parcelAfterPay.pagamento_registrado_em, "parcela guarda a origem do pagamento");
+    check(consulted.parcela_atualizada === true && consulted.parcela_atualizada_em, "o título diz que atualizou a parcela");
+    const payAudit = await pool.query(`SELECT before_json, after_json, payload FROM audit_events WHERE action = 'UPDATE' AND resource_type = 'TaxInstallment' AND resource_id = $1 AND payload->>'pagamento_origem' = 'protheus'`, [inst.a1]);
+    check(payAudit.rows.length === 1 && payAudit.rows[0].after_json.situacao === "paga_aguardando_reconhecimento" && payAudit.rows[0].after_json.pagamento_origem.startsWith("Baixa no Protheus — título TRB"), `auditoria do pagamento vindo do Protheus: ${JSON.stringify(payAudit.rows[0]?.after_json)}`);
+    const guideOfPaid = await call(tA, "GET", `/api/tax/installments/${inst.a1}/guide`);
+    check(guideOfPaid.json?.parcela?.pagamento_origem === "protheus" && guideOfPaid.json.parcela.pagamento_registrado_em && guideOfPaid.json.parcela.situacao === "paga_aguardando_reconhecimento", "a parcela mostra que o pagamento veio do Protheus");
     resetCalls();
     await attach(inst.a1, makeLine(140000, "1003"), { substituir: "true" });
     await call(tA, "DELETE", `/api/tax/installments/${inst.a1}/guide`);
@@ -425,7 +449,7 @@ async function main() {
 
     // ---- Respostas ambíguas na inclusão: incerto; antes de reenviar, consulta ----
     for (const mode of ["html", "sem_chave"]) {
-      fake.state.se2.clear();
+      for (const [key, record] of fake.state.se2) if (record.numero !== t1.numero_e2) fake.state.se2.delete(key);
       resetCalls();
       fake.state.include = mode;
       const installment = mode === "html" ? inst.a4 : inst.a5;
@@ -571,7 +595,7 @@ async function main() {
     check(removed.status === 200 && (await titleOf(inst.a2)) === null, `exclusão com estorno confirmado: ${removed.status}`);
     check(![...fake.state.se2.values()].some((r) => r.numero === busyTitle.numero_e2), "título saiu do Protheus antes da parcela");
     const paidDelete = await call(tA, "DELETE", `/api/entities/TaxInstallment/${inst.a1}`);
-    check(paidDelete.status === 409 && paidDelete.json.error.includes("já foi pago"), `parcela com título pago não é excluída: ${paidDelete.status}`);
+    check(paidDelete.status === 409 && paidDelete.json.error.includes("já foi pago"), `parcela com título pago não é excluída: ${paidDelete.status} ${paidDelete.json?.error}`);
     const conferenceDelete = await call(tA, "DELETE", `/api/entities/TaxInstallment/${inst.a7}`);
     check(conferenceDelete.status === 409, "título em conferência barra a exclusão");
 
@@ -692,6 +716,121 @@ async function main() {
     check(all15.json?.por_resultado?.divergente >= 1 && (await titleOf(inst.a15)).situacao === "conferencia", `incerto divergente contado como divergente: ${JSON.stringify(all15.json?.por_resultado)}`);
     const view15 = (await call(tA, "GET", `/api/tax/payable-titles?installment_id=${inst.a15}`)).json[0];
     check(view15.dados_enviados === true && view15.previsto === false, "incerto que foi enviado: dados enviados, mesmo em conferência");
+
+    // ---- Baixa no Protheus → parcela (ponto 4) ----
+    const recordOf = async (installmentId) => {
+      const title = await titleOf(installmentId);
+      return [...fake.state.se2.values()].find((r) => r.numero === title.numero_e2);
+    };
+    const parcelOf = async (installmentId) => (await pool.query(
+      `SELECT situacao, data_pagamento::text AS data_pagamento, valor_pago::float8 AS valor_pago, pagamento_origem FROM tax_installments WHERE id = $1`,
+      [installmentId]
+    )).rows[0];
+    const today = todayInSaoPaulo();
+    for (const [n, id] of [[1601, inst.a16], [1701, inst.a17], [1801, inst.a18], [1901, inst.a19], [2001, inst.a20], [2101, inst.a21], [2201, inst.a22]]) {
+      await attach(id, makeLine(50000, String(n)));
+      check((await titleOf(id)).situacao === "enviado", `título ${n} integrado`);
+    }
+    // Parcial: só o título.
+    Object.assign(await recordOf(inst.a16), { situacao: "parcial", saldo: 200 });
+    const partial16 = await asA(async () => consultTaxTitle((await titleOf(inst.a16)).id));
+    check(partial16.situacao === "parcial" && (await parcelOf(inst.a16)).situacao === "em_aberto" && partial16.parcela_atualizada === false, `baixa parcial não mexe na parcela: ${partial16.situacao}`);
+    // Título pago (parcialmente) com a parcela ainda em aberto: trocar a guia não mexe no título.
+    resetCalls();
+    await attach(inst.a16, makeLine(52000, "1602"), { substituir: "true" });
+    check((await titleOf(inst.a16)).situacao === "parcial" && callsOf("extornar").length === 0 && callsOf("incluir").length === 0, `título parcialmente pago não muda com a troca da guia: ${(await titleOf(inst.a16)).situacao} ${fake.state.calls.map((c) => c.op)}`);
+    // Data futura: título baixado, parcela espera; quando a data chega, a consulta do agendador aplica.
+    Object.assign(await recordOf(inst.a17), { situacao: "baixado", saldo: 0, baixa: shiftDays(today, 1) });
+    const future17 = await asA(async () => consultTaxTitle((await titleOf(inst.a17)).id));
+    check(future17.situacao === "baixado" && (await parcelOf(inst.a17)).situacao === "em_aberto" && future17.motivo.includes("data futura"), `baixa com data futura não move: ${future17.motivo}`);
+    Object.assign(await recordOf(inst.a17), { baixa: today });
+    await asA(() => consultTaxTitles());
+    check((await parcelOf(inst.a17)).situacao === "paga_aguardando_reconhecimento", "quando a data chega, a consulta do agendador move a parcela");
+    // Parcela já registrada à mão (paga ou cancelada): não muda.
+    const manualPaid = await call(tA, "PATCH", `/api/entities/TaxInstallment/${inst.a18}`, { situacao: "reconhecida", data_pagamento: shiftDays(today, -3), valor_pago: 499.9 });
+    check(manualPaid.status === 200, `parcela paga à mão: ${manualPaid.status} ${JSON.stringify(manualPaid.json)}`);
+    await settleTaxTitleSyncs();
+    Object.assign(await recordOf(inst.a18), { situacao: "baixado", saldo: 0 });
+    const t18 = await asA(async () => consultTaxTitle((await titleOf(inst.a18)).id));
+    const p18 = await parcelOf(inst.a18);
+    check(t18.situacao === "baixado" && p18.situacao === "reconhecida" && p18.valor_pago === 499.9 && p18.data_pagamento === shiftDays(today, -3) && p18.pagamento_origem === null && t18.parcela_atualizada === false,
+      `parcela paga à mão não é sobrescrita: ${JSON.stringify(p18)}`);
+    Object.assign(await recordOf(inst.a19), { situacao: "baixado", saldo: 0, baixa: shiftDays(today, 2) });
+    await asA(async () => consultTaxTitle((await titleOf(inst.a19)).id));
+    await call(tA, "PATCH", `/api/entities/TaxInstallment/${inst.a19}`, { situacao: "cancelada" });
+    await settleTaxTitleSyncs();
+    Object.assign(await recordOf(inst.a19), { baixa: today });
+    await call(tA, "POST", `/api/tax/payable-titles/${(await titleOf(inst.a19)).id}/consult`);
+    check((await parcelOf(inst.a19)).situacao === "cancelada", "parcela cancelada à mão não é sobrescrita");
+    // Baixa desfeita: título em conferência, parcela fica como está.
+    Object.assign(await recordOf(inst.a20), { situacao: "baixado", saldo: 0 });
+    await asA(async () => consultTaxTitle((await titleOf(inst.a20)).id));
+    const moved20 = await parcelOf(inst.a20);
+    check(moved20.situacao === "paga_aguardando_reconhecimento", "parcela 20 movida pela baixa");
+    Object.assign(await recordOf(inst.a20), { situacao: "aberto", saldo: 500, baixa: null });
+    await asA(() => consultTaxTitles());
+    const t20 = await titleOf(inst.a20);
+    check(t20.situacao === "conferencia" && t20.motivo.includes("A baixa deste título no Protheus foi desfeita") && JSON.stringify(await parcelOf(inst.a20)) === JSON.stringify(moved20),
+      `baixa desfeita: conferência sem reverter a parcela: ${t20.situacao} ${JSON.stringify(await parcelOf(inst.a20))}`);
+    // Concorrência com a edição à mão: a tela que carregou a parcela antes da baixa não desfaz o pagamento.
+    const loaded21 = (await call(tA, "GET", `/api/entities/TaxInstallment/${inst.a21}`)).json;
+    Object.assign(await recordOf(inst.a21), { situacao: "baixado", saldo: 0 });
+    await asA(async () => consultTaxTitle((await titleOf(inst.a21)).id));
+    const stale = await call(tA, "PATCH", `/api/entities/TaxInstallment/${inst.a21}`, { observacoes: "editado na tela antiga", updated_date: loaded21.updated_date });
+    check(stale.status === 409 && stale.json?.code === "TAX_INSTALLMENT_CHANGED", `versão antiga recusada: ${stale.status} ${stale.json?.code}`);
+    const noVersion = await call(tA, "PATCH", `/api/entities/TaxInstallment/${inst.a21}`, { situacao: "em_aberto", data_pagamento: null, valor_pago: null });
+    check(noVersion.status === 409 && noVersion.json?.code === "TAX_INSTALLMENT_PAID_BY_ERP", `desfazer pagamento do Protheus sem versão: ${noVersion.status} ${noVersion.json?.code}`);
+    check((await parcelOf(inst.a21)).situacao === "paga_aguardando_reconhecimento", "pagamento vindo do Protheus continua");
+    const current21 = (await call(tA, "GET", `/api/entities/TaxInstallment/${inst.a21}`)).json;
+    const recognized = await call(tA, "PATCH", `/api/entities/TaxInstallment/${inst.a21}`, { situacao: "reconhecida", updated_date: current21.updated_date });
+    check(recognized.status === 200 && recognized.json?.situacao === "reconhecida" && recognized.json?.pagamento_origem === "protheus", `reconhecer mantém a origem: ${recognized.status} ${recognized.json?.pagamento_origem}`);
+    const recognizedNoVersion = await call(tA, "PATCH", `/api/entities/TaxInstallment/${inst.a22}`, { observacoes: "sem versão, sem mexer no pagamento" });
+    check(recognizedNoVersion.status === 200, "edição sem versão que não mexe no pagamento continua aceita");
+    // Gravação em andamento (a baixa travou a parcela): a edição que leu antes não sobrescreve.
+    const holder = await pool.connect();
+    await holder.query("BEGIN");
+    await holder.query(`UPDATE tax_installments SET situacao = 'paga_aguardando_reconhecimento', data_pagamento = $2, valor_pago = 500, pagamento_origem = 'protheus', updated_date = now() WHERE id = $1`, [inst.a22, today]);
+    const racing = call(tA, "PATCH", `/api/entities/TaxInstallment/${inst.a22}`, { observacoes: "edição concorrente" });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await holder.query("COMMIT");
+    holder.release();
+    const raced = await racing;
+    const p22 = await parcelOf(inst.a22);
+    check(raced.status === 409 && raced.json?.code === "TAX_INSTALLMENT_CHANGED" && p22.situacao === "paga_aguardando_reconhecimento", `edição concorrente não sobrescreve: ${raced.status} ${p22.situacao}`);
+    // Semáforo do acordo: parcela paga aguardando reconhecimento (o semáforo da tela lê situacao das parcelas pendentes).
+    const pendingInstallments = (await call(tA, "POST", "/api/entities/TaxInstallment/filter", { query: { agreement_id: agreementA, situacao: { $in: ["em_aberto", "paga_aguardando_reconhecimento"] } } })).json;
+    check(pendingInstallments.some((p) => p.id === inst.a20 && p.situacao === "paga_aguardando_reconhecimento"), "parcela aparece como paga aguardando reconhecimento para o semáforo");
+    // Isolamento: a parcela do outro cliente não muda.
+    check((await parcelOf(inst.b1)).situacao === "em_aberto", "parcela do cliente B não muda");
+
+    // ---- Pago sem data de baixa: o agendador tenta por até 7 dias; a tela continua podendo consultar ----
+    await attach(inst.a23, makeLine(50000, "2301"));
+    const t23 = await titleOf(inst.a23);
+    Object.assign([...fake.state.se2.values()].find((r) => r.numero === t23.numero_e2), { situacao: "baixado", saldo: 0, semData: true });
+    await asA(() => consultTaxTitles());
+    const undated = await titleOf(inst.a23);
+    check(undated.situacao === "baixado" && undated.baixa_sem_data_desde && undated.motivo.includes("Registre o pagamento da parcela à mão ou confira a baixa no Protheus"), `baixa sem data: ${undated.situacao} ${undated.motivo}`);
+    check((await pool.query(`SELECT situacao FROM tax_installments WHERE id = $1`, [inst.a23])).rows[0].situacao === "em_aberto", "sem data, a parcela não muda");
+    const firstSeen = undated.baixa_sem_data_desde.getTime();
+    resetCalls();
+    await asA(() => consultTaxTitles());
+    check(fake.state.calls.some((c) => c.op === "consultar" && c.body.numero === t23.numero_e2), "dentro do prazo, o agendador volta ao título");
+    check((await titleOf(inst.a23)).baixa_sem_data_desde.getTime() === firstSeen, "a primeira vez sem data é a que conta");
+    await pool.query(`UPDATE tax_payable_titles SET baixa_sem_data_desde = now() - interval '8 days' WHERE id = $1`, [t23.id]);
+    resetCalls();
+    await asA(() => consultTaxTitles());
+    check(!fake.state.calls.some((c) => c.body?.numero === t23.numero_e2), "passado o prazo, o agendador não volta mais ao título");
+    resetCalls();
+    const onDemand = await call(tA, "POST", `/api/tax/payable-titles/${t23.id}/consult`);
+    check(onDemand.status === 200 && fake.state.calls.some((c) => c.op === "consultar" && c.body.numero === t23.numero_e2), "consultar um continua tentando");
+    resetCalls();
+    await call(tA, "POST", "/api/tax/payable-titles/consult");
+    check(fake.state.calls.some((c) => c.op === "consultar" && c.body.numero === t23.numero_e2), "consultar todos continua tentando");
+    // A data aparece: a parcela é atualizada e a marca sai.
+    delete [...fake.state.se2.values()].find((r) => r.numero === t23.numero_e2).semData;
+    await call(tA, "POST", `/api/tax/payable-titles/${t23.id}/consult`);
+    const dated = await titleOf(inst.a23);
+    check(dated.baixa_sem_data_desde === null && (await pool.query(`SELECT situacao FROM tax_installments WHERE id = $1`, [inst.a23])).rows[0].situacao === "paga_aguardando_reconhecimento", "com a data, move a parcela e limpa a marca");
 
     // ---- Agendador ----
     const job = await asA(() => syncTaxTitles());

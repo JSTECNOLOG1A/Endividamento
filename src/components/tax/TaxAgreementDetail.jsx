@@ -9,6 +9,7 @@ import { formatCivilDate } from "@/lib/taxDates";
 import { AGREEMENT_STATUS_LABELS, SPHERE_LABELS, formatMoney, isInstallmentOverdue } from "@/lib/taxLabels";
 import { GUIDE_URL_PARAM, amountToPay, isGuideException } from "@/lib/taxGuides";
 import { deletionBlockReasons } from "@/lib/taxTitles";
+import { erpPaymentNote, isInstallmentConflict, withInstallmentVersion } from "@/lib/taxInstallmentPayment";
 import { useAgreementInstallments, useAgreementTaxTitles, useInvalidateTax } from "@/hooks/useTaxData";
 import { TaxErrorState } from "./TaxPageShell";
 import { AmountToPay, GuideStatusBadge, InstallmentStatusBadge, ProvenanceNote, TaxSignalBadge } from "./TaxBadges";
@@ -70,12 +71,21 @@ export default function TaxAgreementDetail({ row, guidesByInstallment, actions, 
   };
 
   const recognizeMutation = useMutation({
-    mutationFn: (installment) => base44.entities.TaxInstallment.update(installment.id, { situacao: "reconhecida" }),
+    mutationFn: (installment) =>
+      base44.entities.TaxInstallment.update(installment.id, withInstallmentVersion({ situacao: "reconhecida" }, installment)),
     onSuccess: async () => {
       toast.success("Reconhecimento confirmado. A parcela agora consta como Paga.");
       await invalidateTax();
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => {
+      if (!isInstallmentConflict(err)) {
+        toast.error(err.message);
+        return;
+      }
+      toast.error(err.message, {
+        action: { label: "Recarregar parcelas", onClick: () => invalidateTax() },
+      });
+    },
   });
 
   const deleteInstallmentMutation = useMutation({
@@ -297,6 +307,11 @@ export default function TaxAgreementDetail({ row, guidesByInstallment, actions, 
                             <span className="block">{formatCivilDate(item.data_pagamento)}</span>
                             {item.valor_pago !== null && item.valor_pago !== undefined ? (
                               <span className="block text-[11px] text-slate-500">{formatMoney(item.valor_pago)}</span>
+                            ) : null}
+                            {erpPaymentNote(item) ? (
+                              <span className="block whitespace-normal text-[11px] font-medium text-emerald-700" title={`${erpPaymentNote(item)}.`}>
+                                pela baixa no Protheus
+                              </span>
                             ) : null}
                           </>
                         ) : (

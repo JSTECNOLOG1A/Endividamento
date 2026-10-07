@@ -94,6 +94,16 @@ export function taxTitleNotes(title) {
   return { motivo, erpMensagem: erp && erp !== motivo ? erp : null };
 }
 
+/**
+ * Quando a baixa do título no Protheus já atualizou a parcela: "A parcela passou a “Paga, aguardando reconhecimento”
+ * pela baixa no Protheus em 02/04/2026." `formatDate` recebe o instante gravado pelo servidor.
+ */
+export function taxTitleInstallmentNote(title, formatDate) {
+  if (!title?.parcela_atualizada) return null;
+  const when = title.parcela_atualizada_em && formatDate ? formatDate(title.parcela_atualizada_em) : "";
+  return `A parcela passou a “Paga, aguardando reconhecimento” pela baixa no Protheus${when && when !== "—" ? ` em ${when}` : ""}.`;
+}
+
 /** Busca livre: empresa, parcelamento, órgão, parcela, chave do título, histórico, situação. */
 export function matchesTaxTitleSearch(title, term) {
   const text = String(term || "").trim().toLowerCase();

@@ -31,6 +31,7 @@ import TaxGuideAttachForm from "./TaxGuideAttachForm";
 import TaxGuideEmailPanel from "./TaxGuideEmailPanel";
 import TaxConfirmDialog from "./TaxConfirmDialog";
 import { TaxTitlePanel } from "./TaxTitleStatus";
+import { erpPaymentNote } from "@/lib/taxInstallmentPayment";
 
 function Info({ label, className, children }) {
   return (
@@ -371,6 +372,9 @@ function GuideDialogBody({ installment: listedInstallment, agreement, entityName
               </span>
               <InstallmentStatusBadge installment={installment} today={today} />
             </div>
+            {erpPaymentNote(installment) ? (
+              <p className="text-xs font-medium text-emerald-700">{erpPaymentNote(installment)}.</p>
+            ) : null}
             <p className="text-xs">A guia não muda a situação de pagamento da parcela.</p>
           </div>
         </DialogDescription>
