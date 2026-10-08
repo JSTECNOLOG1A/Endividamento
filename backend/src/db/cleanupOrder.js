@@ -8,6 +8,7 @@ export const DELETE_ORDER = [
   "contract_settlements",
   "accounting_closings",
   // Gestão Tributária: dos dependentes para o parcelamento (o parcelamento aponta para a empresa).
+  "tax_alert_sends",
   "tax_guide_sends",
   "tax_payable_titles",
   "tax_installment_guides",
@@ -22,6 +23,7 @@ export const DELETE_ORDER = [
   "chart_of_accounts",
   "integrations",
   "company_entities",
+  "user_preferences",
   "tenant_users",
   "tenants",
   "audit_events",

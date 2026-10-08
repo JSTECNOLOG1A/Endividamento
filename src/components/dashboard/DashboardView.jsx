@@ -9,6 +9,7 @@ import { AlertTriangle, ExternalLink, X, ChevronRight } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import PreImplantationBanner from "@/components/accounting/PreImplantationBanner";
+import DashboardMaturities from "@/components/dashboard/DashboardMaturities";
 import { combineGuaranteeLabel, OPERATION_TYPES } from "@/lib/contractOptions";
 
 const fmtBRL = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -289,13 +290,23 @@ export default function DashboardView() {
       ) : isLoading ? (
         <div className="py-16 text-center text-sm text-slate-400">Calculando a posição…</div>
       ) : summary?.blocked ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
-          <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-amber-600" />
-          <p className="text-sm font-medium text-amber-900">
-            {entityId === "all" ? "Nenhuma empresa liberada para o Dashboard ainda." : "Esta empresa está aguardando a implantação de saldos."}
-          </p>
-          <p className="mt-1 text-xs text-amber-800">O Dashboard só mostra números depois que a implantação de saldos é aplicada.</p>
-        </div>
+        <>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
+            <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-amber-600" />
+            <p className="text-sm font-medium text-amber-900">
+              {entityId === "all" ? "Nenhuma empresa liberada para o Dashboard ainda." : "Esta empresa está aguardando a implantação de saldos."}
+            </p>
+            <p className="mt-1 text-xs text-amber-800">
+              {!summary.vencimentosTributarios
+                ? "O Dashboard só mostra números depois que a implantação de saldos é aplicada."
+                : summary.vencimentosTributarios.ok
+                  ? "A dívida bancária só aparece depois da implantação de saldos. Os tributos abaixo não dependem dela."
+                  : "A dívida bancária só aparece depois da implantação de saldos."}
+            </p>
+          </div>
+          {/* Tributos não dependem da implantação de saldos: aparecem mesmo assim, para quem tem a Gestão Tributária. */}
+          <DashboardMaturities vencimentos={null} taxDue={summary.vencimentosTributarios} formatMoney={fmtBRL} />
+        </>
       ) : summary?.indicators ? (
         <>
           {summary.skippedContracts?.length ? (
@@ -316,17 +327,11 @@ export default function DashboardView() {
             />
           </div>
 
-          <div className="mt-3 rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vencimentos, a partir da data-base</p>
-            <div className="mt-2 grid grid-cols-3 divide-x divide-slate-100">
-              {[["30 dias", summary.indicators.vencimentos.d30], ["90 dias", summary.indicators.vencimentos.d90], ["180 dias", summary.indicators.vencimentos.d180]].map(([label, value]) => (
-                <div key={label} className="px-3 text-center first:pl-0">
-                  <p className="text-[11px] text-slate-500">{label}</p>
-                  <p className="mt-0.5 text-lg font-bold tabular-nums text-slate-900">{fmtBRL(value)}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          <DashboardMaturities
+            vencimentos={summary.indicators.vencimentos}
+            taxDue={summary.vencimentosTributarios}
+            formatMoney={fmtBRL}
+          />
 
           <div className="mt-3">
             <CetDrilldownPanel

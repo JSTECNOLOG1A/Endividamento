@@ -33,6 +33,7 @@ import { onboardingRouter } from "./modules/onboarding/routes.js";
 import { parametersRouter } from "./modules/parameters/routes.js";
 import { legalRouter, meFirstAccessRouter } from "./modules/firstAccess/routes.js";
 import { taxRouter } from "./modules/tax/routes.js";
+import { preferencesRouter } from "./modules/preferences/routes.js";
 import { openApiDocument } from "./openapi.js";
 import * as store from "./modules/entities/store.js";
 
@@ -137,6 +138,7 @@ export function createApp() {
   app.use("/api/commercial-proposals", commercialProposalsRouter);
   app.use("/api/implementations", implementationsRouter);
   app.use("/api/onboarding", onboardingRouter);
+  app.use("/api/me/preferences", preferencesRouter);
   app.use("/api/me", meFirstAccessRouter);
   app.use("/api/legal", legalRouter);
   app.use("/api/entities", entitiesRouter);

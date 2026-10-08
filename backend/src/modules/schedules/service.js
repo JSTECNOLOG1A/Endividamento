@@ -2,7 +2,7 @@ import { z } from "zod";
 import { generateCode } from "../integrations/crypto.js";
 import { writeAudit } from "../../middleware/audit.js";
 import { snapshotForAudit } from "../audit/records.js";
-import { TASKS, TASK_KEYS, taskCatalog, taskMeta } from "./tasks.js";
+import { TASKS, TASK_KEYS, auditResourceTypeFor, scheduleProblem, taskCatalog, taskMeta } from "./tasks.js";
 import * as store from "./store.js";
 import { initialRunAt, nextRunAt, formatHoraExecucao } from "./nextRun.js";
 import { loadTenantByGroupId, runWithTenant } from "../tenants/access.js";
@@ -17,6 +17,15 @@ function httpError(status, message, details) {
 // Tarefas aceitas = as cadastradas em tasks.js (fonte única: o catálogo da tela e a validação não divergem).
 const TAREFA_ENUM = TASK_KEYS;
 const MODO_ENUM = ["intervalo", "mensal"];
+
+function assertScheduleFits(tarefa, schedule) {
+  const problem = scheduleProblem(tarefa, schedule);
+  if (problem) {
+    const err = httpError(400, problem, { intervaloMinutos: problem });
+    err.code = "VALIDATION";
+    throw err;
+  }
+}
 
 function normalizeSchedule(data = {}) {
   const modo = data.modo || (data.diaMes ? "mensal" : "intervalo");
@@ -183,6 +192,7 @@ export async function create(data, createdBy) {
   const existing = await store.findByTarefa(data.tarefa);
   if (existing) throw httpError(409, "Já existe um agendamento para esta tarefa");
   const schedule = normalizeSchedule(data);
+  assertScheduleFits(data.tarefa, schedule);
   const row = await store.create({
     id: generateCode("AGD"),
     nome: data.nome,
@@ -206,6 +216,7 @@ export async function updateById(id, data) {
     ativo: data.ativo ?? current.ativo,
   };
   const schedule = normalizeSchedule(merged);
+  assertScheduleFits(data.tarefa ?? current.tarefa, schedule);
   const ativo = data.ativo ?? current.ativo;
   const patch = {
     nome: data.nome,
@@ -262,7 +273,7 @@ export async function executeTask(tarefa, origem = "manual") {
     finishedAt,
   });
   const snapshot = await snapshotForAudit({
-    resourceType: meta.rotina === "Contas a receber" ? "ReceivableTitle" : "PayableTitle",
+    resourceType: auditResourceTypeFor(meta),
     result,
     fallbackLabel: meta.label || tarefa,
   });

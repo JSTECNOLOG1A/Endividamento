@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { taxGuidesApi } from "@/api/taxGuides";
+import { taxPlanningApi } from "@/api/taxPlanning";
 import { taxTitlesApi } from "@/api/taxTitles";
 import { DEFAULT_QUERY_RETRIES } from "@/lib/query-client";
 import { todayInBrazil } from "@/lib/taxDates";
@@ -21,6 +22,8 @@ export const TAX_QUERY_KEYS = {
   titles: ["tax-titles"],
   payableTitles: ["tax-titles", "contas-a-pagar"],
   agreementTitles: (agreementId) => ["tax-titles", "acordo", agreementId],
+  planning: ["tax-planning"],
+  planningFor: (params) => ["tax-planning", params],
 };
 
 // O CRUD genérico devolve no máximo 20.000 linhas por chamada e não pagina. Resposta que bate no teto é tratada
@@ -51,6 +54,19 @@ async function readAll(promise) {
   return rows || [];
 }
 
+// Parcelamentos e empresas: a mesma leitura (e o mesmo cache) na carteira e nos filtros do Planejamento.
+const agreementsQueryOptions = {
+  queryKey: TAX_QUERY_KEYS.agreements,
+  retry: retryUnlessIncomplete,
+  queryFn: () => readAll(base44.entities.TaxAgreement.list("-created_date", READ_LIMIT)),
+};
+
+const entitiesQueryOptions = {
+  queryKey: TAX_QUERY_KEYS.entities,
+  retry: retryUnlessIncomplete,
+  queryFn: () => readAll(base44.entities.CompanyEntity.list("", READ_LIMIT)),
+};
+
 /**
  * Parcelamentos de tributos com as parcelas pendentes, empresa, semáforo e guias já resolvidos.
  * `row.installments` traz só as parcelas em aberto ou aguardando reconhecimento — a lista completa de um acordo
@@ -58,11 +74,7 @@ async function readAll(promise) {
  * (`guidesByInstallment`); sem elas o valor para pagamento não é conhecido, então a falha é erro da tela inteira.
  */
 export function useTaxPortfolio() {
-  const agreementsQuery = useQuery({
-    queryKey: TAX_QUERY_KEYS.agreements,
-    retry: retryUnlessIncomplete,
-    queryFn: () => readAll(base44.entities.TaxAgreement.list("-created_date", READ_LIMIT)),
-  });
+  const agreementsQuery = useQuery(agreementsQueryOptions);
   const installmentsQuery = useQuery({
     queryKey: TAX_QUERY_KEYS.openInstallments,
     retry: retryUnlessIncomplete,
@@ -71,11 +83,7 @@ export function useTaxPortfolio() {
         base44.entities.TaxInstallment.filter({ situacao: { $in: PENDING_INSTALLMENT_STATUSES } }, "vencimento", READ_LIMIT)
       ),
   });
-  const entitiesQuery = useQuery({
-    queryKey: TAX_QUERY_KEYS.entities,
-    retry: retryUnlessIncomplete,
-    queryFn: () => readAll(base44.entities.CompanyEntity.list("", READ_LIMIT)),
-  });
+  const entitiesQuery = useQuery(entitiesQueryOptions);
   const guidesQuery = useQuery({
     queryKey: TAX_QUERY_KEYS.currentGuides,
     queryFn: async () => (await taxGuidesApi.listCurrent()) || [],
@@ -143,6 +151,7 @@ export function useInvalidateTax() {
       queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.guides }),
       // ...e o título de tributo da parcela acompanha (em segundo plano no servidor).
       queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.titles }),
+      queryClient.invalidateQueries({ queryKey: TAX_QUERY_KEYS.planning }),
     ]);
 }
 
@@ -168,9 +177,9 @@ export function useGuideSends(installmentId) {
 
 // Guia e título mudam a parcela no servidor (o título segue a guia; a baixa no Protheus registra o pagamento da
 // parcela). Uma invalidação por prefixo cobre todas as leituras de cada grupo — parcelas pendentes (semáforo e Visão
-// geral) e parcelas de cada parcelamento — e só as que estão na tela são buscadas de novo; as demais ficam marcadas
+// geral), parcelas de cada parcelamento e o Planejamento — e só as que estão na tela são buscadas de novo; as demais ficam marcadas
 // como velhas para a próxima vez que abrirem.
-const GUIDE_AND_TITLE_KEYS = [TAX_QUERY_KEYS.guides, TAX_QUERY_KEYS.titles, TAX_QUERY_KEYS.installments];
+const GUIDE_AND_TITLE_KEYS = [TAX_QUERY_KEYS.guides, TAX_QUERY_KEYS.titles, TAX_QUERY_KEYS.installments, TAX_QUERY_KEYS.planning];
 
 function invalidateGuidesAndTitles(queryClient) {
   return Promise.all(GUIDE_AND_TITLE_KEYS.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
@@ -219,4 +228,36 @@ export function useAgreementTaxTitles(agreementId) {
   });
   const byInstallment = useMemo(() => new Map((query.data || []).map((title) => [title.installment_id, title])), [query.data]);
   return { byInstallment, isLoading: query.isLoading, error: query.error || null, refetch: query.refetch };
+}
+
+/** Erro de pedido (4xx) não muda ao repetir; falha de rede ou do servidor ganha uma nova tentativa. */
+function retryUnlessClientError(failureCount, error) {
+  const status = Number(error?.status);
+  return !(status >= 400 && status < 500) && failureCount < DEFAULT_QUERY_RETRIES;
+}
+
+/**
+ * Planejamento (calendário e fluxo de caixa) para os filtros dados — uma chamada só, com tudo somado no servidor.
+ * `params`: o que vai na consulta (lib/taxPlanning.planningQueryParams).
+ */
+export function useTaxPlanning(params) {
+  const query = useQuery({
+    queryKey: TAX_QUERY_KEYS.planningFor(params),
+    queryFn: () => taxPlanningApi.get(params),
+    retry: retryUnlessClientError,
+  });
+  return { data: query.data || null, isLoading: query.isLoading, error: query.error || null, refetch: query.refetch };
+}
+
+/** Parcelamentos e empresas para montar as opções dos filtros do Planejamento (mesmo cache da carteira). */
+export function useTaxFilterSources() {
+  const agreementsQuery = useQuery(agreementsQueryOptions);
+  const entitiesQuery = useQuery(entitiesQueryOptions);
+  return {
+    agreements: agreementsQuery.data || [],
+    entities: entitiesQuery.data || [],
+    isLoading: agreementsQuery.isLoading || entitiesQuery.isLoading,
+    error: agreementsQuery.error || entitiesQuery.error || null,
+    refetch: () => Promise.all([agreementsQuery.refetch(), entitiesQuery.refetch()]),
+  };
 }

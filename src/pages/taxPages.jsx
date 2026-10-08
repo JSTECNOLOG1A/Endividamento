@@ -1,7 +1,8 @@
 import React from "react";
-import TaxPageShell, { TaxEmptyState } from "@/components/tax/TaxPageShell";
+import TaxPageShell from "@/components/tax/TaxPageShell";
 import TaxOverviewPanel from "@/components/tax/TaxOverviewPanel";
 import TaxAgreementsWorkspace from "@/components/tax/TaxAgreementsWorkspace";
+import TaxPlanningPanel from "@/components/tax/TaxPlanningPanel";
 
 export function TaxOverview() {
   return (
@@ -32,11 +33,11 @@ export function TaxState() {
 
 export function TaxPlanning() {
   return (
-    <TaxPageShell title="Planejamento" description="Calendário de vencimentos e fluxo de caixa dos parcelamentos tributários.">
-      <TaxEmptyState title="Planejamento ainda não disponível">
-        Esta tela ainda está em construção e não mostra as parcelas cadastradas. Por enquanto, acompanhe as próximas parcelas na Visão
-        geral e o detalhe de cada acordo em Parcelamentos Federais e Parcelamentos Estaduais.
-      </TaxEmptyState>
+    <TaxPageShell
+      title="Planejamento"
+      description="Calendário e fluxo de caixa dos vencimentos dos parcelamentos, por mês, empresa, esfera e tributo."
+    >
+      <TaxPlanningPanel />
     </TaxPageShell>
   );
 }

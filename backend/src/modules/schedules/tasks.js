@@ -6,6 +6,7 @@ import { autoIntegrateReceivableTitles } from "../receivables/autoIntegrate.js";
 import { syncPtaxToCurrencies, syncRatesToCdiRates } from "../functions/bacen.js";
 import { runAutomaticClosingForGroup } from "../accounting/automaticClosing.js";
 import { consultTaxTitles, syncTaxTitles } from "../tax/taxTitles.js";
+import { ALERT_FROM_HOUR, ALERT_MAX_INTERVAL_MINUTES, DUE_SOON_DAYS, runTaxAlerts } from "../tax/alerts.js";
 
 export const TASKS = {
   integrar_titulos_pagar: {
@@ -157,6 +158,8 @@ export const TASKS = {
   },
   integrar_titulos_tributos: {
     key: "integrar_titulos_tributos",
+    // Registro da auditoria da execução: os títulos de tributo e os alertas não são títulos de empréstimo.
+    auditResourceType: "TaxPayableTitle",
     label: "Integrar títulos de tributo no ERP",
     rotina: "Gestão Tributária",
     descricao:
@@ -175,6 +178,8 @@ export const TASKS = {
   },
   consultar_titulos_tributos: {
     key: "consultar_titulos_tributos",
+    // Registro da auditoria da execução: os títulos de tributo e os alertas não são títulos de empréstimo.
+    auditResourceType: "TaxPayableTitle",
     label: "Consultar títulos de tributo no ERP",
     rotina: "Gestão Tributária",
     descricao: "Atualiza saldo e baixa dos títulos de tributo já integrados no Protheus. Não altera a parcela.",
@@ -188,6 +193,30 @@ export const TASKS = {
         message: `${s.consultados} título(s) consultado(s) · ${s.conferencia} precisando de conferência`,
         detalhes: s,
       };
+    },
+  },
+  alertas_tributarios: {
+    key: "alertas_tributarios",
+    // Registro da auditoria da execução: os títulos de tributo e os alertas não são títulos de empréstimo.
+    auditResourceType: "TaxAlertSend",
+    label: "Enviar alertas de vencimento dos tributos por e-mail",
+    rotina: "Gestão Tributária",
+    descricao:
+      `Uma vez por dia, a partir das ${ALERT_FROM_HOUR}h, envia a cada usuário com acesso à Gestão Tributária um resumo das parcelas vencidas, das que vencem nos próximos ${DUE_SOON_DAYS} dias e das que estão sem guia. Só envia se houver algo a avisar; quem desligou os alertas não recebe. Agende no modo intervalo, a cada ${ALERT_MAX_INTERVAL_MINUTES} minutos: rodar mais de uma vez no dia não repete o e-mail.`,
+    defaultNome: "Alertas de vencimento dos tributos",
+    defaultModo: "intervalo",
+    defaultIntervaloMinutos: 60,
+    // O resumo sai uma vez por dia a partir das 7h: só um agendamento que roda ao menos de hora em hora garante uma
+    // execução depois desse horário todo dia. Mensal, ou intervalo maior (um diário criado às 5h rodaria sempre às 5h),
+    // pode nunca enviar — é recusado.
+    scheduleRule(schedule) {
+      if (schedule.modo !== "intervalo" || Number(schedule.intervaloMinutos) > ALERT_MAX_INTERVAL_MINUTES) {
+        return `Os alertas de vencimento dos tributos precisam rodar no modo "intervalo", a cada ${ALERT_MAX_INTERVAL_MINUTES} minutos ou menos. O resumo é enviado uma vez por dia, a partir das ${ALERT_FROM_HOUR}h, e rodar de hora em hora garante que o envio aconteça sem repetir o e-mail.`;
+      }
+      return null;
+    },
+    async run() {
+      return runTaxAlerts();
     },
   },
 };
@@ -209,6 +238,20 @@ export function taskCatalog() {
       defaultHoraExecucao: task.defaultHoraExecucao || "00:10",
     };
   });
+}
+
+/**
+ * Tipo de registro do resumo de auditoria de uma execução. Tarefa com tipo próprio (Gestão Tributária) usa o dela; as
+ * demais seguem a regra de sempre: Contas a receber = título a receber, o resto = título a pagar.
+ */
+export function auditResourceTypeFor(meta) {
+  if (meta?.auditResourceType) return meta.auditResourceType;
+  return meta?.rotina === "Contas a receber" ? "ReceivableTitle" : "PayableTitle";
+}
+
+/** Mensagem de recusa quando o agendamento não serve para a tarefa (regra própria da tarefa), ou null. */
+export function scheduleProblem(tarefa, schedule) {
+  return TASKS[tarefa]?.scheduleRule?.(schedule) || null;
 }
 
 export function taskMeta(tarefa) {

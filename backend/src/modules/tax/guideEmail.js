@@ -1,4 +1,4 @@
-import { escapeHtml } from "../signup/mailer.js";
+import { escapeHtml } from "./html.js";
 import { formatGuideLine } from "./guideLine.js";
 import { amountToPay, civilDateLabel, formatCnpj, onlyDigits } from "./guideRules.js";
 

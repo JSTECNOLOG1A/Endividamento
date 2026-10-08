@@ -3,7 +3,9 @@ import { request as httpRequest } from "node:http";
 import { pool } from "../../db/pool.js";
 import { createApp } from "../../app.js";
 import { issueAuthResponse } from "../auth/token.js";
-import { TASK_KEYS } from "./tasks.js";
+import { TASKS, TASK_KEYS, auditResourceTypeFor } from "./tasks.js";
+import { executeTask } from "./service.js";
+import { runWithTenant } from "../tenants/access.js";
 
 // Agendamentos pela API: toda tarefa do catálogo (tasks.js) pode ser agendada e executada na hora — inclusive as da
 // Gestão Tributária — e tarefa fora do catálogo é recusada.
@@ -78,16 +80,72 @@ async function main() {
       check(keys.includes(key), `catálogo traz ${key}`);
     }
 
+    // Alertas dos tributos: agendamento que pode nunca rodar depois das 7h é recusado (mensal, ou intervalo acima de 60 min).
+    for (const [body, label] of [[{ modo: "mensal", diaMes: 1, horaExecucao: "05:00" }, "mensal"], [{ modo: "intervalo", intervaloMinutos: 1440 }, "diário"], [{ modo: "intervalo", intervaloMinutos: 61 }, "61 min"]]) {
+      const refused = await call("POST", "/api/schedules", { nome: "Alertas", tarefa: "alertas_tributarios", ativo: false, ...body });
+      check(refused.status === 400 && refused.json?.code === "VALIDATION" && /a cada 60 minutos ou menos/.test(refused.json?.error || ""),
+        `alertas com agendamento ${label} recusado: ${refused.status} ${JSON.stringify(refused.json)}`);
+    }
+    const importRefused = await call("POST", "/api/schedules/import", { schedules: [{ nome: "Alertas", tarefa: "alertas_tributarios", modo: "intervalo", intervaloMinutos: 1440, ativo: false }] });
+    check(importRefused.status === 400, `importação de alertas diários recusada: ${importRefused.status}`);
+
     // Toda tarefa do catálogo pode ser agendada (inativa: o agendador do servidor não a executa durante o teste).
     for (const tarefa of TASK_KEYS) {
       const created = await call("POST", "/api/schedules", { nome: `Teste ${tarefa}`, tarefa, modo: "intervalo", intervaloMinutos: 60, ativo: false });
       check(created.status === 201 && created.json?.tarefa === tarefa, `agendar ${tarefa}: ${created.status} ${JSON.stringify(created.json?.details || created.json?.error)}`);
     }
 
+    const list = await call("GET", "/api/schedules");
+    const alertJob = (list.json || []).find((job) => job.tarefa === "alertas_tributarios");
+    const widened = await call("PUT", `/api/schedules/${alertJob?.id}`, { modo: "intervalo", intervaloMinutos: 1440 });
+    check(widened.status === 400 && widened.json?.code === "VALIDATION", `alterar alertas para diário recusado: ${widened.status}`);
+    const toMonthly = await call("PUT", `/api/schedules/${alertJob?.id}`, { modo: "mensal", diaMes: 5 });
+    check(toMonthly.status === 400, `alterar alertas para mensal recusado: ${toMonthly.status}`);
+    const narrowed = await call("PUT", `/api/schedules/${alertJob?.id}`, { intervaloMinutos: 30 });
+    check(narrowed.status === 200 && narrowed.json?.intervaloMinutos === 30, `alertas a cada 30 min aceito: ${narrowed.status}`);
+    const otherDaily = (list.json || []).find((job) => job.tarefa === "atualizar_ptax_bacen");
+    const otherWidened = await call("PUT", `/api/schedules/${otherDaily?.id}`, { modo: "intervalo", intervaloMinutos: 1440 });
+    check(otherWidened.status === 200, `outras tarefas continuam aceitando diário: ${otherWidened.status}`);
+
     // Executar agora: as duas tarefas da Gestão Tributária e duas antigas.
     for (const tarefa of ["integrar_titulos_tributos", "consultar_titulos_tributos", "integrar_titulos_pagar", "integrar_titulos_receber"]) {
       const run = await call("POST", "/api/schedules/run-task", { tarefa });
       check(run.status === 200 && run.json?.tarefa === tarefa && typeof run.json?.message === "string", `executar agora ${tarefa}: ${run.status} ${JSON.stringify(run.json)?.slice(0, 200)}`);
+    }
+
+    // Auditoria da execução: as tarefas da Gestão Tributária têm tipo de registro próprio; as demais, exatamente a regra
+    // de antes (Contas a receber = título a receber, o resto = título a pagar).
+    const TAX_AUDIT = { integrar_titulos_tributos: "TaxPayableTitle", consultar_titulos_tributos: "TaxPayableTitle", alertas_tributarios: "TaxAlertSend" };
+    for (const key of TASK_KEYS) {
+      const meta = TASKS[key];
+      const before = meta.rotina === "Contas a receber" ? "ReceivableTitle" : "PayableTitle";
+      const expected = TAX_AUDIT[key] || before;
+      check(auditResourceTypeFor(meta) === expected, `tipo de registro da auditoria de ${key}: ${auditResourceTypeFor(meta)} (esperado ${expected})`);
+      if (meta.rotina === "Gestão Tributária") check(key in TAX_AUDIT, `tarefa da Gestão Tributária sem tipo próprio: ${key}`);
+    }
+    // Execução automática gravada na auditoria com a rotina da tarefa (nova e antiga).
+    for (const [tarefa, rotina] of [["alertas_tributarios", "Gestão Tributária"], ["consultar_titulos_tributos", "Gestão Tributária"], ["integrar_titulos_pagar", "Contas a pagar"]]) {
+      const startedAt = new Date();
+      const run = await runWithTenant({ groupId, tenantId, email: "sistema", fullName: "Sistema" }, () => executeTask(tarefa, "automatico"));
+      const audited = await pool.query(
+        `SELECT resource_type, rotina, registro, actor_email FROM audit_events
+          WHERE group_id = $1 AND action = 'RUN' AND occurred_at >= $2 AND rotina = $3 ORDER BY occurred_at DESC LIMIT 1`,
+        [groupId, startedAt, rotina]
+      );
+      const row = audited.rows[0];
+      check(row?.resource_type === "ScheduledJob" && row.rotina === rotina && row.actor_email === "sistema" && row.registro === run.resumo,
+        `auditoria da execução automática de ${tarefa}: ${JSON.stringify(row)} / ${run.resumo}`);
+    }
+
+    // O tipo chega ao resumo da auditoria: com título de tributo no resultado, o resumo não vai buscar o id na tabela
+    // dos títulos de empréstimo (que o rotularia como título a pagar).
+    const realRun = TASKS.consultar_titulos_tributos.run;
+    TASKS.consultar_titulos_tributos.run = async () => ({ ok: true, message: "teste", titulos: [{ id: "tax-title-id-teste" }] });
+    try {
+      const run = await runWithTenant({ groupId, tenantId, email: "sistema", fullName: "Sistema" }, () => executeTask("consultar_titulos_tributos", "automatico"));
+      check(run.resumo === TASKS.consultar_titulos_tributos.label && !run.resumo.includes("tax-title-id-teste"), `resumo da tarefa tributária não lê títulos de empréstimo: ${run.resumo}`);
+    } finally {
+      TASKS.consultar_titulos_tributos.run = realRun;
     }
 
     const unknown = await call("POST", "/api/schedules/run-task", { tarefa: "tarefa_inexistente" });

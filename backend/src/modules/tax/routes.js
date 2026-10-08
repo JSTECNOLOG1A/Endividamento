@@ -3,6 +3,7 @@ import multer from "multer";
 import { writeAudit } from "../../middleware/audit.js";
 import { requireCanWrite, requireModule, requireOwner } from "../../middleware/rbac.js";
 import * as guides from "./guides.js";
+import * as planning from "./planning.js";
 import * as taxTitles from "./taxTitles.js";
 
 // Rotas próprias da Gestão Tributária (o cadastro de parcelamentos e parcelas segue no CRUD genérico).
@@ -60,6 +61,15 @@ function auditGuide(req, action, { ctx, guideId, before = null, after = null, pa
     payload: { installment_id: ctx.id, ...(payload || {}) },
   });
 }
+
+// Planejamento: calendário e fluxo de caixa dos vencimentos (só leitura).
+taxRouter.get("/planning", async (req, res, next) => {
+  try {
+    res.json(await planning.getTaxPlanning(req.query));
+  } catch (error) {
+    next(error);
+  }
+});
 
 taxRouter.get("/guides", async (req, res, next) => {
   try {

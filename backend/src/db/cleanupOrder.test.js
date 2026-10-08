@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { pool } from "./pool.js";
 import { DELETE_ORDER } from "./cleanupOrder.js";
 
-// A limpeza do ambiente local apaga um grupo com dados da Gestão Tributária (parcelamento, parcela, guia, envio e
-// título de tributo). Tudo numa transação desfeita no fim: nada fica apagado nem criado.
+// A limpeza do ambiente local apaga um grupo com dados da Gestão Tributária (parcelamento, parcela, guia, envio,
+// título de tributo e alerta diário) e preferências de usuário. Tudo numa transação desfeita no fim: nada fica apagado
+// nem criado.
 
 process.exitCode = 1;
 const failures = [];
@@ -11,7 +12,7 @@ function check(condition, message) {
   if (!condition) failures.push(message);
 }
 
-const TAX_TABLES = ["tax_guide_sends", "tax_payable_titles", "tax_installment_guides", "tax_installments", "tax_agreements"];
+const TAX_TABLES = ["tax_alert_sends", "tax_guide_sends", "tax_payable_titles", "tax_installment_guides", "tax_installments", "tax_agreements"];
 
 async function seed(client, groupId) {
   const entityId = `ent_clean_${randomUUID()}`;
@@ -49,6 +50,14 @@ async function seed(client, groupId) {
     `INSERT INTO tax_payable_titles (id, group_id, installment_id, numero_e2, situacao, guide_id)
      VALUES ($1,$2,$3,lpad(nextval('tax_payable_title_number_seq')::text, 9, '0'),'estornado',$4)`,
     [randomUUID(), groupId, installmentId, guideId]
+  );
+  await client.query(
+    `INSERT INTO tax_alert_sends (id, group_id, user_email, data_referencia, situacao) VALUES ($1,$2,'x@teste.local','2026-03-30','enviado')`,
+    [randomUUID(), groupId]
+  );
+  await client.query(
+    `INSERT INTO user_preferences (id, group_id, user_email, chave, ligado) VALUES ($1,$2,'x@teste.local','alertas_tributarios',false)`,
+    [randomUUID(), groupId]
   );
 }
 
@@ -88,6 +97,12 @@ async function main() {
   // Sem as tabelas da Gestão Tributária, a mesma limpeza falha (era o defeito).
   const withoutTax = await attempt(DELETE_ORDER.filter((table) => !TAX_TABLES.includes(table)));
   check(!withoutTax.ok && withoutTax.error?.code === "23503", `sem elas a limpeza falharia: ${withoutTax.error?.code}`);
+  // Cada tabela nova, sozinha, é necessária: sem ela o grupo não sai.
+  for (const table of ["tax_alert_sends", "user_preferences"]) {
+    check(DELETE_ORDER.includes(table), `${table} na ordem de limpeza`);
+    const without = await attempt(DELETE_ORDER.filter((item) => item !== table));
+    check(!without.ok && without.error?.code === "23503", `sem ${table} a limpeza falharia: ${without.error?.code}`);
+  }
   if (failures.length) {
     console.error(`limpeza local: ${failures.length} falha(s)`);
     for (const message of failures) console.error(` - ${message}`);
