@@ -59,6 +59,10 @@ async function seed(client, groupId) {
     `INSERT INTO user_preferences (id, group_id, user_email, chave, ligado) VALUES ($1,$2,'x@teste.local','alertas_tributarios',false)`,
     [randomUUID(), groupId]
   );
+  await client.query(
+    `INSERT INTO erp_allowed_hosts (id, group_id, host, created_by) VALUES ($1,$2,'erp.teste.local','teste')`,
+    [randomUUID(), groupId]
+  );
 }
 
 async function cleanup(client, groupId, order) {
@@ -98,7 +102,7 @@ async function main() {
   const withoutTax = await attempt(DELETE_ORDER.filter((table) => !TAX_TABLES.includes(table)));
   check(!withoutTax.ok && withoutTax.error?.code === "23503", `sem elas a limpeza falharia: ${withoutTax.error?.code}`);
   // Cada tabela nova, sozinha, é necessária: sem ela o grupo não sai.
-  for (const table of ["tax_alert_sends", "user_preferences"]) {
+  for (const table of ["tax_alert_sends", "user_preferences", "erp_allowed_hosts"]) {
     check(DELETE_ORDER.includes(table), `${table} na ordem de limpeza`);
     const without = await attempt(DELETE_ORDER.filter((item) => item !== table));
     check(!without.ok && without.error?.code === "23503", `sem ${table} a limpeza falharia: ${without.error?.code}`);

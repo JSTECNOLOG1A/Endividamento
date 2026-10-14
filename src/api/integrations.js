@@ -32,11 +32,28 @@ export const integrationsApi = {
     });
     return result?.data ?? result;
   },
-  exportAll() {
-    return apiRequest("/integrations/export");
+  exportAll(passphrase) {
+    return apiRequest("/integrations/export", {
+      method: "POST",
+      body: { passphrase },
+    });
   },
-  importBundle(data) {
-    return apiRequest("/integrations/import", { method: "POST", body: data });
+  importBundle(bundle, passphrase) {
+    // O backend lê a senha em `req.body.passphrase`. Se o arquivo for uma lista
+    // crua, embrulhamos em { connections } para que a senha viaje junto no corpo.
+    const body = Array.isArray(bundle)
+      ? { connections: bundle, passphrase }
+      : { ...bundle, passphrase };
+    return apiRequest("/integrations/import", { method: "POST", body });
+  },
+  listAllowedHosts() {
+    return apiRequest("/integrations/allowed-hosts");
+  },
+  createAllowedHost(data) {
+    return apiRequest("/integrations/allowed-hosts", { method: "POST", body: data });
+  },
+  removeAllowedHost(id) {
+    return apiRequest(`/integrations/allowed-hosts/${id}`, { method: "DELETE" });
   },
 };
 

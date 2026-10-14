@@ -13,6 +13,15 @@ const testLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Export/import derivam chaves scrypt (caras) por credencial — limite mais
+// apertado para fechar o vetor de DoS por CPU.
+const bundleLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 function actor(req) {
   return req.user?.email || "system";
 }
@@ -50,9 +59,12 @@ integrationsRouter.post("/test-connection", testLimiter, requireOwner(), async (
   }
 });
 
-integrationsRouter.get("/export", requireOwner(), async (req, res, next) => {
+// Export protegido por senha: as credenciais saem re-cifradas com a passphrase
+// do corpo. Por isso é POST (a senha não pode viajar na URL de um GET).
+integrationsRouter.post("/export", bundleLimiter, requireOwner(), async (req, res, next) => {
   try {
-    const bundle = await service.exportAll();
+    const body = parseOrThrow(service.exportSchema, req.body);
+    const bundle = await service.exportAll(body.passphrase);
     await writeAudit({
       req,
       action: "EXPORT",
@@ -65,9 +77,9 @@ integrationsRouter.get("/export", requireOwner(), async (req, res, next) => {
   }
 });
 
-integrationsRouter.post("/import", requireOwner(), async (req, res, next) => {
+integrationsRouter.post("/import", bundleLimiter, requireOwner(), async (req, res, next) => {
   try {
-    const result = await service.importMany(req.body, actor(req));
+    const result = await service.importMany(req.body, actor(req), req.body?.passphrase);
     await writeAudit({
       req,
       action: "IMPORT",
@@ -75,6 +87,50 @@ integrationsRouter.post("/import", requireOwner(), async (req, res, next) => {
       payload: { imported: result.imported, failed: result.failed },
     });
     res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Endereços permitidos por cliente (anti-SSRF). Mesma guarda de escrita das
+// demais rotas do módulo (requireOwner).
+integrationsRouter.get("/allowed-hosts", requireOwner(), async (req, res, next) => {
+  try {
+    res.json({ data: await service.listAllowedHosts() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+integrationsRouter.post("/allowed-hosts", requireOwner(), async (req, res, next) => {
+  try {
+    const body = parseOrThrow(service.allowedHostSchema, req.body);
+    const created = await service.addAllowedHost(body, actor(req));
+    await writeAudit({
+      req,
+      action: "CREATE",
+      resourceType: "IntegrationAllowedHost",
+      resourceId: created.id,
+      after: created,
+      payload: { host: created.host },
+    });
+    res.status(201).json({ data: created });
+  } catch (error) {
+    next(error);
+  }
+});
+
+integrationsRouter.delete("/allowed-hosts/:id", requireOwner(), async (req, res, next) => {
+  try {
+    const removed = await service.removeAllowedHost(req.params.id);
+    await writeAudit({
+      req,
+      action: "DELETE",
+      resourceType: "IntegrationAllowedHost",
+      resourceId: removed.id,
+      payload: { host: removed.host },
+    });
+    res.json({ data: removed });
   } catch (error) {
     next(error);
   }

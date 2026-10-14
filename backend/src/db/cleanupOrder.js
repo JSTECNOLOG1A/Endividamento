@@ -21,6 +21,7 @@ export const DELETE_ORDER = [
   "natures",
   "bank_accounts",
   "chart_of_accounts",
+  "erp_allowed_hosts",
   "integrations",
   "company_entities",
   "user_preferences",

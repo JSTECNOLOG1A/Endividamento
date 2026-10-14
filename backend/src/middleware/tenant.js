@@ -21,7 +21,19 @@ function requestedTenantId(req) {
 function requestedSupportSessionId(req) {
   const header = req.headers["x-support-session-id"];
   const fromHeader = Array.isArray(header) ? header[0] : header;
-  return String(fromHeader || "").trim() || null;
+  const headerId = String(fromHeader || "").trim();
+  if (headerId) return headerId;
+  // Download de anexo é via <a href>/<iframe src>, que não mandam header próprio.
+  // Só nesse caminho (/uploads) aceitamos o id da sessão de suporte pela query
+  // string; nunca em /api. A validação é idêntica (getActiveSupportSession); muda
+  // apenas a FONTE do id. (Débito conhecido: na query, o id aparece em log, como o
+  // ?token= já usado para anexos — tratado junto desse débito, não aqui.)
+  if (req.baseUrl === "/uploads") {
+    const fromQuery = req.query?.support_session_id;
+    const queryId = Array.isArray(fromQuery) ? fromQuery[0] : fromQuery;
+    return String(queryId || "").trim() || null;
+  }
+  return null;
 }
 
 const BLOCKED_LIFECYCLE = new Set(["SUSPENDED", "DISABLED", "CANCELLED"]);

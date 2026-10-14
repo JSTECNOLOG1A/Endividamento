@@ -1,8 +1,9 @@
 import { z } from "zod";
 import * as store from "./store.js";
-import { encryptSecret, decryptSecret, generateCode } from "./crypto.js";
+import { encryptSecret, decryptSecret, encryptWithPassphraseAsync, decryptWithPassphraseAsync, generateCode } from "./crypto.js";
 import { probeErpConnection } from "./erpConnection.js";
 import { applyProtheusContext, isProtheusErp } from "./protheus.js";
+import { isValidHostEntry } from "./ssrfGuard.js";
 
 export const CADASTRO_KEYS = [
   "naturezas",
@@ -215,6 +216,16 @@ export async function getByCode(code) {
 
 const EXPORT_FORMAT = "alldebt.integrations";
 const EXPORT_VERSION = 1;
+// Marca que as credenciais do pacote estão cifradas com a passphrase do export.
+const CREDENTIAL_ENCRYPTION = "passphrase-scrypt-aes-256-gcm";
+// Teto de itens: cada credencial deriva uma chave scrypt (cara). Limita o custo
+// de CPU por requisição e fecha o vetor de DoS no export/import.
+const MAX_EXPORT_ITEMS = 200;
+const MAX_IMPORT_ITEMS = 200;
+
+export const exportSchema = z.object({
+  passphrase: z.string().min(8, "A senha do arquivo deve ter ao menos 8 caracteres").max(256),
+});
 
 function normalizeImportBundle(body) {
   if (Array.isArray(body)) return body;
@@ -247,18 +258,30 @@ function toExportItem(full, credential) {
   };
 }
 
-export async function exportAll() {
-  const listed = await store.list({ page: 1, limit: 100 });
+export async function exportAll(passphrase) {
+  if (!passphrase) {
+    throw httpError(400, "Informe a senha do arquivo para exportar as credenciais", {
+      passphrase: "Informe a senha do arquivo para exportar as credenciais",
+    });
+  }
+  const listed = await store.list({ page: 1, limit: MAX_EXPORT_ITEMS + 1 });
+  const items = listed.data || [];
+  if (items.length > MAX_EXPORT_ITEMS) {
+    throw httpError(400, `Muitas conexões para exportar de uma vez (limite de ${MAX_EXPORT_ITEMS}). Reduza antes de exportar.`);
+  }
   const connections = [];
-  for (const item of listed.data || []) {
+  for (const item of items) {
     const full = await getByCode(item.code);
+    // A credencial é decifrada da chave-mestra e RE-CIFRADA com a passphrase —
+    // nunca sai em texto puro no pacote de export. Falha de decifragem é erro
+    // explícito: nunca exportamos uma conexão sem a credencial em silêncio.
     let credential;
     const credRow = await store.findCredential(full.id);
     if (credRow?.credential_encrypted) {
       try {
-        credential = decryptSecret(credRow.credential_encrypted);
+        credential = await encryptWithPassphraseAsync(decryptSecret(credRow.credential_encrypted), passphrase);
       } catch {
-        credential = undefined;
+        throw httpError(500, `Não foi possível decifrar a credencial da conexão "${full.nome}". Verifique a chave de criptografia do servidor.`);
       }
     }
     connections.push(toExportItem(full, credential));
@@ -266,16 +289,28 @@ export async function exportAll() {
   return {
     format: EXPORT_FORMAT,
     version: EXPORT_VERSION,
+    credentialEncryption: CREDENTIAL_ENCRYPTION,
     exportedAt: new Date().toISOString(),
     count: connections.length,
     connections,
   };
 }
 
-export async function importMany(body, createdBy) {
+export async function importMany(body, createdBy, passphrase) {
   const rawItems = normalizeImportBundle(body);
   if (!rawItems?.length) {
     throw httpError(400, "Arquivo inválido: esperado { connections: [...] }");
+  }
+  if (rawItems.length > MAX_IMPORT_ITEMS) {
+    throw httpError(400, `Arquivo com conexões demais (limite de ${MAX_IMPORT_ITEMS}). Divida em lotes menores.`);
+  }
+
+  // Pacotes novos trazem as credenciais cifradas com a passphrase do export.
+  const encrypted = body?.credentialEncryption === CREDENTIAL_ENCRYPTION;
+  if (encrypted && !passphrase) {
+    throw httpError(400, "Informe a senha do arquivo para importar as credenciais", {
+      passphrase: "Informe a senha do arquivo para importar as credenciais",
+    });
   }
 
   const created = [];
@@ -301,6 +336,15 @@ export async function importMany(body, createdBy) {
         }
       }
 
+      let credentialPlain = raw.credential;
+      if (encrypted && raw.credential) {
+        try {
+          credentialPlain = await decryptWithPassphraseAsync(raw.credential, passphrase);
+        } catch {
+          throw new Error("Senha do arquivo incorreta ou credencial corrompida");
+        }
+      }
+
       const parsed = createSchema.parse({
         nome: raw.nome,
         descricao: raw.descricao,
@@ -309,7 +353,7 @@ export async function importMany(body, createdBy) {
         authType: raw.authType || "none",
         authHeader: raw.authHeader,
         username: raw.username,
-        credential: raw.credential,
+        credential: credentialPlain,
         timeoutSeconds: raw.timeoutSeconds ?? 30,
         grupoEmpresas: raw.grupoEmpresas,
         empresa: raw.empresa,
@@ -345,6 +389,21 @@ export async function importMany(body, createdBy) {
   };
 }
 
+function safeOrigin(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+function originChanged(oldUrl, newUrl) {
+  const a = safeOrigin(oldUrl);
+  const b = safeOrigin(newUrl);
+  // Se não der para comparar as duas origens, trata como mudança (conservador).
+  return a === null || b === null || a !== b;
+}
+
 export async function create(data, createdBy) {
   await assertUniqueCadastroKeys(data.endpoints);
   return store.create({
@@ -378,7 +437,14 @@ export async function updateByCode(code, data) {
   if (data.grupoEmpresas !== undefined) patch.grupoEmpresas = data.grupoEmpresas ?? "";
   if (data.empresa !== undefined) patch.empresa = data.empresa ?? "";
   if (data.filial !== undefined) patch.filial = data.filial ?? "";
-  if (data.credential) patch.credentialEncrypted = encryptSecret(data.credential);
+  if (data.credential) {
+    patch.credentialEncrypted = encryptSecret(data.credential);
+  } else if (data.baseUrl !== undefined && originChanged(existing.base_url, data.baseUrl)) {
+    // Mudou o destino (esquema/host/porta) sem recredenciar: a credencial salva
+    // foi confiada ao host antigo e NÃO pode seguir para o novo. Limpa — o OWNER
+    // informa a credencial do novo host na próxima edição/teste.
+    patch.credentialEncrypted = null;
+  }
   if (data.endpoints) await assertUniqueCadastroKeys(data.endpoints, existing.id);
   return store.update(existing.id, patch, data.endpoints ? mapEndpoints(data.endpoints) : undefined);
 }
@@ -393,7 +459,38 @@ export async function updateStatusByCode(code, status) {
   return store.update(existing.id, { status });
 }
 
-export async function testConnection(data) {
+export const allowedHostSchema = z.object({
+  host: z.preprocess(
+    (val) => (typeof val === "string" ? val.trim() : val),
+    z.string().min(1, "Informe o endereço").max(253)
+  ).refine(isValidHostEntry, {
+    message: "Informe um hostname válido (ex.: erp.cliente.com.br) ou uma faixa CIDR (ex.: 10.0.0.0/24)",
+  }),
+  descricao: optionalText(255),
+});
+
+export async function listAllowedHosts() {
+  return store.listAllowedHosts();
+}
+
+export async function addAllowedHost(data, createdBy) {
+  return store.createAllowedHost({
+    host: data.host.toLowerCase(),
+    descricao: data.descricao ?? null,
+    createdBy,
+  });
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function removeAllowedHost(id) {
+  if (!UUID_RE.test(String(id || ""))) {
+    throw httpError(404, "Endereço permitido não encontrado");
+  }
+  return store.removeAllowedHost(id);
+}
+
+export async function testConnection(data, { probe = probeErpConnection } = {}) {
   let baseUrl = data.baseUrl;
   let authType = data.authType ?? "none";
   let authHeader = data.authHeader ?? null;
@@ -408,7 +505,11 @@ export async function testConnection(data) {
   if (data.code) {
     const saved = await resolveByCode(data.code);
     const credRow = await store.findCredential(saved.id);
-    baseUrl = baseUrl || saved.base_url;
+    // Segurança: numa conexão salva, o host é SEMPRE o salvo — qualquer baseUrl
+    // vindo do corpo é ignorado. Senão, enviar `code` + um baseUrl próprio faria
+    // a credencial salva ser decifrada e mandada ao host do atacante. Só o
+    // `path` do corpo é aproveitado (mais abaixo).
+    baseUrl = saved.base_url;
     authType = data.authType ?? saved.auth_type;
     authHeader = data.authHeader ?? saved.auth_header;
     username = data.username ?? saved.username;
@@ -431,7 +532,7 @@ export async function testConnection(data) {
   }
 
   const ctx = { erpNome, grupoEmpresas, empresa, filial };
-  return probeErpConnection({
+  return probe({
     baseUrl,
     path: data.path
       ? applyProtheusContext(data.path, ctx)

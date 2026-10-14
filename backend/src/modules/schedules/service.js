@@ -5,7 +5,7 @@ import { snapshotForAudit } from "../audit/records.js";
 import { TASKS, TASK_KEYS, auditResourceTypeFor, scheduleProblem, taskCatalog, taskMeta } from "./tasks.js";
 import * as store from "./store.js";
 import { initialRunAt, nextRunAt, formatHoraExecucao } from "./nextRun.js";
-import { loadTenantByGroupId, runWithTenant } from "../tenants/access.js";
+import { groupIdOrThrow, loadTenantByGroupId, runWithTenant } from "../tenants/access.js";
 
 function httpError(status, message, details) {
   const err = new Error(message);
@@ -246,6 +246,12 @@ function nextAfterRun(job) {
 export async function executeTask(tarefa, origem = "manual") {
   const meta = taskMeta(tarefa);
   if (!meta) throw httpError(400, "Tarefa desconhecida");
+  // Escopo ANTES de rodar: executar uma tarefa é efeito (consulta/escrita no ERP,
+  // envio de e-mail, atualização de catálogo). Sem isso, o master sem sessão de
+  // suporte dispararia a tarefa via POST /run-task antes do groupIdOrThrow interno
+  // de cada tarefa — e as de catálogo compartilhado (BACEN) nem têm esse guard.
+  // No caminho automático (runDueJobs) o groupId já vem setado via runWithTenant.
+  groupIdOrThrow();
   const startedAt = new Date();
   let result;
   try {
@@ -340,6 +346,6 @@ export async function refreshUpcomingRuns() {
   for (const job of jobs) {
     if (!job.ativo || job.modo !== "mensal") continue;
     const nextAt = nextRunAt(job, new Date());
-    await store.update(job.id, { proximaExecucaoEm: nextAt });
+    await store.setNextRun(job.id, nextAt);
   }
 }

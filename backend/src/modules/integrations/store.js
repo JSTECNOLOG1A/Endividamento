@@ -344,4 +344,52 @@ function mapDbError(error) {
   return error;
 }
 
+function toPublicAllowedHost(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    host: row.host,
+    descricao: row.descricao,
+    createdAt: row.created_date,
+    createdBy: row.created_by,
+  };
+}
+
+export async function listAllowedHosts() {
+  const result = await pool.query(
+    `SELECT id, host, descricao, created_date, created_by
+     FROM erp_allowed_hosts
+     WHERE group_id = $1
+     ORDER BY lower(host) ASC`,
+    [groupIdOrThrow()]
+  );
+  return result.rows.map(toPublicAllowedHost);
+}
+
+export async function createAllowedHost({ host, descricao, createdBy }) {
+  try {
+    const result = await pool.query(
+      `INSERT INTO erp_allowed_hosts (group_id, host, descricao, created_by)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, host, descricao, created_date, created_by`,
+      [groupIdOrThrow(), host, descricao ?? null, createdBy ?? null]
+    );
+    return toPublicAllowedHost(result.rows[0]);
+  } catch (error) {
+    if (error?.code === "23505") {
+      throw httpError(400, "Este endereço já está na lista de permitidos");
+    }
+    throw error;
+  }
+}
+
+export async function removeAllowedHost(id) {
+  const result = await pool.query(
+    `DELETE FROM erp_allowed_hosts WHERE id = $1 AND group_id = $2 RETURNING id, host`,
+    [id, groupIdOrThrow()]
+  );
+  if (!result.rows[0]) throw httpError(404, "Endereço permitido não encontrado");
+  return result.rows[0];
+}
+
 export { toPublic, httpError };

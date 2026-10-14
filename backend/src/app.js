@@ -25,6 +25,7 @@ import { usersRouter } from "./modules/users/routes.js";
 import { signupRouter } from "./modules/signup/routes.js";
 import { accountRouter } from "./modules/account/routes.js";
 import { platformRouter } from "./modules/platform/routes.js";
+import { writeAccessLog } from "./modules/platform/service.js";
 import { billingRouter } from "./modules/billing/routes.js";
 import { pricingConfigRouter } from "./modules/pricingConfig/routes.js";
 import { commercialProposalsRouter } from "./modules/commercialProposals/routes.js";
@@ -85,7 +86,7 @@ export function createApp() {
       req.headers.authorization = `Bearer ${String(req.query.token)}`;
     }
     next();
-  }, requireAuth, attachTenant, (req, res, next) => {
+  }, requireAuth, attachTenant, async (req, res, next) => {
     const filename = String(req.path || "").replace(/^\/+/, "");
     // Bloqueia "/" (sem subpastas no nome vindo da URL — quem decide a subpasta
     // por tenant é o servidor, não o cliente) e ".." só como segmento de path
@@ -97,34 +98,44 @@ export function createApp() {
       res.status(404).json({ error: "Arquivo não encontrado", code: "NOT_FOUND" });
       return;
     }
+    // Anexo mora SEMPRE em uploads/<group_id>/. Quem decide o grupo é o servidor
+    // (tenant do usuário, ou — para o master — o grupo da sessão de suporte ativa,
+    // que o attachTenant só preenche quando há sessão), nunca o cliente. Master
+    // sem sessão fica com group_id nulo e cai no 404, sem varrer pastas de outros
+    // clientes. Não há fallback para a raiz de uploads: arquivo sem grupo não é
+    // servível (evita leitura cruzada de anexos legados sem dono).
     const tenantDir = req.user.group_id
       ? path.join(config.uploadDir, req.user.group_id)
       : null;
     if (tenantDir) {
       const tenantFile = path.join(tenantDir, filename);
       if (fs.existsSync(tenantFile)) {
+        // Leitura de anexo de cliente pelo master (só com sessão de suporte) deixa
+        // rastro OBRIGATÓRIO (LGPD): fail-closed — se o registro de acesso não
+        // gravar, responde 500 e NÃO serve o arquivo (nunca servir sem rastro).
+        if (req.user.platform_admin && req.supportSession) {
+          try {
+            await writeAccessLog({
+              req,
+              action: "TENANT_FILE_READ",
+              tenant: req.tenant,
+              purpose: "suporte_operacional",
+              supportSessionId: req.supportSession.id,
+              metadata: { filename },
+            });
+          } catch {
+            res.status(500).json({
+              error: "Não foi possível registrar o acesso ao anexo",
+              code: "ACCESS_LOG_FAILED",
+            });
+            return;
+          }
+        }
         res.sendFile(path.resolve(tenantFile));
         return;
       }
     }
-    if (req.user.platform_admin) {
-      const root = config.uploadDir;
-      const entries = fs.existsSync(root) ? fs.readdirSync(root, { withFileTypes: true }) : [];
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const candidate = path.join(root, entry.name, filename);
-        if (fs.existsSync(candidate)) {
-          res.sendFile(path.resolve(candidate));
-          return;
-        }
-      }
-    }
-    const legacyFile = path.join(config.uploadDir, filename);
-    if (fs.existsSync(legacyFile) && (req.user.platform_admin || req.tenant?.group_id)) {
-      res.sendFile(path.resolve(legacyFile));
-      return;
-    }
-    next();
+    res.status(404).json({ error: "Arquivo não encontrado", code: "NOT_FOUND" });
   });
 
   app.use("/api", healthRouter);

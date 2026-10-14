@@ -1,4 +1,117 @@
+import http from "node:http";
+import https from "node:https";
 import { protheusContextHeaders } from "./protheus.js";
+import {
+  assertUrlShape,
+  assertLiteralIpAllowed,
+  createPinnedLookup,
+  loadAllowedHostsForTenant,
+} from "./ssrfGuard.js";
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 5;
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
+
+// Requisição crua via node:http(s) com um `lookup` pinado: o socket conecta
+// EXATAMENTE no IP que a guarda aprovou (sem segunda resolução de DNS), fechando
+// a janela de DNS rebinding. Retorna um objeto mínimo compatível com Response.
+function rawRequest(rawUrl, { method, headers, body, signal, lookup, maxBytes = MAX_BODY_BYTES }) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(rawUrl);
+    const transport = url.protocol === "https:" ? https : http;
+    const outHeaders = { ...headers };
+    if (body != null && outHeaders["Content-Length"] == null && outHeaders["content-length"] == null) {
+      outHeaders["Content-Length"] = Buffer.byteLength(body);
+    }
+    const request = transport.request(
+      url,
+      { method, headers: outHeaders, signal, lookup, agent: false },
+      (response) => {
+        const chunks = [];
+        let size = 0;
+        let truncated = false;
+        response.on("data", (chunk) => {
+          if (truncated) return;
+          size += chunk.length;
+          if (size > maxBytes) {
+            truncated = true;
+            chunks.push(chunk.subarray(0, Math.max(0, chunk.length - (size - maxBytes))));
+            response.destroy();
+            return;
+          }
+          chunks.push(chunk);
+        });
+        let settled = false;
+        const finish = () => {
+          if (settled) return; // 'end' e 'close' podem disparar ambos
+          settled = true;
+          const text = Buffer.concat(chunks).toString("utf8").slice(0, maxBytes);
+          resolve({
+            status: response.statusCode,
+            headers: { get: (name) => response.headers[String(name).toLowerCase()] ?? null },
+            text: async () => text,
+          });
+        };
+        response.on("end", finish);
+        response.on("close", finish);
+        response.on("error", reject);
+      }
+    );
+    request.on("error", reject);
+    if (body != null) request.write(body);
+    request.end();
+  });
+}
+
+function originOf(rawUrl) {
+  return new URL(rawUrl).origin;
+}
+
+// Faz a requisição ao ERP validando o destino (anti-SSRF) a cada salto e
+// seguindo redirecionamentos MANUALMENTE: cada destino é revalidado pela mesma
+// regra (incluindo o IP de conexão, via pinned lookup) e, se o ORIGEM mudar
+// (esquema, host ou porta), as credenciais (Authorization e cabeçalho de API
+// key) são removidas para não vazarem a outro destino.
+export async function safeFetch(rawUrl, options, deps = {}) {
+  const { method, headers, body, signal, credentialHeaderNames = [], maxBytes } = options;
+  const requestImpl = deps.requestImpl || rawRequest;
+  const loadAllowedHosts = deps.loadAllowedHosts || loadAllowedHostsForTenant;
+  const resolveHost = deps.resolveHost; // repassado ao lookup (para testes)
+
+  const allowedHosts = await loadAllowedHosts();
+  const sensitive = new Set(["authorization", ...credentialHeaderNames.map((name) => String(name).toLowerCase())]);
+  const originalOrigin = originOf(rawUrl);
+  let currentUrl = rawUrl;
+  let currentHeaders = { ...headers };
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const parsed = assertUrlShape(currentUrl);
+    assertLiteralIpAllowed(parsed, allowedHosts);
+    const lookup = createPinnedLookup(allowedHosts, resolveHost ? { resolveHost } : {});
+
+    const response = await requestImpl(currentUrl, { method, headers: currentHeaders, body, signal, lookup, maxBytes });
+
+    const location = response.headers.get("location");
+    if (!REDIRECT_STATUSES.has(response.status) || !location) {
+      return response;
+    }
+
+    const next = new URL(location, currentUrl);
+    if (next.origin !== originalOrigin) {
+      currentHeaders = Object.fromEntries(
+        Object.entries(currentHeaders).filter(([key]) => !sensitive.has(key.toLowerCase()))
+      );
+    }
+    currentUrl = next.toString();
+  }
+
+  throw new Error("O ERP redirecionou vezes demais");
+}
+
+function sensitiveHeaderNames({ authType, authHeader }) {
+  if (authType === "api_key") return [(authHeader || "X-API-Key").trim() || "X-API-Key"];
+  return [];
+}
 
 function assertSafeUrl(raw) {
   let parsed;
@@ -140,6 +253,9 @@ function messageForStatus(statusCode, data, method, { isBaseProbe } = {}) {
 
 function messageForNetworkError(error) {
   const code = error?.cause?.code || error?.code;
+  if (code === "ERP_HOST_BLOCKED" || code === "ERP_HOST_NOT_ALLOWED") {
+    return error.message;
+  }
   if (code === "ABORT_ERR" || error?.name === "TimeoutError" || error?.name === "AbortError") {
     return "Tempo esgotado ao conectar no ERP";
   }
@@ -191,12 +307,13 @@ export async function probeErpConnection(params) {
   const timer = setTimeout(() => controller.abort(), Math.max(params.timeoutSeconds, 5) * 1000);
 
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       method,
       headers,
       body: isWrite ? "{}" : undefined,
-      redirect: "follow",
       signal: controller.signal,
+      credentialHeaderNames: sensitiveHeaderNames(params),
+      maxBytes: 512 * 1024,
     });
     const text = await readLimitedBody(response);
     const status = messageForStatus(response.status, parseBody(text), method, { isBaseProbe });
@@ -231,12 +348,12 @@ export async function fetchErpJson(params) {
   const timer = setTimeout(() => controller.abort(), Math.max(params.timeoutSeconds || 30, 5) * 1000);
 
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       method,
       headers,
       body: params.body != null ? JSON.stringify(params.body) : undefined,
-      redirect: "follow",
       signal: controller.signal,
+      credentialHeaderNames: sensitiveHeaderNames(params),
     });
     const text = await response.text();
     return {

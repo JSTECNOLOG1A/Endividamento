@@ -3,6 +3,7 @@ import { Download, Eye, Pencil, Plus, Power, Trash2, Upload } from "lucide-react
 import { toast } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -47,6 +48,16 @@ import {
   prepareIntegrationPayload,
 } from "@/api/integrations";
 import { parametersApi } from "@/api/parameters";
+import { sameOrigin } from "@/lib/erpBaseUrl";
+
+// Normaliza mensagens de erro do import para linguagem leiga, sem jargão técnico.
+function friendlyImportError(message) {
+  if (!message) return "Falha ao importar conexões";
+  if (/Senha do arquivo incorreta/i.test(message)) {
+    return "A senha do arquivo está incorreta. Informe a senha usada na exportação.";
+  }
+  return message;
+}
 
 export default function IntegrationsPanel({ canManage = false, viewingAll = false }) {
   const [items, setItems] = useState([]);
@@ -62,6 +73,8 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
   const [details, setDetails] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [externalErpEnabled, setExternalErpEnabled] = useState(true);
+  const [exportDialog, setExportDialog] = useState(null);
+  const [importDialog, setImportDialog] = useState(null);
   const fileInputRef = useRef(null);
 
   const load = useCallback(async (page = pagination.page) => {
@@ -111,6 +124,8 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
         mode: "edit",
         code: full.code,
         hasCredential: full.hasCredential,
+        originalBaseUrl: full.baseUrl || "",
+        credentialWarning: false,
         form: formFromIntegration(full),
       });
     } catch (error) {
@@ -127,10 +142,24 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
     }
   };
 
-  const handleExport = async () => {
+  const openExportDialog = () => {
+    setExportDialog({ passphrase: "", confirm: "", error: "" });
+  };
+
+  const confirmExport = async () => {
+    if (!exportDialog) return;
+    const passphrase = exportDialog.passphrase;
+    if (passphrase.trim().length < 8) {
+      setExportDialog((prev) => ({ ...prev, error: "A senha deve ter ao menos 8 caracteres." }));
+      return;
+    }
+    if (passphrase !== exportDialog.confirm) {
+      setExportDialog((prev) => ({ ...prev, error: "As senhas não são iguais. Digite a mesma senha nos dois campos." }));
+      return;
+    }
     setExporting(true);
     try {
-      const bundle = await integrationsApi.exportAll();
+      const bundle = await integrationsApi.exportAll(passphrase);
       const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
@@ -141,13 +170,18 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+      // Não mantemos a senha na tela depois do download.
+      setExportDialog(null);
       toast.success(
         bundle.count
-          ? `${bundle.count} conexão(ões) exportada(s)`
-          : "Arquivo exportado (sem conexões)"
+          ? `${bundle.count} conexão(ões) exportada(s). Guarde a senha: você vai precisar dela para importar.`
+          : "Arquivo exportado (sem conexões)."
       );
     } catch (error) {
-      toast.error(error.message || "Falha ao exportar conexões");
+      const message =
+        error.data?.details?.passphrase || error.message || "Falha ao exportar conexões";
+      setExportDialog((prev) => (prev ? { ...prev, error: message } : prev));
+      toast.error(message);
     } finally {
       setExporting(false);
     }
@@ -157,27 +191,62 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    setImporting(true);
     try {
       const text = await file.text();
       let parsed;
       try {
         parsed = JSON.parse(text);
       } catch {
-        throw new Error("Arquivo JSON inválido");
+        throw new Error("O arquivo não é um JSON válido de conexões.");
       }
-      const result = await integrationsApi.importBundle(parsed);
+      // O arquivo é protegido por senha quando foi exportado com credenciais cifradas.
+      const protectedFile = Boolean(parsed?.credentialEncryption);
+      setImportDialog({
+        bundle: parsed,
+        fileName: file.name,
+        protectedFile,
+        passphrase: "",
+        error: "",
+      });
+    } catch (error) {
+      toast.error(error.message || "Falha ao ler o arquivo");
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!importDialog) return;
+    const { bundle, protectedFile, passphrase } = importDialog;
+    if (protectedFile && !passphrase.trim()) {
+      setImportDialog((prev) => ({
+        ...prev,
+        error: "Este arquivo está protegido por senha. Informe a senha usada na exportação.",
+      }));
+      return;
+    }
+    setImporting(true);
+    try {
+      const result = await integrationsApi.importBundle(
+        bundle,
+        passphrase.trim() ? passphrase : undefined
+      );
       await load(1);
+      setImportDialog(null);
       if (result.failed) {
+        const first = result.errors?.[0]?.message;
         toast.warning(
           `${result.imported} importada(s), ${result.failed} com erro` +
-            (result.errors?.[0]?.message ? `: ${result.errors[0].message}` : "")
+            (first ? `: ${friendlyImportError(first)}` : "")
         );
       } else {
         toast.success(`${result.imported} conexão(ões) importada(s)`);
       }
     } catch (error) {
-      toast.error(error.message || "Falha ao importar conexões");
+      // Só tratamos como "senha errada" quando o backend sinaliza isso de fato
+      // (mensagem "Senha do arquivo incorreta...") — não por qualquer texto com "senha".
+      const raw = error.data?.details?.passphrase || error.message || "";
+      const message = friendlyImportError(raw);
+      setImportDialog((prev) => (prev ? { ...prev, error: message } : prev));
+      toast.error(message);
     } finally {
       setImporting(false);
     }
@@ -185,19 +254,18 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
 
   const save = async () => {
     if (!editor) return;
+    const isCreate = editor.mode === "create";
     setSaving(true);
     setErrors({});
+
+    // Etapa 1 — gravação. Só aqui uma falha é "falha ao salvar".
     try {
       const payload = prepareIntegrationPayload(editor.form);
-      if (editor.mode === "create") {
+      if (isCreate) {
         await integrationsApi.create(payload);
-        toast.success("Conexão criada");
       } else {
         await integrationsApi.update(editor.code, payload);
-        toast.success("Conexão atualizada");
       }
-      setEditor(null);
-      await load(editor.mode === "create" ? 1 : pagination.page);
     } catch (error) {
       const detailsMap = error.data?.details;
       if (detailsMap && typeof detailsMap === "object") {
@@ -206,9 +274,53 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
       } else {
         toast.error(error.message || "Falha ao salvar a conexão");
       }
-    } finally {
       setSaving(false);
+      return;
     }
+
+    // Etapa 2 — pós-gravação. A conexão JÁ foi salva; falha ao recarregar/rebuscar
+    // não deve dizer "falha ao salvar".
+    // Por segurança, ao mudar o endereço do servidor para uma origem diferente, o
+    // backend apaga a senha de acesso salva. Se a conexão ainda precisa de senha e
+    // o usuário não digitou uma nova, reabrimos pedindo a credencial.
+    const needsCredential = editor.form.authType !== "none";
+    const credentialWiped =
+      !isCreate &&
+      needsCredential &&
+      editor.hasCredential &&
+      !editor.form.credential.trim() &&
+      !sameOrigin(editor.originalBaseUrl, editor.form.baseUrl);
+
+    if (credentialWiped) {
+      toast.warning(
+        "Como você mudou o endereço do servidor, por segurança a senha de acesso foi apagada. Informe a senha novamente para este novo endereço."
+      );
+      try {
+        const full = await integrationsApi.get(editor.code);
+        setEditor({
+          mode: "edit",
+          code: full.code,
+          hasCredential: full.hasCredential,
+          originalBaseUrl: full.baseUrl || "",
+          credentialWarning: true,
+          form: formFromIntegration(full),
+        });
+      } catch {
+        // Se não der para rebuscar, mantém a edição aberta com o aviso.
+        setEditor((prev) =>
+          prev
+            ? { ...prev, credentialWarning: true, hasCredential: false, originalBaseUrl: prev.form.baseUrl }
+            : prev
+        );
+      }
+    } else {
+      toast.success(isCreate ? "Conexão criada" : "Conexão atualizada");
+      setEditor(null);
+    }
+
+    setSaving(false);
+    // load() já trata o próprio erro (toast de carregamento) — não afeta o "salvo".
+    await load(isCreate ? 1 : pagination.page);
   };
 
   const runConfirm = async () => {
@@ -277,9 +389,9 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
                     ? "Selecione um cliente no topo"
                     : !externalErpEnabled
                       ? "Ative a integração com ERP em Parâmetros"
-                      : "Exportar conexões em JSON (inclui credenciais)"
+                      : "Exportar conexões em um arquivo protegido por senha"
                 }
-                onClick={handleExport}
+                onClick={openExportDialog}
               >
                 <Download className="w-4 h-4" />
                 {exporting ? "Exportando..." : "Exportar"}
@@ -443,6 +555,7 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
               loading={saving}
               isEditing={editor.mode === "edit"}
               hasCredential={editor.hasCredential}
+              credentialWarning={editor.credentialWarning}
               integrationCode={editor.code}
               onChange={(form) => setEditor((prev) => ({ ...prev, form }))}
               onSubmit={save}
@@ -511,6 +624,140 @@ export default function IntegrationsPanel({ canManage = false, viewingAll = fals
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={Boolean(exportDialog)}
+        onOpenChange={(open) => {
+          if (!open && !exporting) setExportDialog(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Exportar conexões</DialogTitle>
+            <DialogDescription>
+              Defina uma senha para proteger este arquivo. Você vai precisar dela para importar de
+              volta. Sem essa senha, não é possível abrir as credenciais do arquivo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-slate-700">Senha de proteção do arquivo</Label>
+              <Input
+                type="password"
+                autoFocus
+                autoComplete="new-password"
+                value={exportDialog?.passphrase || ""}
+                onChange={(e) =>
+                  setExportDialog((prev) => ({ ...prev, passphrase: e.target.value, error: "" }))
+                }
+                placeholder="Mínimo de 8 caracteres"
+                disabled={exporting}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-slate-700">Repita a senha</Label>
+              <Input
+                type="password"
+                autoComplete="new-password"
+                value={exportDialog?.confirm || ""}
+                onChange={(e) =>
+                  setExportDialog((prev) => ({ ...prev, confirm: e.target.value, error: "" }))
+                }
+                placeholder="Digite a senha de novo"
+                disabled={exporting}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    confirmExport();
+                  }
+                }}
+              />
+            </div>
+            {exportDialog?.error ? (
+              <p className="text-xs text-red-600">{exportDialog.error}</p>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Anote a senha em local seguro. Ela não fica salva no sistema — se esquecer, o arquivo
+                não poderá mais ser importado.
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setExportDialog(null)}
+              disabled={exporting}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={confirmExport} disabled={exporting}>
+              {exporting ? "Exportando..." : "Exportar arquivo"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(importDialog)}
+        onOpenChange={(open) => {
+          if (!open && !importing) setImportDialog(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Importar conexões</DialogTitle>
+            <DialogDescription>
+              {importDialog?.protectedFile
+                ? "Este arquivo está protegido por senha. Informe a senha definida na exportação para abrir as credenciais."
+                : "Confirme a importação das conexões deste arquivo."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-sm text-slate-600 break-all">
+              Arquivo: <span className="font-medium text-slate-900">{importDialog?.fileName}</span>
+            </p>
+            {importDialog?.protectedFile ? (
+              <>
+                <Label className="text-slate-700">Senha do arquivo</Label>
+                <Input
+                  type="password"
+                  autoFocus
+                  autoComplete="new-password"
+                  value={importDialog?.passphrase || ""}
+                  onChange={(e) =>
+                    setImportDialog((prev) => ({ ...prev, passphrase: e.target.value, error: "" }))
+                  }
+                  placeholder="Senha usada na exportação"
+                  disabled={importing}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      confirmImport();
+                    }
+                  }}
+                />
+              </>
+            ) : null}
+            {importDialog?.error ? (
+              <p className="text-xs text-red-600">{importDialog.error}</p>
+            ) : null}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setImportDialog(null)}
+              disabled={importing}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={confirmImport} disabled={importing}>
+              {importing ? "Importando..." : "Importar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

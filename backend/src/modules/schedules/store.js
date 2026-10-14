@@ -50,15 +50,10 @@ export async function listRaw() {
 }
 
 export async function findById(id) {
-  const groupId = getTenantScope()?.groupId;
-  if (groupId) {
-    const result = await pool.query(
-      `SELECT * FROM scheduled_jobs WHERE id = $1 AND group_id = $2`,
-      [id, groupId]
-    );
-    return result.rows[0] || null;
-  }
-  const result = await pool.query(`SELECT * FROM scheduled_jobs WHERE id = $1`, [id]);
+  const result = await pool.query(
+    `SELECT * FROM scheduled_jobs WHERE id = $1 AND group_id = $2`,
+    [id, groupIdOrThrow()]
+  );
   return result.rows[0] || null;
 }
 
@@ -115,20 +110,6 @@ export async function update(id, patch) {
     proximaExecucaoEm: patch.proximaExecucaoEm === undefined ? current.proxima_execucao_em : patch.proximaExecucaoEm,
   };
   try {
-    const groupId = getTenantScope()?.groupId;
-    const params = [
-      id,
-      next.nome,
-      next.tarefa,
-      next.intervaloMinutos,
-      next.modo,
-      next.diaMes,
-      next.horaExecucao,
-      next.ativo,
-      next.proximaExecucaoEm,
-    ];
-    const tenantSql = groupId ? "AND group_id = $10" : "";
-    if (groupId) params.push(groupId);
     const result = await pool.query(
       `UPDATE scheduled_jobs SET
          nome = $2,
@@ -140,9 +121,20 @@ export async function update(id, patch) {
          ativo = $8,
          proxima_execucao_em = $9,
          updated_date = now()
-       WHERE id = $1 ${tenantSql}
+       WHERE id = $1 AND group_id = $10
        RETURNING *`,
-      params
+      [
+        id,
+        next.nome,
+        next.tarefa,
+        next.intervaloMinutos,
+        next.modo,
+        next.diaMes,
+        next.horaExecucao,
+        next.ativo,
+        next.proximaExecucaoEm,
+        groupIdOrThrow(),
+      ]
     );
     return result.rows[0];
   } catch (error) {
@@ -205,6 +197,18 @@ export async function finishRun(id, { ok, message, nextAt }) {
   return result.rows[0];
 }
 
+// Caminho do agendador (runner), fora de qualquer sessão: reprograma o próximo
+// disparo de um job de QUALQUER cliente. Intencionalmente sem filtro de grupo —
+// como claimDueJobs, finishRun e releaseStuckJobs —, porque roda no boot do
+// worker sem contexto de tenant. NÃO usar em caminho de requisição: a escrita
+// por cliente passa por update(), que é tenant-scoped (groupIdOrThrow).
+export async function setNextRun(id, nextAt) {
+  await pool.query(
+    `UPDATE scheduled_jobs SET proxima_execucao_em = $2, updated_date = now() WHERE id = $1`,
+    [id, nextAt ?? null]
+  );
+}
+
 export async function insertRun(row) {
   await pool.query(
     `INSERT INTO scheduled_job_runs (job_id, tarefa, origem, ok, mensagem, detalhes, started_at, finished_at, group_id)
@@ -224,16 +228,10 @@ export async function insertRun(row) {
 }
 
 export async function listRuns(jobId, limit = 10) {
-  const groupId = getTenantScope()?.groupId;
-  const result = groupId
-    ? await pool.query(
-      `SELECT * FROM scheduled_job_runs WHERE job_id = $1 AND group_id = $2 ORDER BY started_at DESC LIMIT $3`,
-      [jobId, groupId, limit]
-    )
-    : await pool.query(
-      `SELECT * FROM scheduled_job_runs WHERE job_id = $1 ORDER BY started_at DESC LIMIT $2`,
-      [jobId, limit]
-    );
+  const result = await pool.query(
+    `SELECT * FROM scheduled_job_runs WHERE job_id = $1 AND group_id = $2 ORDER BY started_at DESC LIMIT $3`,
+    [jobId, groupIdOrThrow(), limit]
+  );
   return result.rows.map((row) => ({
     id: row.id,
     origem: row.origem,

@@ -1,5 +1,6 @@
 import { toast } from "@/lib/notify";
 import { getToken } from "@/api/base44Client";
+import { getSupportSessionId } from "@/api/platformScope";
 
 // Usado para montar o nome do arquivo baixado (ex.: "Bradesco_6111879.pdf") —
 // compartilhado entre qualquer tela que baixe um PDF anexado (contrato,
@@ -13,16 +14,27 @@ export function sanitizeFilename(name) {
 }
 
 // /uploads/* exige autenticação, mas <iframe src>, <a href> e download direto
-// não têm como mandar o header Authorization — o backend previu isso e aceita
-// o token como query string (?token=...) nessas rotas (ver app.js). Anexa o
-// token só em caminhos internos (/uploads/...); um link externo não precisa
-// (e não deve receber) o token.
+// não têm como mandar os headers Authorization / X-Support-Session-Id — o backend
+// previu isso e aceita o token como query string (?token=...) nessas rotas (ver
+// app.js). Anexa o token só em caminhos internos (/uploads/...); um link externo
+// não precisa (e não deve receber) o token.
+//
+// Quando há uma sessão de suporte ativa (equipe Clarity atendendo um cliente),
+// anexa também o id da sessão (support_session_id=...), pela MESMA fonte que o
+// client de API usa no header das chamadas de /api (getSupportSessionId). Sem
+// isso, o master receberia 404 ao abrir o anexo do cliente atendido. O id só
+// entra na query de /uploads — nunca em /api. (O id na URL tem o mesmo problema
+// de log do ?token=, um débito conhecido que não é resolvido aqui.)
 export function withAuthToken(url) {
   if (!url || !url.startsWith("/uploads/")) return url;
   const token = getToken();
   if (!token) return url;
-  const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}token=${encodeURIComponent(token)}`;
+  let next = `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+  const supportSessionId = getSupportSessionId();
+  if (supportSessionId) {
+    next += `&support_session_id=${encodeURIComponent(supportSessionId)}`;
+  }
+  return next;
 }
 
 // Baixa um PDF já hospedado (contract_pdf_url, proof_url etc.) forçando o

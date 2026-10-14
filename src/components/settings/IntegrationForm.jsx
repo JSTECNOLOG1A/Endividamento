@@ -56,6 +56,7 @@ export default function IntegrationForm({
   loading,
   isEditing,
   hasCredential,
+  credentialWarning = false,
   integrationCode,
   onChange,
   onSubmit,
@@ -157,6 +158,13 @@ export default function IntegrationForm({
         onSubmit();
       }}
     >
+      {credentialWarning ? (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          Como você mudou o endereço do servidor, por segurança a senha de acesso foi apagada.
+          Informe a senha novamente para este novo endereço.
+        </p>
+      ) : null}
+
       <section className="space-y-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
           <Plug className="w-4 h-4" />

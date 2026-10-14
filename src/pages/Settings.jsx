@@ -15,6 +15,7 @@ import {
   filterSettingsSections,
 } from "@/config/settingsNavigation";
 import IntegrationsPanel from "@/components/settings/IntegrationsPanel";
+import AllowedHostsPanel from "@/components/settings/AllowedHostsPanel";
 import SchedulesPanel from "@/components/settings/SchedulesPanel";
 import AuditLogPanel from "@/components/settings/AuditLogPanel";
 import UsersPanel from "@/components/settings/UsersPanel";
@@ -123,17 +124,33 @@ export function SettingsView({ section = "integracoes" }) {
 function SettingsPanel({ section, isTenantAdmin, isOwner, viewingAll, user, logout }) {
   if (section === "integracoes") {
     return (
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base text-slate-900">Conexões de API</CardTitle>
-          <CardDescription>
-            Mesmo modelo do Clarity: URL REST, autenticação, contexto Protheus e endpoints vinculados a cadastros.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <IntegrationsPanel canManage={isOwner} viewingAll={viewingAll} />
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base text-slate-900">Conexões de API</CardTitle>
+            <CardDescription>
+              Mesmo modelo do Clarity: URL REST, autenticação, contexto Protheus e endpoints vinculados a cadastros.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <IntegrationsPanel canManage={isOwner} viewingAll={viewingAll} />
+          </CardContent>
+        </Card>
+        {isOwner ? (
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base text-slate-900">Endereços de ERP liberados</CardTitle>
+              <CardDescription>
+                Libere servidores de ERP que ficam em rede interna ou VPN para que o sistema possa se
+                conectar a eles.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AllowedHostsPanel canManage={isOwner} viewingAll={viewingAll} />
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
     );
   }
   if (section === "agendamento") {
