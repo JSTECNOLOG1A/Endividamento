@@ -1,8 +1,10 @@
+import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
+import { config } from "../../config.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { writeAudit } from "../../middleware/audit.js";
 import { loadTenantForEmail, loadTenantForEmailAndId, loadAllTenantsForEmail, isTenantBlocked } from "../tenants/access.js";
@@ -11,6 +13,16 @@ import { writeAccessLog } from "../platform/service.js";
 import { markFirstLoginIfNeeded } from "../firstAccess/service.js";
 
 export const authRouter = Router();
+
+// Hash bcrypt válido, de custo igual ao real (config.bcryptRounds), gerado uma
+// vez no boot a partir de um segredo aleatório. Serve de alvo para o
+// bcrypt.compare quando o usuário não existe ou está inativo, de modo que esse
+// caminho gaste o mesmo tempo do caminho "senha errada" — senão o tempo de
+// resposta revela quais e-mails existem (enumeração por timing).
+// Exportado para o teste de segurança (security/p0.test.js) conferir o custo do
+// hash (bcrypt.getRounds === config.bcryptRounds); o valor é um hash de segredo
+// aleatório, nunca uma credencial real.
+export const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(32).toString("hex"), config.bcryptRounds);
 
 const loginLimiter = rateLimit({
   windowMs: 60_000,
@@ -68,7 +80,15 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
     );
     const user = result.rows[0];
     const active = user && user.status === "active" && user.blocked !== true;
-    const ok = active && await bcrypt.compare(body.password, user.password_hash);
+    // Sempre executa um bcrypt.compare — contra o hash real ou o dummy — para que
+    // "usuário inexistente/inativo" gaste o mesmo tempo de "senha errada". O `&&`
+    // anterior curto-circuitava e devolvia ~70x mais rápido nesse caminho,
+    // revelando por timing quais e-mails existem.
+    const passwordMatches = await bcrypt.compare(
+      body.password,
+      active ? user.password_hash : DUMMY_PASSWORD_HASH
+    );
+    const ok = active && passwordMatches;
     if (!ok) {
       const err = new Error("Credenciais inválidas");
       err.status = 401;

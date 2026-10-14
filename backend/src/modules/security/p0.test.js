@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { request as httpRequest } from "node:http";
+import bcrypt from "bcryptjs";
 import { pool } from "../../db/pool.js";
 import { config } from "../../config.js";
 import { runWithTenant } from "../tenants/access.js";
@@ -9,7 +10,9 @@ import { cleanupOrphanedReceivableTitles } from "../receivables/generate.js";
 import { clearCDIRatesByType, clearCurrencyRates } from "../functions/bacen.js";
 import { adminEmails } from "../notifications/contractNotifications.js";
 import { publicInvitePayload } from "../users/service.js";
+import { publicSignupPayload } from "../signup/service.js";
 import { createApp } from "../../app.js";
+import { DUMMY_PASSWORD_HASH } from "../auth/routes.js";
 import { issueAuthResponse } from "../auth/token.js";
 
 function fail(message) {
@@ -184,6 +187,11 @@ async function main() {
   const server = createApp().listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
 
+  // store.create sanitiza o contract_number (remove hífens), então o número
+  // gravado não é `P0-CREATE-<suffix>`: a limpeza tem que apagar pelo id real,
+  // não pelo número informado, senão o contrato órfão trava o DELETE da entidade.
+  let createdContractId = null;
+
   try {
     const listB = await as(scopeB, () => store.list("LoanContract", "", 100));
     if (!listB.some((row) => row.id === contractB)) fail("B deveria ver o próprio contrato");
@@ -258,6 +266,7 @@ async function main() {
       approved_date: "2020-01-01",
       exported_to_payables: true,
     }, emailAdminA));
+    createdContractId = created.id;
     if (created.status !== "rascunho") fail(`CREATE não pode nascer aprovado (status=${created.status})`);
     if (created.approved_by) fail("CREATE não pode gravar approved_by do cliente");
     if (created.exported_to_payables === true) fail("CREATE não pode marcar exported_to_payables");
@@ -317,6 +326,65 @@ async function main() {
       if (hidden.invite_url) fail("invite_url não deve aparecer quando o e-mail foi enviado");
     }
 
+    // C1 — o confirm_url do cadastro público carrega o token bruto que cria o
+    // tenant e torna o solicitante OWNER sem login. Gate idêntico ao do convite:
+    // nunca sai em produção (mesmo com e-mail NÃO enviado) e some quando o e-mail
+    // foi enviado. Exercita os QUATRO quadrantes (produção/dev × enviado/falhou)
+    // forçando config.env, para que a mutação "remover o gate de produção"
+    // reprove independente do ambiente em que o runner roda — senão, num runner
+    // de dev, a vazão em produção ficaria sem teste (o mesmo ponto cego do
+    // teste de convite acima).
+    const prodConfirmUrl = "https://app.example/concluir-cadastro?token=secret";
+    const devConfirmUrl = "https://localhost/concluir-cadastro?token=secret";
+    const envBackup = config.env;
+    try {
+      config.env = "production";
+      if (publicSignupPayload({ email: "s@p0.test" }, false, prodConfirmUrl).confirm_url) {
+        fail("production não pode devolver confirm_url nem quando o e-mail não é enviado");
+      }
+      if (publicSignupPayload({ email: "s@p0.test" }, true, prodConfirmUrl).confirm_url) {
+        fail("production não pode devolver confirm_url nem quando o e-mail foi enviado");
+      }
+      config.env = "development";
+      const devMiss = publicSignupPayload({ email: "s@p0.test" }, false, devConfirmUrl);
+      if (devMiss.confirm_url !== devConfirmUrl) fail("development deve devolver confirm_url quando o e-mail falha");
+      if (devMiss.email_sent !== false) fail("publicSignupPayload deve refletir email_sent=false");
+      const devSent = publicSignupPayload({ email: "s@p0.test" }, true, devConfirmUrl);
+      if (devSent.confirm_url) fail("confirm_url não deve aparecer quando o e-mail foi enviado");
+      if (devSent.email_sent !== true) fail("publicSignupPayload deve refletir email_sent=true");
+    } finally {
+      config.env = envBackup;
+    }
+
+    // A9 — o hash dummy anti-timing precisa ter o MESMO custo do hash real
+    // (config.bcryptRounds); custo menor devolveria mais rápido e revelaria por
+    // timing quais e-mails existem.
+    if (bcrypt.getRounds(DUMMY_PASSWORD_HASH) !== config.bcryptRounds) {
+      fail(`dummy hash deveria ser bcrypt de custo ${config.bcryptRounds}, veio ${bcrypt.getRounds(DUMMY_PASSWORD_HASH)}`);
+    }
+
+    // A9 — e o caminho "usuário inexistente" tem que EXECUTAR o bcrypt.compare
+    // (contra o dummy), não curto-circuitar. Comparamos o tempo de um login com
+    // e-mail inexistente com o de um bcrypt.compare real de custo 12: se o
+    // compare fosse pulado (a regressão), o login voltaria ordens de grandeza
+    // mais rápido. Limite folgado (1/4 do compare) para absorver ruído de
+    // agendamento sem deixar passar o curto-circuito, que devolvia ~70x antes.
+    await bcrypt.compare("warmup", DUMMY_PASSWORD_HASH);
+    const compareStart = process.hrtime.bigint();
+    await bcrypt.compare("baseline-probe", DUMMY_PASSWORD_HASH);
+    const compareMs = Number(process.hrtime.bigint() - compareStart) / 1e6;
+    const loginStart = process.hrtime.bigint();
+    const loginMissing = await jsonRequest(server, {
+      method: "POST",
+      path: "/api/auth/login",
+      body: { email: `ghost-${suffix}@p0.test`, password: "senha-irrelevante-1" },
+    });
+    const loginMs = Number(process.hrtime.bigint() - loginStart) / 1e6;
+    if (loginMissing.status !== 401) fail(`login de e-mail inexistente deveria 401, veio ${loginMissing.status}`);
+    if (loginMs < compareMs / 4) {
+      fail(`login de e-mail inexistente rápido demais (${loginMs.toFixed(0)}ms vs compare ${compareMs.toFixed(0)}ms): bcrypt.compare pode ter sido pulado`);
+    }
+
     const victim = await pool.query(
       `SELECT
          (SELECT count(*) FROM loan_contracts WHERE id = $1) AS contracts,
@@ -336,7 +404,7 @@ async function main() {
     await pool.query(`DELETE FROM account_movements WHERE id IN ($1,$2)`, [moveA, moveB]);
     await pool.query(`DELETE FROM payable_titles WHERE id IN ($1,$2)`, [titleA, titleB]);
     await pool.query(`DELETE FROM receivable_titles WHERE id = $1`, [recvB]);
-    await pool.query(`DELETE FROM loan_contracts WHERE contract_number = $1`, [`P0-CREATE-${suffix}`]);
+    if (createdContractId) await pool.query(`DELETE FROM loan_contracts WHERE id = $1`, [createdContractId]);
     await pool.query(`DELETE FROM loan_contracts WHERE id IN ($1,$2)`, [contractA, contractB]);
     await pool.query(`DELETE FROM cdi_rates WHERE id IN ($1,$2)`, [cdiGlobal, cdiB]);
     await pool.query(`DELETE FROM currencies WHERE id = $1`, [curB]);

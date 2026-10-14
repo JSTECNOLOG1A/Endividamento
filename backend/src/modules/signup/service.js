@@ -11,6 +11,20 @@ import { confirmationEmail, sendMail } from "./mailer.js";
 
 const SIGNUP_TTL_MS = 48 * 60 * 60 * 1000;
 
+// O confirm_url carrega o token bruto de cadastro: concluí-lo cria o tenant e
+// torna o solicitante OWNER sem login. Esta é uma rota pública, então o link
+// NUNCA pode sair em produção — mesmo quando o e-mail não é enviado. Fora de
+// produção continua sendo devolvido por conveniência de dev. Mesmo gate do
+// convite de usuário (publicInvitePayload em ../users/service.js). Função pura
+// e exportada para ser coberta em testes (ver security/p0.test.js).
+export function publicSignupPayload(base, sent, confirmUrl) {
+  const payload = { ...base, email_sent: Boolean(sent) };
+  if (!sent && config.env !== "production" && confirmUrl) {
+    payload.confirm_url = confirmUrl;
+  }
+  return payload;
+}
+
 function httpError(status, message, code, details) {
   const err = new Error(message);
   err.status = status;
@@ -225,14 +239,16 @@ export async function startSignup(input) {
   const sent = await sendMail({ to: email, ...mail });
   logger.info({ email, domain, cnpj, emailSent: sent.sent }, "cadastro de tenant iniciado");
 
-  return {
-    email,
-    company_name: companyName,
-    domain,
-    expires_at: expiresAt.toISOString(),
-    email_sent: sent.sent,
-    confirm_url: sent.sent ? undefined : confirmUrl,
-  };
+  return publicSignupPayload(
+    {
+      email,
+      company_name: companyName,
+      domain,
+      expires_at: expiresAt.toISOString(),
+    },
+    sent.sent,
+    confirmUrl
+  );
 }
 
 export async function getSignupByToken(rawToken) {

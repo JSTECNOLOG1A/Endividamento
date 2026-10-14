@@ -63,7 +63,13 @@ const upload = multer({
 
 export function createApp() {
   const app = express();
-  app.set("trust proxy", 1);
+  // Quantos saltos de proxy confiáveis descascar do X-Forwarded-For para obter
+  // req.ip — a chave do rate limit de login. Configurável por ambiente
+  // (config.trustProxyHops, default 1): com UM proxy à frente (nginx direto, em
+  // docker-compose.yml/prod.yml) o valor é 1; só atrás de Traefik→nginx→api
+  // (docker-compose.traefik.yml) é 2. Valor maior que a cadeia real torna
+  // req.ip falsificável via X-Forwarded-For e fura o limitador de login.
+  app.set("trust proxy", config.trustProxyHops);
   app.use(requestId);
   app.use(pinoHttp({
     logger,

@@ -108,25 +108,35 @@ export default function Signup() {
   };
 
   if (result) {
+    const emailFailed = !result.email_sent && !result.confirm_url;
     return (
       <div className="fixed inset-0 overflow-auto bg-slate-50 p-6">
         <div className="mx-auto w-full max-w-lg space-y-4 rounded-xl border border-slate-200 bg-white p-6">
-          <h1 className="text-lg font-semibold text-slate-900">Verifique seu e-mail</h1>
-          <p className="text-sm text-slate-600">
-            Enviamos um link para <strong>{result.email}</strong> concluir o cadastro da empresa{" "}
-            <strong>{result.company_name}</strong> e criar a primeira senha.
-          </p>
-          {result.email_sent ? (
-            <p className="text-sm text-slate-500">O link expira em 48 horas.</p>
+          {emailFailed ? (
+            <>
+              <h1 className="text-lg font-semibold text-slate-900">Não foi possível enviar o e-mail</h1>
+              <p className="text-sm text-red-600">
+                Não foi possível enviar o e-mail de confirmação agora. Tente novamente em alguns minutos ou fale com o suporte.
+              </p>
+            </>
           ) : (
-            <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              <p>O servidor de e-mail ainda não está configurado. Use o link abaixo para concluir o cadastro neste ambiente.</p>
-              {result.confirm_url ? (
-                <a className="break-all text-sky-700 underline" href={result.confirm_url}>
-                  {result.confirm_url}
-                </a>
-              ) : null}
-            </div>
+            <>
+              <h1 className="text-lg font-semibold text-slate-900">Verifique seu e-mail</h1>
+              <p className="text-sm text-slate-600">
+                Enviamos um link para <strong>{result.email}</strong> concluir o cadastro da empresa{" "}
+                <strong>{result.company_name}</strong> e criar a primeira senha.
+              </p>
+              {result.email_sent ? (
+                <p className="text-sm text-slate-500">O link expira em 48 horas.</p>
+              ) : (
+                <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p>O servidor de e-mail ainda não está configurado. Use o link abaixo para concluir o cadastro neste ambiente.</p>
+                  <a className="break-all text-sky-700 underline" href={result.confirm_url}>
+                    {result.confirm_url}
+                  </a>
+                </div>
+              )}
+            </>
           )}
           <Link to="/" className="inline-block text-sm text-slate-600 underline">
             Voltar ao login
